@@ -1,0 +1,41 @@
+[project]
+name = "grime"
+version = "0.1.0"
+description = "Archival document management as a reusable Django app"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.0",
+    "Pillow",
+    "pypdf",
+    "pdf2image",
+    "django-environ",
+]
+
+[project.optional-dependencies]
+ocr = ["pytesseract", "opencv-python", "numpy"]
+textract = ["boto3"]
+hf = ["transformers", "torch"]
+viz = ["imageio[ffmpeg]"]
+dev = [
+    "pytesseract",
+    "opencv-python",
+    "numpy",
+    "boto3",
+    "imageio[ffmpeg]",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["grime*"]
+exclude = ["demo*"]
+
+[tool.setuptools.package-data]
+grime = [
+    "templates/**/*.html",
+    "static/**/*",
+]
