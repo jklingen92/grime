@@ -1,0 +1,255 @@
+"""
+Admin registrations for the grime document management app.
+
+The DocumentPage change form embeds an inline document viewer that overlays
+Word bounding boxes and Tag rectangles on the page image. Interactive
+editing (OCR corrections, tag CRUD, NER label correction) requires AJAX
+endpoints that are not yet implemented — the viewer renders read-only for
+now and the edit URLs in VIEWER_CONFIG are left empty.
+"""
+
+import json
+
+from django.contrib import admin
+from django.contrib.contenttypes.models import ContentType
+from django.utils.safestring import mark_safe
+
+from grime.models import Document, DocumentPage, NERPass, OCRPass, Tag, Word
+
+
+class DocumentPageInline(admin.TabularInline):
+    model = DocumentPage
+    fields = ("page_number", "title", "text_complete", "text_source", "handwritten")
+    readonly_fields = ("text_complete",)
+    extra = 0
+    show_change_link = True
+    ordering = ("page_number",)
+
+
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ("title", "document_id", "page_count", "text_complete", "is_structured")
+    list_filter = ("text_complete", "is_structured", "handwritten")
+    search_fields = ("title", "document_id")
+    readonly_fields = ("page_count",)
+    inlines = [DocumentPageInline]
+    fieldsets = (
+        (None, {"fields": ("title", "document_id", "url", "file")}),
+        (
+            "Content",
+            {
+                "fields": (
+                    "text",
+                    "text_complete",
+                    "text_source",
+                    "handwritten",
+                    "manually_flagged",
+                )
+            },
+        ),
+        (
+            "Structured",
+            {"fields": ("is_structured", "column_schema"), "classes": ("collapse",)},
+        ),
+        ("Notes", {"fields": ("notes",), "classes": ("collapse",)}),
+    )
+
+    @admin.display(description="Pages")
+    def page_count(self, obj):
+        return obj.pages.count()
+
+
+class WordInline(admin.TabularInline):
+    model = Word
+    fields = (
+        "line_num",
+        "word_num",
+        "text",
+        "corrected_text",
+        "conf",
+        "ner_label",
+        "corrected_ner_label",
+    )
+    readonly_fields = ("line_num", "word_num", "text", "conf", "ner_label")
+    extra = 0
+    can_delete = False
+    max_num = 0
+    ordering = ("block_num", "par_num", "line_num", "word_num")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DocumentPage)
+class DocumentPageAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "document", "page_number", "text_complete", "latest_ocr_method")
+    list_filter = ("text_complete", "text_source", "handwritten")
+    search_fields = ("document__title", "title", "document_id")
+    raw_id_fields = ("document",)
+    inlines = [WordInline]
+    change_form_template = "admin/grime/documentpage/change_form.html"
+    fieldsets = (
+        (None, {"fields": ("document", "page_number", "title", "file", "image")}),
+        (
+            "Content",
+            {
+                "fields": (
+                    "text",
+                    "text_complete",
+                    "text_source",
+                    "handwritten",
+                )
+            },
+        ),
+        (
+            "Structured",
+            {"fields": ("structured_data",), "classes": ("collapse",)},
+        ),
+        ("Notes", {"fields": ("notes",), "classes": ("collapse",)}),
+    )
+
+    @admin.display(description="OCR method")
+    def latest_ocr_method(self, obj):
+        latest = obj.ocr_passes.first()
+        return latest.method if latest else "—"
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = dict(extra_context or {})
+        try:
+            page = DocumentPage.objects.get(pk=object_id)
+        except DocumentPage.DoesNotExist:
+            page = None
+
+        if page is not None:
+            extra_context.update(self._build_viewer_context(page))
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+
+    def _build_viewer_context(self, page: DocumentPage) -> dict:
+        """
+        Build the context the embedded document viewer needs.
+
+        For now the viewer is read-only: word bboxes and tag rectangles render,
+        but the AJAX edit endpoints are not implemented. All edit URLs are
+        empty strings; ``ocr_record_pk`` is None so the OCR-edit toolbar UI
+        does not render.
+        """
+        image_url = page.image.url if page.image else None
+        if not image_url:
+            return {"image_url": None}
+
+        words = list(
+            Word.objects.filter(page=page)
+            .order_by("block_num", "par_num", "line_num", "word_num")
+            .values(
+                "id",
+                "left",
+                "top",
+                "width",
+                "height",
+                "text",
+                "corrected_text",
+                "conf",
+                "is_ditto",
+                "ner_label",
+                "corrected_ner_label",
+                "block_num",
+                "par_num",
+                "line_num",
+                "word_num",
+            )
+        )
+        page_ct = ContentType.objects.get_for_model(DocumentPage)
+        tags = list(
+            Tag.objects.filter(source_type=page_ct, source_id=page.pk).values(
+                "id",
+                "label",
+                "bbox_left",
+                "bbox_top",
+                "bbox_width",
+                "bbox_height",
+                "subcomponents",
+                "created_by_id",
+            )
+        )
+
+        def _safe_json(payload) -> str:
+            return mark_safe(json.dumps(payload).replace("</", "<\\/"))
+
+        return {
+            "image_url": image_url,
+            "image_alt": str(page),
+            "ocr_words_json": _safe_json(words),
+            "tags_json": _safe_json(tags),
+            "citations_json": _safe_json([]),
+            "prev_url_json": _safe_json(None),
+            "next_url_json": _safe_json(None),
+            "page_list_json": _safe_json(None),
+            "ocr_record_pk": None,
+            "tag_source_type_id": page_ct.pk,
+            "tag_source_id": page.pk,
+            "doc_tag_count": Tag.objects.filter(
+                source_type=page_ct,
+                source_id__in=page.document.pages.values_list("pk", flat=True),
+            ).count(),
+            "autogen_unreviewed_count": 0,
+            "use_preprocessed_bbox": False,
+            "tag_create_url": "",
+            "tag_update_url": "",
+            "tag_delete_url": "",
+            "ner_correct_url": "",
+            "review_tags_url": "",
+            "rerun_ocr_url": "",
+            "prev_url": "",
+            "next_url": "",
+            "nav_prefix": "",
+            "nav_prev_label": "Previous",
+            "nav_next_label": "Next",
+        }
+
+
+@admin.register(Word)
+class WordAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "page", "line_num", "word_num", "conf", "ner_label")
+    list_filter = ("ner_label", "is_ditto")
+    search_fields = ("text", "corrected_text", "page__document__title")
+    raw_id_fields = ("page", "ocr_pass", "ner_pass", "corrected_by", "corrected_ner_by")
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ("label", "source", "autogenerated", "created_by", "created_at")
+    list_filter = ("label", "created_by")
+    search_fields = ("label",)
+    readonly_fields = ("source", "subcomponents", "created_at")
+    raw_id_fields = ("created_by",)
+
+    @admin.display(boolean=True, description="Auto")
+    def autogenerated(self, obj):
+        return obj.autogenerated
+
+
+@admin.register(OCRPass)
+class OCRPassAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "page", "method", "status", "confidence", "created_at")
+    list_filter = ("method", "status")
+    search_fields = ("page__document__title",)
+    raw_id_fields = ("page",)
+    readonly_fields = ("created_at", "output_text")
+
+
+@admin.register(NERPass)
+class NERPassAdmin(admin.ModelAdmin):
+    list_display = (
+        "__str__",
+        "page",
+        "schema_name",
+        "method",
+        "status",
+        "confidence",
+        "threshold",
+        "created_at",
+    )
+    list_filter = ("schema_name", "method", "status")
+    search_fields = ("page__document__title",)
+    raw_id_fields = ("page",)
+    readonly_fields = ("created_at",)
