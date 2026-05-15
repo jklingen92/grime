@@ -28,6 +28,7 @@
   var MARK_AS_DITTO_URL  = C.markAsDittoUrl || null;
   var BULK_DITTO_URL     = C.bulkDittoUrl || null;
   var BULK_DELETE_URL    = C.bulkDeleteUrl || null;
+  var RERUN_SELECTION_URL = C.rerunSelectionUrl || null;
   var PAGE_LIST      = C.pageList || null;
   var CURRENT_PAGE_PK = C.currentPagePk || null;
 
@@ -846,14 +847,46 @@
 
   function updateOcrMergeBar() {
     var bar=document.getElementById('ocr-merge-bar');
-    if (!bar) return;   // merge/bulk UI is not present in this build
+    if (!bar) return;
     var n=state.ocrSelectedIds.size;
     if (n<2){bar.style.display='none';return;}
-    document.getElementById('ocr-merge-label').textContent=n+' words selected';
-    var sel=OCR_WORDS.filter(function(w){return state.ocrSelectedIds.has(w.id);});
-    sel.sort(function(a,b){return a.block_num!==b.block_num?a.block_num-b.block_num:a.par_num!==b.par_num?a.par_num-b.par_num:a.line_num!==b.line_num?a.line_num-b.line_num:a.word_num-b.word_num;});
-    var input=document.getElementById('ocr-merge-input'); input.value=sel.map(function(w){return w.corrected_text||w.text;}).join(' ');
-    bar.style.display='flex'; input.focus(); input.select();
+    var label=document.getElementById('ocr-merge-label');
+    if (label) label.textContent=n+' word'+(n===1?'':'s')+' selected';
+    bar.style.display='flex';
+  }
+
+  function selectAllOcrWords() {
+    state.ocrSelectedIds.clear();
+    OCR_WORDS.forEach(function(w){ if (w.id != null) state.ocrSelectedIds.add(w.id); });
+    document.querySelectorAll('.ocr-word').forEach(function(el){
+      el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+    });
+    updateOcrMergeBar();
+  }
+
+  function rerunSelectionOcr() {
+    if (!RERUN_SELECTION_URL || !state.ocrSelectedIds.size) return;
+    var btn = document.getElementById('ocr-rerun-ocr');
+    var pks = Array.from(state.ocrSelectedIds);
+    if (btn) { btn.disabled = true; btn.textContent = 'Rerunning…'; }
+    fetch(RERUN_SELECTION_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN},
+      body: 'word_pks=' + encodeURIComponent(pks.join(','))
+    }).then(function(r){ return r.json(); }).then(function(data) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; }
+      if (!data.ok) { alert(data.error || 'Rerun OCR failed.'); return; }
+      var del = new Set(data.deleted_ids);
+      OCR_WORDS = OCR_WORDS.filter(function(w){ return !del.has(w.id); });
+      data.deleted_ids.forEach(function(id){ delete wordById[id]; });
+      (data.new_words || []).forEach(function(w){ OCR_WORDS.push(w); wordById[w.id] = w; });
+      state.ocrSelectedIds.clear();
+      var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
+      renderOverlays();
+      updateTextPanels();
+    }).catch(function(){
+      if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; }
+    });
   }
 
   function ocrSelectInRect(x1,y1,x2,y2) {
@@ -1196,7 +1229,21 @@
           document.getElementById('dp-select-rect').style.display='none';
         } else {
           var wordEl=state.selectStart.target.closest?state.selectStart.target.closest('.ocr-word'):(state.selectStart.target.classList.contains('ocr-word')?state.selectStart.target:null);
-          if(wordEl&&wordEl.dataset.wordId){var word=wordById[parseInt(wordEl.dataset.wordId)];if(word){state.suppressClickClose=true;openEditPopup(word,wordEl,e);}}
+          if(wordEl&&wordEl.dataset.wordId){
+            var wid=parseInt(wordEl.dataset.wordId), word=wordById[wid];
+            if (word) {
+              if (e.shiftKey) {
+                // Shift-click toggles word into the multi-select set instead of opening the popup.
+                if (state.ocrSelectedIds.has(wid)) state.ocrSelectedIds.delete(wid);
+                else state.ocrSelectedIds.add(wid);
+                wordEl.classList.toggle('selected', state.ocrSelectedIds.has(wid));
+                updateOcrMergeBar();
+              } else {
+                state.suppressClickClose=true;
+                openEditPopup(word,wordEl,e);
+              }
+            }
+          }
           else{clearOcrSelection();}
         }
         state.isDragging=false;state.selectStart=null;
@@ -1297,19 +1344,13 @@
     var ocpInput = document.getElementById('ocr-popup-input');
     if (ocpInput) ocpInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();var p=document.getElementById('ocr-popup');if(p._pendingRegion){saveEdit();return;}e.target.value.trim()===''?confirmEdit():saveEdit();}if(e.key==='Escape'){e.preventDefault();closeEditPopup();if(state.drawMode)setDrawMode(false);}});
 
-    // Merge bar
-    var mergeBtn = document.getElementById('ocr-merge-save');
-    if (mergeBtn) mergeBtn.addEventListener('click',function(e){e.preventDefault();saveMerge();});
-    var joinBtn = document.getElementById('ocr-join-line');
-    if (joinBtn) joinBtn.addEventListener('click',function(e){e.preventDefault();joinLine();});
-    var bulkDittoBtn = document.getElementById('ocr-bulk-ditto');
-    if (bulkDittoBtn) bulkDittoBtn.addEventListener('click',function(e){e.preventDefault();bulkDitto();});
+    // Selection bar
+    var rerunBtn = document.getElementById('ocr-rerun-ocr');
+    if (rerunBtn) rerunBtn.addEventListener('click',function(e){e.preventDefault();rerunSelectionOcr();});
     var bulkDeleteBtn = document.getElementById('ocr-bulk-delete');
     if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click',function(e){e.preventDefault();bulkDelete();});
     var mergeCancelBtn = document.getElementById('ocr-merge-cancel');
-    if (mergeCancelBtn) mergeCancelBtn.addEventListener('click',function(e){e.preventDefault();state.ocrSelectedIds.clear();document.getElementById('ocr-merge-bar').style.display='none';clearOcrSelection();});
-    var mergeInput = document.getElementById('ocr-merge-input');
-    if (mergeInput) mergeInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveMerge();}if(e.key==='Escape'){e.preventDefault();state.ocrSelectedIds.clear();document.getElementById('ocr-merge-bar').style.display='none';clearOcrSelection();}});
+    if (mergeCancelBtn) mergeCancelBtn.addEventListener('click',function(e){e.preventDefault();state.ocrSelectedIds.clear();var b=document.getElementById('ocr-merge-bar');if(b)b.style.display='none';clearOcrSelection();});
 
     // Global click: close popups / clear OCR selections
     document.addEventListener('click',function(e){
@@ -1425,10 +1466,17 @@
     }
 
     if (HAS_REPAIR) {
-      if (e.key==='Escape' && state.activeTab === 'ocr') { closeEditPopup(); state.ocrSelectedIds.clear(); document.getElementById('ocr-merge-bar').style.display='none'; return; }
-      if ((e.ctrlKey||e.metaKey)&&!inInput){if(e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return;}if(e.key==='y'||(e.key==='z'&&e.shiftKey)){e.preventDefault();redo();return;}}
+      if (e.key==='Escape' && state.activeTab === 'ocr') { closeEditPopup(); state.ocrSelectedIds.clear(); var bar1=document.getElementById('ocr-merge-bar'); if (bar1) bar1.style.display='none'; clearOcrSelection(); return; }
+      if ((e.ctrlKey||e.metaKey)&&!inInput){
+        if(e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return;}
+        if(e.key==='y'||(e.key==='z'&&e.shiftKey)){e.preventDefault();redo();return;}
+        if(e.key==='a' && state.activeTab==='ocr'){e.preventDefault();selectAllOcrWords();return;}
+      }
       if (inInput) return;
-      if (state.activeTab==='ocr'){if(e.key==='a'){e.preventDefault();setDrawMode(!state.drawMode);return;}if(e.key==='m'&&state.ocrSelectedIds.size>=2){e.preventDefault();saveMerge();return;}if((e.key==='ArrowUp'||e.key==='ArrowDown')&&state.ocrSelectedIds.size){e.preventDefault();reorderLine(e.key==='ArrowDown'?'down':'up');}}
+      if (state.activeTab==='ocr'){
+        if(e.key==='a'){e.preventDefault();setDrawMode(!state.drawMode);return;}
+        if((e.key==='Delete'||e.key==='Backspace') && state.ocrSelectedIds.size>=2){e.preventDefault();bulkDelete();return;}
+      }
     }
   });
 })();

@@ -13,6 +13,9 @@ Endpoints implemented here:
     POST words/add/           — create a new Word at a drawn bbox
     POST words/delete/        — delete a Word
     POST words/ner-correct/   — set Word.corrected_ner_label
+    POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
+    POST words/bulk-delete/   — delete multiple Words at once
+    POST words/rerun-ocr/     — re-OCR the union bbox of a Word selection
     POST tags/create/         — create a Tag on this page
     POST tags/update/         — edit an existing Tag
     POST tags/delete/         — delete a Tag
@@ -67,6 +70,21 @@ def get_viewer_urls() -> list:
             "<int:page_pk>/viewer/words/ner-correct/",
             word_ner_correct,
             name="grime_documentpage_viewer_word_ner_correct",
+        ),
+        path(
+            "<int:page_pk>/viewer/words/mark-ditto/",
+            word_mark_ditto,
+            name="grime_documentpage_viewer_word_mark_ditto",
+        ),
+        path(
+            "<int:page_pk>/viewer/words/bulk-delete/",
+            words_bulk_delete,
+            name="grime_documentpage_viewer_words_bulk_delete",
+        ),
+        path(
+            "<int:page_pk>/viewer/words/rerun-ocr/",
+            words_rerun_ocr,
+            name="grime_documentpage_viewer_words_rerun_ocr",
         ),
         path(
             "<int:page_pk>/viewer/tags/create/",
@@ -221,7 +239,10 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_correct_url": _url("grime_documentpage_viewer_word_correct"),
         "ocr_add_word_url": _url("grime_documentpage_viewer_word_add"),
         "ocr_delete_url": _url("grime_documentpage_viewer_word_delete"),
-        # Not implemented yet — leave empty so the JS feature-gates them off.
+        "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
+        "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
+        "ocr_rerun_selection_url": _url("grime_documentpage_viewer_words_rerun_ocr"),
+        # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
         "ocr_reorder_url": "",
         "ocr_join_line_url": "",
@@ -229,9 +250,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_recluster_url": "",
         "ocr_clear_words_url": "",
         "ocr_resolve_dittos_url": "",
-        "ocr_mark_as_ditto_url": "",
         "ocr_bulk_ditto_url": "",
-        "ocr_bulk_delete_url": "",
         "ocr_create_person_url": "",
         "rerun_ocr_url": "",
         "review_tags_url": "",
@@ -430,3 +449,180 @@ def tag_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     if not deleted:
         return JsonResponse({"error": "Tag not found on this page"}, status=404)
     return JsonResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Ditto / bulk / re-OCR endpoints
+# ---------------------------------------------------------------------------
+
+
+def _parse_word_pks(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    return [int(p) for p in raw.split(",") if p.strip()]
+
+
+def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]:
+    """Run the shadow-based ditto resolver across all words on ``page`` and persist any
+    new corrections.  Returns one ``{"id", "corrected_text", "is_ditto"}`` row per word
+    whose effective text changed during this resolution pass.
+    """
+    from grime.pipeline.ocr import _resolve_dittos
+
+    rows = list(
+        Word.objects.filter(page=page).values(
+            "id",
+            "block_num",
+            "par_num",
+            "line_num",
+            "left",
+            "top",
+            "width",
+            "height",
+            "text",
+            "corrected_text",
+        )
+    )
+    # _resolve_dittos walks `text`, so seed it with the effective text.
+    for row in rows:
+        row["text"] = row.pop("corrected_text") or row["text"]
+    before = {row["id"]: row["text"] for row in rows}
+    _resolve_dittos(rows)
+    changed = [row for row in rows if row["text"] != before[row["id"]]]
+
+    if changed:
+        now = timezone.now()
+        for row in changed:
+            Word.objects.filter(pk=row["id"]).update(
+                corrected_text=row["text"],
+                corrected_by=request.user,
+                corrected_at=now,
+                is_ditto=True,
+            )
+    return [
+        {"id": row["id"], "corrected_text": row["text"], "is_ditto": True}
+        for row in changed
+    ]
+
+
+@require_POST
+def word_mark_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Replace one Word's text with a ditto mark and re-resolve dittos for the page.
+
+    Persists the ditto-resolved correction for any word whose effective text changed,
+    so the viewer can refresh those rows from the JSON response without a reload.
+    """
+    word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
+    if word is None:
+        return JsonResponse({"error": "Word not found on this page"}, status=404)
+    word.text = '"'
+    word.corrected_text = None
+    word.is_ditto = False
+    word.corrected_by = None
+    word.corrected_at = None
+    word.save(
+        update_fields=[
+            "text",
+            "corrected_text",
+            "is_ditto",
+            "corrected_by",
+            "corrected_at",
+        ]
+    )
+    updated = _resolve_page_dittos(word.page, request)
+    return JsonResponse({"ok": True, "word_pk": word.pk, "updated": updated})
+
+
+@require_POST
+def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Delete several Words at once. Only words belonging to this page are affected."""
+    try:
+        pks = _parse_word_pks(request.POST.get("word_pks"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if not pks:
+        return JsonResponse({"error": "No word_pks provided"}, status=400)
+    qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
+    found_ids = list(qs.values_list("pk", flat=True))
+    deleted, _ = qs.delete()
+    return JsonResponse({"ok": True, "deleted_ids": found_ids, "deleted": deleted})
+
+
+@require_POST
+def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Re-OCR the union bbox of a Word selection on this page.
+
+    Crops the page image to the rectangle that contains every selected Word
+    (with a small padding), runs Tesseract on the crop, deletes the selected
+    Words, and inserts the new words with bbox coords translated back to the
+    full page.  Returns the deleted IDs and the new word rows.
+
+    Requires the ``[ocr]`` optional dependency (``pytesseract`` + ``opencv-python``).
+    """
+    try:
+        pks = _parse_word_pks(request.POST.get("word_pks"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if not pks:
+        return JsonResponse({"error": "No word_pks provided"}, status=400)
+
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    if not page.image:
+        return JsonResponse({"error": "Page has no image to re-OCR"}, status=400)
+
+    words = list(Word.objects.filter(pk__in=pks, page_id=page_pk))
+    if not words:
+        return JsonResponse({"error": "No words found on this page"}, status=404)
+
+    padding = 4
+    left = max(0, min(w.left for w in words) - padding)
+    top = max(0, min(w.top for w in words) - padding)
+    right = max(w.left + w.width for w in words) + padding
+    bottom = max(w.top + w.height for w in words) + padding
+
+    try:
+        from PIL import Image as PILImage
+
+        from grime.pipeline.ocr import ocr_image
+    except ImportError:
+        return JsonResponse(
+            {"error": "OCR dependencies not installed (pip install -e '.[ocr]')"},
+            status=500,
+        )
+
+    full_img = PILImage.open(page.image.path)
+    crop = full_img.crop(
+        (left, top, min(right, full_img.width), min(bottom, full_img.height))
+    )
+    try:
+        _text, _conf, new_words = ocr_image(crop)
+    except Exception as exc:
+        return JsonResponse({"error": f"OCR failed: {exc}"}, status=500)
+
+    block_num = words[0].block_num
+    par_num = words[0].par_num
+    line_num = words[0].line_num
+
+    deleted_ids = [w.pk for w in words]
+    Word.objects.filter(pk__in=deleted_ids).delete()
+
+    created = []
+    for i, row in enumerate(new_words):
+        w = Word.objects.create(
+            page=page,
+            block_num=block_num,
+            par_num=par_num,
+            line_num=line_num,
+            word_num=i,
+            left=left + int(row["left"]),
+            top=top + int(row["top"]),
+            width=int(row["width"]),
+            height=int(row["height"]),
+            conf=float(row["conf"]),
+            text=row["text"],
+        )
+        created.append(_word_to_dict(w))
+
+    return JsonResponse({"ok": True, "deleted_ids": deleted_ids, "new_words": created})

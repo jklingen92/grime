@@ -162,10 +162,20 @@
   <input type="text" id="ocr-popup-input" placeholder="Corrected text… (Enter to save)">
   <div class="ocr-popup-actions">
     <button id="ocr-popup-confirm" class="button default">Confirm</button>
+    <button id="ocr-popup-ditto"   class="button">Ditto</button>
     <button id="ocr-popup-delete"  class="button" style="color:#a00">Delete</button>
     <button id="ocr-popup-cancel"  class="button">Cancel</button>
     <span class="ocr-popup-hint">Enter · Esc</span>
   </div>
+</div>
+
+<!-- OCR selection bar (multi-select actions) -->
+<div id="ocr-merge-bar">
+  <label id="ocr-merge-label">2 words selected</label>
+  <button id="ocr-rerun-ocr"   class="button">Rerun OCR</button>
+  <button id="ocr-bulk-delete" class="button" style="color:#a00">Delete</button>
+  <button id="ocr-merge-cancel" class="button">Cancel</button>
+  <span class="merge-bar-hint">Esc · ⌫</span>
 </div>
 
 {% if image_url %}
@@ -188,9 +198,12 @@ window.VIEWER_CONFIG = {
   csrfToken:       "{{ csrf_token }}",
   usePreprocessedBbox: {% if use_preprocessed_bbox %}true{% else %}false{% endif %},
 {% if ocr_record_pk %}
-  correctUrl:      "{{ ocr_correct_url }}",
-  deleteUrl:       "{{ ocr_delete_url }}",
-  addWordUrl:      "{{ ocr_add_word_url }}",
+  correctUrl:        "{{ ocr_correct_url }}",
+  deleteUrl:         "{{ ocr_delete_url }}",
+  addWordUrl:        "{{ ocr_add_word_url }}",
+  markAsDittoUrl:    "{{ ocr_mark_as_ditto_url }}",
+  bulkDeleteUrl:     "{{ ocr_bulk_delete_url }}",
+  rerunSelectionUrl: "{{ ocr_rerun_selection_url }}",
 {% endif %}
 };
 </script>

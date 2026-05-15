@@ -1,10 +1,15 @@
+"""
+Tesseract OCR helpers.
+
+Top-of-module imports are kept lightweight (stdlib + Pillow) so callers that
+only need ``_resolve_dittos`` — for example the document viewer's ditto
+endpoint — don't have to install the full ``[ocr]`` stack.  Functions that
+need OpenCV, numpy, pytesseract or requests import them lazily.
+"""
+
 import io
 
-import cv2
-import numpy as np
-import pytesseract
-import requests
-from PIL import Image, ImageEnhance
+from PIL import Image
 
 TESS_CONFIG = "--oem 3 --psm 3"
 
@@ -25,6 +30,10 @@ def preprocess(img: Image.Image) -> Image.Image:
       5. Denoise
       6. Binarize with Otsu thresholding
     """
+    import cv2
+    import numpy as np
+    from PIL import ImageEnhance
+
     img = img.convert("L")
 
     if img.width < 2000:
@@ -60,6 +69,8 @@ def preprocess(img: Image.Image) -> Image.Image:
 
 def fetch_image(url: str, proxies: dict | None = None) -> Image.Image:
     """Download an image from a URL and return it as a PIL Image."""
+    import requests
+
     resp = requests.get(url, headers=_HEADERS, proxies=proxies, timeout=30)
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content))
@@ -89,6 +100,8 @@ def is_visual_content(
     percentile-stretched to the 2nd–98th percentile before the midtone ratio
     is measured.
     """
+    import numpy as np
+
     gray = np.array(img.convert("L"), dtype=np.float32)
     lo, hi = np.percentile(gray, 2), np.percentile(gray, 98)
     if hi > lo:
@@ -122,6 +135,9 @@ def handwriting_score(img: Image.Image) -> float:
     Returns 0.0 for clearly typed, 1.0 for clearly handwritten.
     Compare against HANDWRITING_THRESHOLD to get a boolean classification.
     """
+    import cv2
+    import numpy as np
+
     gray = np.array(img.convert("L"))
 
     if gray.shape[1] < 1000:
@@ -270,6 +286,8 @@ def ocr_image(
     - words is a list of per-word dicts with keys: block_num, par_num, line_num,
       word_num, left, top, width, height, conf, text
     """
+    import pytesseract
+
     processed = preprocess(img)
     data = pytesseract.image_to_data(
         processed, config=config, output_type=pytesseract.Output.DICT
