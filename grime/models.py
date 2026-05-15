@@ -205,8 +205,8 @@ class Word(models.Model):
     One OCR-extracted word on a DocumentPage.
 
     Bounding box coordinates are in the preprocessed image's coordinate space.
-    Corrections are stored in-place: set ``corrected_text`` + ``corrected_by``
-    + ``corrected_at``. Training data: ``text`` → ``corrected_text`` where not null.
+    Corrections are stored in-place: set ``corrected_text`` + ``corrected_ocr_by``
+    + ``corrected_ocr_at``. Training data: ``ocr_text`` → ``corrected_text`` where not null.
 
     ``ner_label`` uses BIO encoding (B-PER, I-PER, B-LOC, I-LOC, B-ORG, I-ORG,
     or null for O / unlabelled). Populated by ``python manage.py ner``.
@@ -233,20 +233,20 @@ class Word(models.Model):
     height = models.PositiveIntegerField()
 
     conf = models.FloatField(help_text="Per-word confidence (0–100)")
-    text = models.CharField(max_length=500)
+    ocr_text = models.CharField(max_length=500)
     corrected_text = models.CharField(max_length=500, blank=True, null=True)
     is_ditto = models.BooleanField(default=False)
-    corrected_by = models.ForeignKey(
+    corrected_ocr_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
     )
-    corrected_at = models.DateTimeField(null=True, blank=True)
+    corrected_ocr_at = models.DateTimeField(null=True, blank=True)
 
     ner_label = models.CharField(max_length=20, null=True, blank=True)
-    corrected_ner_label = models.CharField(max_length=20, null=True, blank=True)
+    corrected_label = models.CharField(max_length=20, null=True, blank=True)
     corrected_ner_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -269,11 +269,11 @@ class Word(models.Model):
         unique_together = [("page", "line_num", "word_num")]
 
     def __str__(self):
-        return self.corrected_text or self.text
+        return self.corrected_text or self.ocr_text
 
     @property
-    def effective_text(self) -> str:
-        return self.corrected_text or self.text
+    def text(self) -> str:
+        return self.corrected_text or self.ocr_text
 
     @property
     def effective_ner_label(self) -> str | None:

@@ -335,7 +335,7 @@ class Migration(migrations.Migration):
                     models.CharField(blank=True, max_length=500, null=True),
                 ),
                 ("is_ditto", models.BooleanField(default=False)),
-                ("corrected_at", models.DateTimeField(blank=True, null=True)),
+                ("corrected_ocr_at", models.DateTimeField(blank=True, null=True)),
                 ("ner_label", models.CharField(blank=True, max_length=20, null=True)),
                 (
                     "corrected_ner_label",

@@ -131,7 +131,7 @@ def _word_to_dict(word: Word | dict) -> dict:
             "width": word["width"],
             "height": word["height"],
             "conf": word["conf"],
-            "text": word["text"],
+            "text": word["corrected_text"] or word["ocr_text"],
             "corrected_text": word["corrected_text"],
             "is_ditto": word.get("is_ditto", False),
             "ner_label": word.get("ner_label"),
@@ -184,7 +184,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
             "top",
             "width",
             "height",
-            "text",
+            "ocr_text",
             "corrected_text",
             "conf",
             "is_ditto",
@@ -282,9 +282,9 @@ def word_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
         return JsonResponse({"error": "Word not found on this page"}, status=404)
     corrected = (request.POST.get("corrected_text") or "").strip()
     word.corrected_text = corrected or None
-    word.corrected_by = request.user if corrected else None
-    word.corrected_at = timezone.now() if corrected else None
-    word.save(update_fields=["corrected_text", "corrected_by", "corrected_at"])
+    word.corrected_ocr_by = request.user if corrected else None
+    word.corrected_ocr_at = timezone.now() if corrected else None
+    word.save(update_fields=["corrected_text", "corrected_ocr_by", "corrected_ocr_at"])
     return JsonResponse({"ok": True, "corrected_text": word.corrected_text})
 
 
@@ -324,10 +324,10 @@ def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
         width=width,
         height=height,
         conf=0,
-        text="",
+        ocr_text="",
         corrected_text=corrected or None,
-        corrected_by=request.user if corrected else None,
-        corrected_at=now,
+        corrected_ocr_by=request.user if corrected else None,
+        corrected_ocr_at=now,
     )
     return JsonResponse({"ok": True, "word": _word_to_dict(word)})
 
@@ -474,13 +474,13 @@ def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]
             "top",
             "width",
             "height",
-            "text",
+            "ocr_text",
             "corrected_text",
         )
     )
     # _resolve_dittos walks `text`, so seed it with the effective text.
     for row in rows:
-        row["text"] = row.pop("corrected_text") or row["text"]
+        row["text"] = row.pop("corrected_text") or row.pop("ocr_text")
     before = {row["id"]: row["text"] for row in rows}
     _resolve_dittos(rows)
     changed = [row for row in rows if row["text"] != before[row["id"]]]
@@ -490,8 +490,8 @@ def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]
         for row in changed:
             Word.objects.filter(pk=row["id"]).update(
                 corrected_text=row["text"],
-                corrected_by=request.user,
-                corrected_at=now,
+                corrected_ocr_by=request.user,
+                corrected_ocr_at=now,
                 is_ditto=True,
             )
     return [
@@ -502,7 +502,7 @@ def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]
 
 @require_POST
 def word_mark_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Replace one Word's text with a ditto mark and re-resolve dittos for the page.
+    """Replace one Word's ocr_text with a ditto mark and re-resolve dittos for the page.
 
     Persists the ditto-resolved correction for any word whose effective text changed,
     so the viewer can refresh those rows from the JSON response without a reload.
@@ -510,18 +510,18 @@ def word_mark_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
     if word is None:
         return JsonResponse({"error": "Word not found on this page"}, status=404)
-    word.text = '"'
+    word.ocr_text = '"'
     word.corrected_text = None
     word.is_ditto = False
-    word.corrected_by = None
-    word.corrected_at = None
+    word.corrected_ocr_by = None
+    word.corrected_ocr_at = None
     word.save(
         update_fields=[
-            "text",
+            "ocr_text",
             "corrected_text",
             "is_ditto",
-            "corrected_by",
-            "corrected_at",
+            "corrected_ocr_by",
+            "corrected_ocr_at",
         ]
     )
     updated = _resolve_page_dittos(word.page, request)
@@ -568,11 +568,11 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     if not marked_pks:
         return JsonResponse({"error": "No words found on this page"}, status=404)
     qs.update(
-        text='"',
+        ocr_text='"',
         corrected_text=None,
         is_ditto=False,
-        corrected_by=None,
-        corrected_at=None,
+        corrected_ocr_by=None,
+        corrected_ocr_at=None,
     )
     page = DocumentPage.objects.get(pk=page_pk)
     updated = _resolve_page_dittos(page, request)
