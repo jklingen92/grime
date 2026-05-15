@@ -161,49 +161,12 @@ class Command(BaseCommand):
             page_height_pt = probe_page.height
             has_embedded = bool(probe_words)
 
-        # ── Interactive: structured mode? ─────────────────────────────────
-        is_structured = False
-        column_schema = None
-        boundary_pt = None
-
-        if has_embedded:
-            self.stdout.write("\n  Embedded text detected.")
-            answer = input("  Is this structured/tabular data? [y/N] ").strip().lower()
-            is_structured = answer == "y"
-
-            if is_structured:
-                suggested = _detect_name_boundary(probe_words, page_width_pt)
-                self.stdout.write(
-                    f"  Detected name column boundary: {suggested:.1f} pts"
-                )
-                raw = input(
-                    f"  Enter boundary in pts [Enter = {suggested:.1f}]: "
-                ).strip()
-                if raw:
-                    try:
-                        boundary_pt = float(raw)
-                    except ValueError:
-                        self.stderr.write("  Invalid — using detected boundary.")
-                        boundary_pt = suggested
-                else:
-                    boundary_pt = suggested
-                column_schema = {"col_boundary_pt": boundary_pt}
-                self.stdout.write(f"  Name/remainder split at {boundary_pt:.1f} pts.")
-
         # ── Create / update parent Document ───────────────────────────────
         if not dry_run:
             doc, created = Document.objects.get_or_create(
                 title=title,
-                defaults={
-                    "is_structured": is_structured,
-                    "column_schema": column_schema,
-                },
             )
-            if not created and force:
-                doc.is_structured = is_structured
-                doc.column_schema = column_schema
-                doc.save(update_fields=["is_structured", "column_schema"])
-            elif not created:
+            if not created and not force:
                 self.stdout.write(
                     f"  Document already exists (pk={doc.pk}); use --force to replace pages."
                 )
@@ -228,9 +191,7 @@ class Command(BaseCommand):
                     DocumentPage.objects.filter(file=rel_str).delete()
 
             if dry_run:
-                if has_embedded and is_structured:
-                    self.stdout.write(f"  (dry) p.{i:04d} → structured/embedded")
-                elif has_embedded:
+                if has_embedded:
                     self.stdout.write(f"  (dry) p.{i:04d} → embedded text")
                 else:
                     self.stdout.write(f"  (dry) p.{i:04d} → OCR pending")
@@ -242,19 +203,7 @@ class Command(BaseCommand):
             with open(page_path, "wb") as f:
                 writer.write(f)
 
-            if has_embedded and is_structured:
-                self._ingest_structured_page(
-                    doc,
-                    page_path,
-                    i,
-                    title,
-                    rel_str,
-                    boundary_pt,
-                    page_width_pt,
-                    page_height_pt,
-                    stem,
-                )
-            elif has_embedded:
+            if has_embedded:
                 self._ingest_embedded_page(doc, page_path, i, title, rel_str, stem)
             else:
                 self._ingest_image_only_page(doc, page_path, i, title, rel_str, stem)
@@ -592,8 +541,6 @@ def _create_structured_words(
             Word(
                 page=dp,
                 ocr_pass=ocr_pass,
-                block_num=0,
-                par_num=0,
                 line_num=line_num,
                 word_num=0,
                 left=0,
@@ -608,8 +555,6 @@ def _create_structured_words(
             Word(
                 page=dp,
                 ocr_pass=ocr_pass,
-                block_num=0,
-                par_num=0,
                 line_num=line_num,
                 word_num=1,
                 left=name_boundary_px,

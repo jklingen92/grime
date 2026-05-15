@@ -33,25 +33,18 @@ class Document(models.Model):
     A standalone archival document (PDF, scanned booklet, ledger, etc.).
 
     Large documents should be burst into DocumentPage chunks for OCR or
-    structured extraction. If ``is_structured`` is True, ``column_schema``
-    holds an ordered list of column names used when extracting table data
-    into ``DocumentPage.structured_data``.
+    structured extraction.
     """
 
     title = models.CharField(max_length=1000)
     document_id = models.CharField(max_length=100, blank=True)
     url = models.URLField(blank=True)
     text = models.TextField(blank=True)
-    text_complete = models.BooleanField(default=False)
     text_source = models.CharField(
         max_length=20,
         blank=True,
         choices=TEXT_SOURCE_CHOICES,
         help_text="How the text field was populated; set at ingest and not changed automatically",
-    )
-    handwritten = models.BooleanField(
-        default=False,
-        help_text="Document is handwritten rather than typeset",
     )
     manually_flagged = models.BooleanField(
         default=False,
@@ -59,15 +52,6 @@ class Document(models.Model):
     )
     notes = models.TextField(blank=True)
     file = models.FileField(upload_to="documents/", null=True, blank=True)
-    is_structured = models.BooleanField(
-        default=False,
-        help_text="Pages contain tabular data; structured_data is extracted per page",
-    )
-    column_schema = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Ordered list of column names for structured documents (e.g. ['name', 'address'])",
-    )
 
     class Meta:
         ordering = ["title"]
@@ -84,7 +68,8 @@ class DocumentPage(models.Model):
     A single page of a Document — the unit of OCR processing.
 
     ``file`` — the source PDF page (source of truth)
-    ``image`` — PNG rendered from file at OCR time; populated by run_ocr()
+    ``image`` — PNG rendered from file at OCR time; populated by the
+        ``pipeline.run_ocr`` orchestrator (or upstream by ``ingest``)
     """
 
     document = models.ForeignKey(
@@ -95,21 +80,14 @@ class DocumentPage(models.Model):
     title = models.CharField(max_length=1000, blank=True)
     url = models.URLField(blank=True)
     text = models.TextField(blank=True)
-    text_complete = models.BooleanField(default=False)
     text_source = models.CharField(
         max_length=20, blank=True, choices=TEXT_SOURCE_CHOICES
     )
-    handwritten = models.BooleanField(default=False)
     manually_flagged = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
 
     file = models.FileField(upload_to="documents/", null=True, blank=True)
     image = models.ImageField(upload_to="document_pages/", null=True, blank=True)
-    structured_data = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Table rows extracted from this page; list of dicts keyed by Document.column_schema",
-    )
 
     class Meta:
         ordering = ["document", "page_number"]
@@ -133,70 +111,8 @@ class DocumentPage(models.Model):
         if not text.strip():
             return False
         self.text = text.strip()
-        self.text_complete = True
-        self.save(update_fields=["text", "text_complete"])
+        self.save(update_fields=["text"])
         return True
-
-    def _save_ocr_results(
-        self, text: str, conf: float, words: list[dict], method: str = "tesseract"
-    ) -> "OCRPass":
-        """Persist OCR output: write self.text, create OCRPass, bulk-create Word rows."""
-        self.text = text.strip()
-        self.text_complete = True
-        self.save(update_fields=["text", "text_complete"])
-        ocr_pass = OCRPass.objects.create(
-            page=self,
-            method=method,
-            confidence=conf,
-            output_text=text.strip(),
-            status=OCRPass.STATUS_COMPLETE,
-        )
-        Word.objects.bulk_create(
-            [Word(page=self, ocr_pass=ocr_pass, **w) for w in words],
-            ignore_conflicts=True,
-        )
-        return ocr_pass
-
-    def run_ocr(self, force: bool = False) -> None:
-        """Run OCR on self.image; prefer Textract, fall back to Tesseract.
-
-        No-op if text_source is 'embedded' or 'manual' — those sources own
-        their text and must not be overwritten by OCR. Blank text_source is
-        treated as 'ocr' for backwards compatibility.
-        """
-        import logging
-
-        from PIL import Image as PILImage
-
-        if self.text_source in ("embedded", "manual"):
-            return
-        if self.text_complete and not force:
-            return
-        img_field = getattr(self, "image", None)
-        if not img_field:
-            return
-
-        img = PILImage.open(img_field.path)
-
-        try:
-            from grime.pipeline.textract import make_client, textract_page
-
-            client = make_client()
-            text, conf, words = textract_page(img, client)
-            method = "textract"
-        except Exception as exc:
-            logging.getLogger(__name__).warning(
-                "Textract unavailable (%s); falling back to Tesseract.", exc
-            )
-            from grime.pipeline.ocr import ocr_image
-
-            text, conf, words = ocr_image(img)
-            method = "tesseract"
-
-        from grime.pipeline.ocr import _resolve_dittos
-
-        _resolve_dittos(words)
-        self._save_ocr_results(text, conf, words, method=method)
 
 
 class OCRPass(models.Model):
@@ -308,8 +224,6 @@ class Word(models.Model):
         help_text="Which OCR run produced this word",
     )
 
-    block_num = models.PositiveSmallIntegerField(default=0)
-    par_num = models.PositiveSmallIntegerField(default=0)
     line_num = models.PositiveSmallIntegerField()
     word_num = models.PositiveSmallIntegerField()
 
@@ -351,8 +265,8 @@ class Word(models.Model):
     )
 
     class Meta:
-        ordering = ["block_num", "par_num", "line_num", "word_num"]
-        unique_together = [("page", "block_num", "par_num", "line_num", "word_num")]
+        ordering = ["line_num", "word_num"]
+        unique_together = [("page", "line_num", "word_num")]
 
     def __str__(self):
         return self.corrected_text or self.text

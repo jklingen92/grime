@@ -3,12 +3,12 @@ Run OCR on a Document's pages.
 
 Examples::
 
-    python manage.py ocr --document 42                     # pk or document_id
-    python manage.py ocr --document 42 --page 5            # one page
-    python manage.py ocr --document 42 --textract          # use AWS Textract
-    python manage.py ocr --document 42 --textract --region us-west-2
-    python manage.py ocr --document 42 --force             # replace existing OCRPass + Words
-    python manage.py ocr --document 42 --dry-run
+    python manage.py run_ocr --document 42                       # Textract → Tesseract fallback
+    python manage.py run_ocr --document 42 --page 5              # one page
+    python manage.py run_ocr --document 42 --engine tesseract    # force Tesseract
+    python manage.py run_ocr --document 42 --engine textract     # force Textract (no fallback)
+    python manage.py run_ocr --document 42 --force               # replace existing OCRPass + Words
+    python manage.py run_ocr --document 42 --dry-run
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -33,14 +33,10 @@ class Command(BaseCommand):
             help="Restrict to a single page_number",
         )
         parser.add_argument(
-            "--textract",
-            action="store_true",
-            help="Use AWS Textract instead of local Tesseract (requires boto3 + AWS credentials)",
-        )
-        parser.add_argument(
-            "--region",
-            default="us-east-1",
-            help="AWS region for Textract (default: us-east-1)",
+            "--engine",
+            choices=["textract", "tesseract"],
+            default=None,
+            help="Force a specific engine. Default: Textract with Tesseract fallback.",
         )
         parser.add_argument(
             "--dry-run",
@@ -56,9 +52,7 @@ class Command(BaseCommand):
     def handle(self, **options):
         self.dry_run = options["dry_run"]
         self.force = options["force"]
-        self.use_textract = options["textract"]
-        self.region = options["region"]
-        self._client = None
+        self.engine = options["engine"]
 
         doc = self._resolve_document(options["document"])
         pages_qs = doc.pages.order_by("page_number")
@@ -87,6 +81,8 @@ class Command(BaseCommand):
         return False, ""
 
     def _run_pages(self, pages, label):
+        from grime.pipeline.ocr import run_page
+
         self.stdout.write(f"{label} — {len(pages)} page(s) to process")
 
         if not self._confirm_force(pages):
@@ -113,12 +109,16 @@ class Command(BaseCommand):
                 continue
 
             try:
-                if self.use_textract:
-                    self._textract_page(page)
+                if self.force:
+                    Word.objects.filter(page=page).delete()
+                ocr_pass = run_page(page, engine=self.engine, force=self.force)
+                if ocr_pass is None:
+                    self.stdout.write(
+                        self.style.WARNING("    skipped (no image or already complete)")
+                    )
                 else:
-                    page.run_ocr(force=True)
-                self.stdout.write(self.style.SUCCESS("    OK"))
-                processed += 1
+                    self.stdout.write(self.style.SUCCESS(f"    OK ({ocr_pass.method})"))
+                    processed += 1
             except Exception as e:
                 self.stderr.write(self.style.WARNING(f"    Error: {e}"))
 
@@ -128,49 +128,6 @@ class Command(BaseCommand):
                 f"skipped {skipped}."
             )
         )
-
-    def _load_image(self, page):
-        from PIL import Image as PILImage
-
-        if page.image and page.image.name:
-            return PILImage.open(page.image.path)
-        if page.file and page.file.name:
-            from pdf2image import convert_from_path
-
-            pages = convert_from_path(
-                page.file.path, dpi=200, first_page=1, last_page=1
-            )
-            if pages:
-                return pages[0]
-        raise CommandError(
-            f"DocumentPage pk={page.pk} has no image or renderable file."
-        )
-
-    def _get_client(self):
-        if self._client is None and not self.dry_run:
-            try:
-                from grime.pipeline.textract import make_client
-            except ImportError:
-                raise CommandError(
-                    "boto3 is not installed. Run: pip install -e '.[textract]'"
-                )
-            self._client = make_client(self.region)
-        return self._client
-
-    def _textract_page(self, page):
-        from grime.pipeline.textract import textract_page
-
-        if self.force:
-            existing = OCRPass.objects.filter(page=page)
-            Word.objects.filter(page=page).delete()
-            existing.delete()
-
-        img = self._load_image(page)
-        client = self._get_client()
-        text, conf, words = textract_page(img, client)
-        page._save_ocr_results(text, conf / 100.0, words, method="textract")
-        page.text_source = "ocr"
-        page.save(update_fields=["text_source"])
 
     def _confirm_force(self, pages) -> bool:
         if not self.force or self.dry_run:

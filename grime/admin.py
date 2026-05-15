@@ -14,8 +14,11 @@ from grime.models import Document, DocumentPage, NERPass, OCRPass, Tag, Word
 
 class DocumentPageInline(admin.TabularInline):
     model = DocumentPage
-    fields = ("page_number", "title", "text_complete", "text_source", "handwritten")
-    readonly_fields = ("text_complete",)
+    fields = (
+        "page_number",
+        "title",
+        "text_source",
+    )
     extra = 0
     show_change_link = True
     ordering = ("page_number",)
@@ -27,10 +30,7 @@ class DocumentAdmin(admin.ModelAdmin):
         "title",
         "document_id",
         "page_count",
-        "text_complete",
-        "is_structured",
     )
-    list_filter = ("text_complete", "is_structured", "handwritten")
     search_fields = ("title", "document_id")
     readonly_fields = ("page_count",)
     inlines = [DocumentPageInline]
@@ -41,16 +41,10 @@ class DocumentAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "text",
-                    "text_complete",
                     "text_source",
-                    "handwritten",
                     "manually_flagged",
                 )
             },
-        ),
-        (
-            "Structured",
-            {"fields": ("is_structured", "column_schema"), "classes": ("collapse",)},
         ),
         ("Notes", {"fields": ("notes",), "classes": ("collapse",)}),
     )
@@ -75,7 +69,7 @@ class WordInline(admin.TabularInline):
     extra = 0
     can_delete = False
     max_num = 0
-    ordering = ("block_num", "par_num", "line_num", "word_num")
+    ordering = ("line_num", "word_num")
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -87,10 +81,9 @@ class DocumentPageAdmin(admin.ModelAdmin):
         "__str__",
         "document",
         "page_number",
-        "text_complete",
         "latest_ocr_method",
     )
-    list_filter = ("text_complete", "text_source", "handwritten")
+    list_filter = ("text_source",)
     search_fields = ("document__title", "title", "document_id")
     raw_id_fields = ("document",)
     inlines = [WordInline]
@@ -102,15 +95,9 @@ class DocumentPageAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "text",
-                    "text_complete",
                     "text_source",
-                    "handwritten",
                 )
             },
-        ),
-        (
-            "Structured",
-            {"fields": ("structured_data",), "classes": ("collapse",)},
         ),
         ("Notes", {"fields": ("notes",), "classes": ("collapse",)}),
     )

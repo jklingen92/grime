@@ -233,7 +233,7 @@ class Command(BaseCommand):
         for page in pages:
             page_words = list(
                 Word.objects.filter(page=page)
-                .order_by("block_num", "par_num", "line_num", "word_num")
+                .order_by("line_num", "word_num")
                 .values(
                     "id",
                     "left",
@@ -244,8 +244,6 @@ class Command(BaseCommand):
                     "corrected_text",
                     "ner_label",
                     "corrected_ner_label",
-                    "block_num",
-                    "par_num",
                     "line_num",
                     "word_num",
                 )

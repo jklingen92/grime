@@ -136,8 +136,6 @@ def _word_to_dict(word: Word | dict) -> dict:
             "is_ditto": word.get("is_ditto", False),
             "ner_label": word.get("ner_label"),
             "corrected_ner_label": word.get("corrected_ner_label"),
-            "block_num": word["block_num"],
-            "par_num": word["par_num"],
             "line_num": word["line_num"],
             "word_num": word["word_num"],
         }
@@ -153,8 +151,6 @@ def _word_to_dict(word: Word | dict) -> dict:
         "is_ditto": word.is_ditto,
         "ner_label": word.ner_label,
         "corrected_ner_label": word.corrected_ner_label,
-        "block_num": word.block_num,
-        "par_num": word.par_num,
         "line_num": word.line_num,
         "word_num": word.word_num,
     }
@@ -181,7 +177,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
 
     words = list(
         Word.objects.filter(page=page)
-        .order_by("block_num", "par_num", "line_num", "word_num")
+        .order_by("line_num", "word_num")
         .values(
             "id",
             "left",
@@ -194,8 +190,6 @@ def build_viewer_context(page: DocumentPage) -> dict:
             "is_ditto",
             "ner_label",
             "corrected_ner_label",
-            "block_num",
-            "par_num",
             "line_num",
             "word_num",
         )
@@ -314,17 +308,15 @@ def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
     if width <= 0 or height <= 0:
         return JsonResponse({"error": "Region must have positive size"}, status=400)
 
-    max_word_num = Word.objects.filter(
-        page=page, block_num=0, par_num=0, line_num=0
-    ).aggregate(m=Max("word_num"))["m"]
+    max_word_num = Word.objects.filter(page=page, line_num=0).aggregate(
+        m=Max("word_num")
+    )["m"]
     next_word_num = (max_word_num if max_word_num is not None else -1) + 1
     corrected = (request.POST.get("corrected_text") or "").strip()
     now = timezone.now() if corrected else None
 
     word = Word.objects.create(
         page=page,
-        block_num=0,
-        par_num=0,
         line_num=0,
         word_num=next_word_num,
         left=left,
@@ -477,8 +469,6 @@ def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]
     rows = list(
         Word.objects.filter(page=page).values(
             "id",
-            "block_num",
-            "par_num",
             "line_num",
             "left",
             "top",
@@ -591,19 +581,25 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
 
 @require_POST
 def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Re-OCR the union bbox of a Word selection on this page.
+    """Re-OCR a Word selection (or the whole page) and return the diff.
 
-    Crops the page image to the rectangle that contains every selected Word
-    (with a small padding), runs Tesseract on the crop, deletes the selected
-    Words, and inserts the new words with bbox coords translated back to the
-    full page.  Returns the deleted IDs and the new word rows.
+    POST params:
+      ``word_pks``  comma-separated Word IDs (empty → re-OCR full page)
+      ``engine``    ``textract`` | ``tesseract`` | omitted (default: Textract
+                    with Tesseract fallback)
 
-    Requires the ``[ocr]`` optional dependency (``pytesseract`` + ``opencv-python``).
+    All persistence and engine dispatch happens in
+    :func:`grime.pipeline.run_ocr.rerun_selection`; this endpoint only parses
+    inputs and shapes the JSON response.
     """
     try:
         pks = _parse_word_pks(request.POST.get("word_pks"))
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+
+    engine = (request.POST.get("engine") or "").lower() or None
+    if engine not in (None, "textract", "tesseract"):
+        return JsonResponse({"error": f"Unknown engine: {engine}"}, status=400)
 
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
@@ -611,68 +607,22 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
     if not page.image:
         return JsonResponse({"error": "Page has no image to re-OCR"}, status=400)
 
+    from grime.pipeline.ocr import rerun_selection
+
     try:
-        from PIL import Image as PILImage
-
-        from grime.pipeline.ocr import ocr_image
-    except ImportError:
-        return JsonResponse(
-            {"error": "OCR dependencies not installed (pip install -e '.[ocr]')"},
-            status=500,
-        )
-
-    full_img = PILImage.open(page.image.path)
-
-    if pks:
-        words = list(Word.objects.filter(pk__in=pks, page_id=page_pk))
-        if not words:
-            return JsonResponse({"error": "No words found on this page"}, status=404)
-        padding = 4
-        left = max(0, min(w.left for w in words) - padding)
-        top = max(0, min(w.top for w in words) - padding)
-        right = max(w.left + w.width for w in words) + padding
-        bottom = max(w.top + w.height for w in words) + padding
-        block_num, par_num, line_num = (
-            words[0].block_num,
-            words[0].par_num,
-            words[0].line_num,
-        )
-        deleted_ids = [w.pk for w in words]
-        Word.objects.filter(pk__in=deleted_ids).delete()
-    else:
-        left, top, right, bottom = 0, 0, full_img.width, full_img.height
-        block_num, par_num, line_num = 0, 0, 0
-        deleted_ids = list(
-            Word.objects.filter(page_id=page_pk).values_list("pk", flat=True)
-        )
-        Word.objects.filter(page_id=page_pk).delete()
-
-    crop = full_img.crop(
-        (left, top, min(right, full_img.width), min(bottom, full_img.height))
-    )
-    try:
-        _, _, new_words = ocr_image(crop)
+        result = rerun_selection(page, pks, engine=engine)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
     except Exception as exc:
         return JsonResponse({"error": f"OCR failed: {exc}"}, status=500)
 
-    created = []
-    for i, row in enumerate(new_words):
-        w = Word.objects.create(
-            page=page,
-            block_num=block_num,
-            par_num=par_num,
-            line_num=line_num,
-            word_num=i,
-            left=left + int(row["left"]),
-            top=top + int(row["top"]),
-            width=int(row["width"]),
-            height=int(row["height"]),
-            conf=float(row["conf"]),
-            text=row["text"],
-        )
-        created.append(_word_to_dict(w))
-
-    return JsonResponse({"ok": True, "deleted_ids": deleted_ids, "new_words": created})
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_ids": result["deleted_ids"],
+            "new_words": [_word_to_dict(w) for w in result["new_words"]],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
