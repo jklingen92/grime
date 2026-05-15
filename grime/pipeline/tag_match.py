@@ -20,7 +20,7 @@ Usage::
     kernel = build_kernel(tags)
     page_words = list(Word.objects.filter(page=page).values(
         "id","left","top","width","height","text","corrected_text",
-        "ner_label","corrected_ner_label","block_num","par_num","line_num","word_num",
+        "ner_label","corrected_ner_label","line_num","word_num",
     ))
     matches = search_page(kernel, page_words)
 """
@@ -82,10 +82,9 @@ def _assign_line_ranks(words: list[dict]) -> list[list[dict]]:
 
     Returns the sorted list of merged line groups.
     """
-    line_groups: dict[tuple, list] = {}
+    line_groups: dict[int, list] = {}
     for w in words:
-        key = (w.get("block_num") or 0, w.get("par_num") or 0, w.get("line_num") or 0)
-        line_groups.setdefault(key, []).append(w)
+        line_groups.setdefault(w.get("line_num") or 0, []).append(w)
 
     sorted_groups = sorted(
         line_groups.values(),
@@ -382,8 +381,6 @@ def _build_kernel(
                 "height",
                 "text",
                 "corrected_text",
-                "block_num",
-                "par_num",
                 "line_num",
             )
         )
@@ -718,8 +715,6 @@ def _collect_subcomponents(matched_slots: list[dict]) -> list[dict]:
             continue
         words.sort(
             key=lambda w: (
-                w.get("block_num", 0),
-                w.get("par_num", 0),
                 w.get("line_num", 0),
                 w.get("word_num", 0),
                 w["top"],

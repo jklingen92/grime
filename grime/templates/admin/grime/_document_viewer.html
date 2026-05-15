@@ -22,7 +22,13 @@
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
-      <button id="dp-rerun-ocr" type="button">Run OCR</button>
+      <span class="dp-split-btn">
+        <button id="dp-rerun-ocr" type="button">Run OCR</button><button id="dp-rerun-ocr-caret" type="button" aria-label="Choose OCR engine">&#9662;</button>
+        <div id="dp-rerun-ocr-menu" class="dp-menu">
+          <a href="#" data-engine="textract" class="active">Textract</a>
+          <a href="#" data-engine="tesseract">Tesseract</a>
+        </div>
+      </span>
       <button id="dp-boxes-toggle" type="button">Hide boxes</button>
       <button id="dp-draw-toggle" type="button">Add region (a)</button>
     </div>

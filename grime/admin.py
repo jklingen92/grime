@@ -75,7 +75,7 @@ class WordInline(admin.TabularInline):
     extra = 0
     can_delete = False
     max_num = 0
-    ordering = ("block_num", "par_num", "line_num", "word_num")
+    ordering = ("line_num", "word_num")
 
     def has_add_permission(self, request, obj=None):
         return False

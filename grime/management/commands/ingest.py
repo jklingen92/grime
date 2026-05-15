@@ -592,8 +592,6 @@ def _create_structured_words(
             Word(
                 page=dp,
                 ocr_pass=ocr_pass,
-                block_num=0,
-                par_num=0,
                 line_num=line_num,
                 word_num=0,
                 left=0,
@@ -608,8 +606,6 @@ def _create_structured_words(
             Word(
                 page=dp,
                 ocr_pass=ocr_pass,
-                block_num=0,
-                par_num=0,
                 line_num=line_num,
                 word_num=1,
                 left=name_boundary_px,

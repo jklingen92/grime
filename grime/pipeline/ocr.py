@@ -226,10 +226,9 @@ def _resolve_dittos(words: list[dict]) -> list[dict]:
     if not words:
         return words
 
-    by_line: dict[tuple, list[dict]] = {}
+    by_line: dict[int, list[dict]] = {}
     for w in words:
-        key = (w["block_num"], w["par_num"], w["line_num"])
-        by_line.setdefault(key, []).append(w)
+        by_line.setdefault(w["line_num"], []).append(w)
 
     line_keys = sorted(
         by_line, key=lambda k: sum(w["top"] for w in by_line[k]) / len(by_line[k])
@@ -283,8 +282,13 @@ def ocr_image(
     Returns (text, mean_confidence, words) where:
     - text is the full OCR output string
     - mean_confidence is 0–100 (documents below CONFIDENCE_THRESHOLD should be flagged)
-    - words is a list of per-word dicts with keys: block_num, par_num, line_num,
-      word_num, left, top, width, height, conf, text
+    - words is a list of per-word dicts with keys: line_num, word_num,
+      left, top, width, height, conf, text.
+
+    Tesseract's native output is hierarchical (block, paragraph, line, word).
+    We flatten it to the Textract shape: groups of (block, par, line) are
+    sorted top-to-bottom and assigned a single global line_num; word_num
+    is reassigned left-to-right within each line.
     """
     import pytesseract
 
@@ -294,24 +298,34 @@ def ocr_image(
     )
     confidences = [c for c in data["conf"] if c != -1]
     mean_conf = round(sum(confidences) / len(confidences), 1) if confidences else 0.0
-    words = [
-        {
-            k: data[k][i]
-            for k in (
-                "block_num",
-                "par_num",
-                "line_num",
-                "word_num",
-                "left",
-                "top",
-                "width",
-                "height",
-                "conf",
-                "text",
-            )
-        }
-        for i in range(len(data["text"]))
-        if data["conf"][i] != -1 and data["text"][i].strip()
-    ]
+
+    raw_by_group: dict[tuple, list[dict]] = {}
+    for i in range(len(data["text"])):
+        if data["conf"][i] == -1 or not data["text"][i].strip():
+            continue
+        key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+        raw_by_group.setdefault(key, []).append(
+            {
+                "left": data["left"][i],
+                "top": data["top"][i],
+                "width": data["width"][i],
+                "height": data["height"][i],
+                "conf": data["conf"][i],
+                "text": data["text"][i],
+            }
+        )
+
+    sorted_keys = sorted(
+        raw_by_group,
+        key=lambda k: sum(w["top"] for w in raw_by_group[k]) / len(raw_by_group[k]),
+    )
+    words = []
+    for new_line, k in enumerate(sorted_keys):
+        line_words = sorted(raw_by_group[k], key=lambda w: w["left"])
+        for new_wn, w in enumerate(line_words):
+            w["line_num"] = new_line
+            w["word_num"] = new_wn
+            words.append(w)
+
     text = pytesseract.image_to_string(processed, config=config)
     return text, mean_conf, words

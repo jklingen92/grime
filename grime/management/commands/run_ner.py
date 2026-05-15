@@ -152,9 +152,7 @@ class Command(BaseCommand):
             status=NERPass.STATUS_COMPLETE,
         )
         words = list(
-            Word.objects.filter(page=page).order_by(
-                "block_num", "par_num", "line_num", "word_num"
-            )
+            Word.objects.filter(page=page).order_by("line_num", "word_num")
         )
         label_ocr_words(words, page.text, entities)
         # Link the labelled words back to this NERPass run for traceability.

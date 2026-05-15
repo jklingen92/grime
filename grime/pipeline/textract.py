@@ -17,8 +17,8 @@ def textract_page(img: Image.Image, client) -> tuple[str, float, list[dict]]:
     Returns (text, mean_confidence, words) in the same format as ocr_image():
     - text: page text with line breaks
     - mean_confidence: 0–100 (Textract native scale)
-    - words: list of per-word dicts with keys block_num, par_num, line_num,
-      word_num, left, top, width, height, conf, text;
+    - words: list of per-word dicts with keys line_num, word_num,
+      left, top, width, height, conf, text;
       bboxes are scaled to pixel coords using the image dimensions
     """
     buf = io.BytesIO()
@@ -53,8 +53,6 @@ def textract_page(img: Image.Image, client) -> tuple[str, float, list[dict]]:
             bb = wb["Geometry"]["BoundingBox"]
             words.append(
                 {
-                    "block_num": 0,
-                    "par_num": 0,
                     "line_num": line_i,
                     "word_num": word_j,
                     "left": round(bb["Left"] * img_w),
