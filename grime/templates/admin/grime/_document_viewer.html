@@ -22,13 +22,8 @@
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
-      <button id="dp-confirm-all" type="button">Confirm all</button>
       <button id="dp-boxes-toggle" type="button">Hide boxes</button>
       <button id="dp-draw-toggle" type="button">Add region (a)</button>
-      <button id="dp-recluster" type="button">Re-cluster</button>
-      <button id="dp-resolve-dittos" type="button">Resolve dittos</button>
-      <button id="dp-clear-words" type="button" style="color:#a00">Clear</button>
-      {% if rerun_ocr_url %}<button id="dp-rerun-ocr" type="button">Rerun OCR</button>{% endif %}
     </div>
     {% endif %}
 
@@ -167,39 +162,9 @@
   <input type="text" id="ocr-popup-input" placeholder="Corrected text… (Enter to save)">
   <div class="ocr-popup-actions">
     <button id="ocr-popup-confirm" class="button default">Confirm</button>
-    <button id="ocr-popup-ditto"   class="button">Ditto</button>
     <button id="ocr-popup-delete"  class="button" style="color:#a00">Delete</button>
     <button id="ocr-popup-cancel"  class="button">Cancel</button>
     <span class="ocr-popup-hint">Enter · Esc</span>
-  </div>
-</div>
-
-<!-- OCR merge bar -->
-<div id="ocr-merge-bar">
-  <label id="ocr-merge-label">2 words selected</label>
-  <input type="text" id="ocr-merge-input" placeholder="Merged text…">
-  <button id="ocr-merge-save"   class="button">Merge</button>
-  <button id="ocr-join-line"    class="button">Join line</button>
-  <button id="ocr-bulk-ditto"   class="button">Ditto</button>
-  <button id="ocr-bulk-delete"  class="button" style="color:#a00">Delete</button>
-  <button id="ocr-merge-cancel" class="button">Cancel</button>
-  <span class="merge-bar-hint">Enter · Esc</span>
-</div>
-
-<!-- person modal -->
-<div id="dp-person-backdrop">
-  <div id="dp-person-modal">
-    <h3>Create person &amp; membership</h3>
-    <div class="dp-pf"><label>First name</label><input type="text" id="dpp-first" placeholder="First name"></div>
-    <div class="dp-pf"><label>Middle name</label><input type="text" id="dpp-middle" placeholder="Middle name"></div>
-    <div class="dp-pf"><label>Last name</label><input type="text" id="dpp-last" placeholder="Last name"></div>
-    <div class="dp-pf"><label>Role</label><input type="text" id="dpp-role" placeholder="Role or rank (optional)"></div>
-    <div class="dp-pf"><label>Group</label><select id="dpp-group"></select></div>
-    <div id="dp-person-msg"></div>
-    <div id="dp-person-actions">
-      <button id="dpp-save"   class="button default" type="button">Create</button>
-      <button id="dpp-cancel" class="button"         type="button">Cancel</button>
-    </div>
   </div>
 </div>
 
@@ -224,22 +189,8 @@ window.VIEWER_CONFIG = {
   usePreprocessedBbox: {% if use_preprocessed_bbox %}true{% else %}false{% endif %},
 {% if ocr_record_pk %}
   correctUrl:      "{{ ocr_correct_url }}",
-  mergeUrl:        "{{ ocr_merge_url }}",
   deleteUrl:       "{{ ocr_delete_url }}",
   addWordUrl:      "{{ ocr_add_word_url }}",
-  reorderUrl:      "{{ ocr_reorder_url }}",
-  joinLineUrl:     "{{ ocr_join_line_url }}",
-  confirmAllUrl:   "{{ ocr_confirm_all_url }}",
-  reclusterUrl:      "{{ ocr_recluster_url }}",
-  createPersonUrl:   "{{ ocr_create_person_url }}",
-  clearWordsUrl:     "{{ ocr_clear_words_url }}",
-  resolveDittosUrl:  "{{ ocr_resolve_dittos_url }}",
-  markAsDittoUrl:    "{{ ocr_mark_as_ditto_url }}",
-  bulkDittoUrl:      "{{ ocr_bulk_ditto_url }}",
-  bulkDeleteUrl:     "{{ ocr_bulk_delete_url }}",
-{% endif %}
-{% if rerun_ocr_url %}
-  rerunOcrUrl:     "{{ rerun_ocr_url }}",
 {% endif %}
 };
 </script>

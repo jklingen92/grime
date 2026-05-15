@@ -845,7 +845,9 @@
   }
 
   function updateOcrMergeBar() {
-    var bar=document.getElementById('ocr-merge-bar'), n=state.ocrSelectedIds.size;
+    var bar=document.getElementById('ocr-merge-bar');
+    if (!bar) return;   // merge/bulk UI is not present in this build
+    var n=state.ocrSelectedIds.size;
     if (n<2){bar.style.display='none';return;}
     document.getElementById('ocr-merge-label').textContent=n+' words selected';
     var sel=OCR_WORDS.filter(function(w){return state.ocrSelectedIds.has(w.id);});
@@ -883,13 +885,15 @@
   function openEditPopup(word,el,event){
     if (!HAS_REPAIR) return;
     var popup=document.getElementById('ocr-popup');
-    document.getElementById('ocr-merge-bar').style.display='none';
+    var mergeBar=document.getElementById('ocr-merge-bar'); if (mergeBar) mergeBar.style.display='none';
     state.currentWord=word;state.currentEl=el;
     document.getElementById('ocr-popup-original').textContent='Original: '+word.text;
     document.getElementById('ocr-popup-input').value=word.corrected_text||'';
     var x=event.clientX+10,y=event.clientY+10;if(x+240>window.innerWidth-16)x=window.innerWidth-256;
     popup.style.left=x+'px';popup.style.top=y+'px';popup.style.display='block';
-    document.getElementById('ocr-popup-confirm').style.display='';document.getElementById('ocr-popup-delete').style.display='';document.getElementById('ocr-popup-ditto').style.display='';
+    var confirmBtn=document.getElementById('ocr-popup-confirm'); if (confirmBtn) confirmBtn.style.display='';
+    var delBtn=document.getElementById('ocr-popup-delete'); if (delBtn) delBtn.style.display='';
+    var dittoBtn=document.getElementById('ocr-popup-ditto'); if (dittoBtn) dittoBtn.style.display='';
     document.getElementById('ocr-popup-input').focus();document.getElementById('ocr-popup-input').select();
   }
   function closeEditPopup(){var popup=document.getElementById('ocr-popup');popup.style.display='none';popup._pendingRegion=null;state.currentWord=null;state.currentEl=null;if(state.ocrSelectedIds.size>=2)updateOcrMergeBar();}
