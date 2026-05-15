@@ -124,6 +124,8 @@ def ocr_image(
     import pytesseract
 
     processed = preprocess(img)
+    sx = img.width / processed.width
+    sy = img.height / processed.height
     data = pytesseract.image_to_data(
         processed, config=config, output_type=pytesseract.Output.DICT
     )
@@ -137,10 +139,10 @@ def ocr_image(
         key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
         raw_by_group.setdefault(key, []).append(
             {
-                "left": data["left"][i],
-                "top": data["top"][i],
-                "width": data["width"][i],
-                "height": data["height"][i],
+                "left": round(data["left"][i] * sx),
+                "top": round(data["top"][i] * sy),
+                "width": round(data["width"][i] * sx),
+                "height": round(data["height"][i] * sy),
                 "conf": data["conf"][i],
                 "text": data["text"][i],
             }

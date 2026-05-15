@@ -228,7 +228,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
             source_id__in=page.document.pages.values_list("pk", flat=True),
         ).count(),
         "autogen_unreviewed_count": 0,
-        "use_preprocessed_bbox": True,
+        "use_preprocessed_bbox": False,
         # Wired endpoints — the JS gates feature availability on whether each
         # URL is truthy.
         "tag_create_url": _url("grime_documentpage_viewer_tag_create"),
