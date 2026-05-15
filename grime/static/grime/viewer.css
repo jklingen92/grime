@@ -94,12 +94,11 @@
     font-size: 0.82em; font-family: monospace; border: 1px solid #ddd;
     padding: 8px; background: #fafafa;
     overflow-y: auto; color: #111; line-height: 1.6; border-radius: 3px;
-    display: flex; flex-direction: column; gap: 4px;
   }
   .dp-text-line {
-    padding: 4px 6px; background: #fff; border-radius: 2px; border-left: 3px solid #ddd;
-    display: flex; flex-wrap: wrap; gap: 2px; align-items: baseline;
+    display: block; min-height: 1.6em;
   }
+  .dp-text-line + .dp-text-line { margin-top: 0; }
   .dp-text-word {
     cursor: pointer; padding: 1px 2px; border-radius: 1px; transition: all 0.1s;
   }
