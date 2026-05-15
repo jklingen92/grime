@@ -63,7 +63,7 @@ class WordInline(admin.TabularInline):
         "corrected_text",
         "conf",
         "ner_label",
-        "corrected_ner_label",
+        "corrected_label",
     )
     readonly_fields = ("line_num", "word_num", "text", "conf", "ner_label")
     extra = 0

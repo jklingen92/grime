@@ -20,7 +20,7 @@ Usage::
     kernel = build_kernel(tags)
     page_words = list(Word.objects.filter(page=page).values(
         "id","left","top","width","height","text","corrected_text",
-        "ner_label","corrected_ner_label","line_num","word_num",
+        "ner_label","corrected_label","line_num","word_num",
     ))
     matches = search_page(kernel, page_words)
 """
@@ -612,7 +612,7 @@ def search_page(
     line_rel_x (content and position slots).
 
     page_words: list of Word dicts with at minimum:
-      id, left, top, width, height, text, corrected_text, ner_label, corrected_ner_label
+      id, left, top, width, height, text, corrected_text, ner_label, corrected_label
 
     Returns list of:
       {

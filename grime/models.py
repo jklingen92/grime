@@ -277,7 +277,7 @@ class Word(models.Model):
 
     @property
     def label(self) -> str | None:
-        return self.corrected_ner_label or self.ner_label
+        return self.corrected_label or self.ner_label
 
 
 class Tag(models.Model):

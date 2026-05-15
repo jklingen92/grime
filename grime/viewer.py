@@ -12,7 +12,7 @@ Endpoints implemented here:
     POST words/correct/       — set Word.corrected_text
     POST words/add/           — create a new Word at a drawn bbox
     POST words/delete/        — delete a Word
-    POST words/ner-correct/   — set Word.corrected_ner_label
+    POST words/ner-correct/   — set Word.corrected_label
     POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
     POST words/bulk-delete/   — delete multiple Words at once
     POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
@@ -135,7 +135,7 @@ def _word_to_dict(word: Word | dict) -> dict:
             "corrected_text": word["corrected_text"],
             "is_ditto": word.get("is_ditto", False),
             "ner_label": word.get("ner_label"),
-            "corrected_ner_label": word.get("corrected_ner_label"),
+            "corrected_label": word.get("corrected_label"),
             "line_num": word["line_num"],
             "word_num": word["word_num"],
         }
@@ -150,7 +150,7 @@ def _word_to_dict(word: Word | dict) -> dict:
         "corrected_text": word.corrected_text,
         "is_ditto": word.is_ditto,
         "ner_label": word.ner_label,
-        "corrected_ner_label": word.corrected_ner_label,
+        "corrected_label": word.corrected_label,
         "line_num": word.line_num,
         "word_num": word.word_num,
     }
@@ -189,7 +189,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
             "conf",
             "is_ditto",
             "ner_label",
-            "corrected_ner_label",
+            "corrected_label",
             "line_num",
             "word_num",
         )
@@ -291,7 +291,6 @@ def word_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
     )
 
 
-
 @require_POST
 def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
     """Create a Word at a manually drawn bbox.
@@ -334,9 +333,7 @@ def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
         corrected_ocr_at=now,
     )
     updated = _run_post_ocr(page, request)
-    return JsonResponse(
-        {"ok": True, "word": _word_to_dict(word), "updated": updated}
-    )
+    return JsonResponse({"ok": True, "word": _word_to_dict(word), "updated": updated})
 
 
 @require_POST
@@ -353,7 +350,7 @@ def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
 
 @require_POST
 def word_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Set Word.corrected_ner_label.  Empty string or 'NONE' clears the label."""
+    """Set Word.corrected_label.  Empty string or 'NONE' clears the label."""
     word = _get_word_on_page(page_pk, request.POST.get("word_id"))
     if word is None:
         return JsonResponse({"error": "Word not found on this page"}, status=404)
@@ -362,12 +359,10 @@ def word_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
         label = None
     if label not in _VALID_NER_LABELS:
         return JsonResponse({"error": f"Invalid label {label!r}"}, status=400)
-    word.corrected_ner_label = label
+    word.corrected_label = label
     word.corrected_ner_by = request.user if label else None
     word.corrected_ner_at = timezone.now() if label else None
-    word.save(
-        update_fields=["corrected_ner_label", "corrected_ner_by", "corrected_ner_at"]
-    )
+    word.save(update_fields=["corrected_label", "corrected_ner_by", "corrected_ner_at"])
     return JsonResponse({"ok": True, "word_id": word.pk, "label": label})
 
 

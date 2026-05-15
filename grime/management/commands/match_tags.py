@@ -243,7 +243,7 @@ class Command(BaseCommand):
                     "text",
                     "corrected_text",
                     "ner_label",
-                    "corrected_ner_label",
+                    "corrected_label",
                     "line_num",
                     "word_num",
                 )

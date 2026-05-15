@@ -56,7 +56,7 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Re-run even if a NERPass exists. Clears NERPass + resets Word.ner_label "
-                "(corrected_ner_label is preserved)."
+                "(corrected_label is preserved)."
             ),
         )
 
@@ -151,9 +151,7 @@ class Command(BaseCommand):
             threshold=self.threshold,
             status=NERPass.STATUS_COMPLETE,
         )
-        words = list(
-            Word.objects.filter(page=page).order_by("line_num", "word_num")
-        )
+        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
         label_ocr_words(words, page.text, entities)
         # Link the labelled words back to this NERPass run for traceability.
         labelled = [w for w in words if w.ner_label]

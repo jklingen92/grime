@@ -126,7 +126,7 @@
       clearOcrSelection();
     } else {
       if (nerLegend) {
-        var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_ner_label; });
+        var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_label; });
         nerLegend.style.display = hasNer ? 'flex' : 'none';
       }
       if (actions) { actions.classList.remove('visible'); if (sep) sep.style.display = 'none'; }
@@ -527,7 +527,7 @@
   var NER_ENTITY_LABEL = { PER: 'name', LOC: 'address', ORG: 'organization' };
 
   function nerEffectiveLabel(w) {
-    var raw = w.corrected_ner_label || w.ner_label;
+    var raw = w.corrected_label || w.ner_label;
     if (!raw) return null;
     return raw; // full BIO label e.g. "B-PER"
   }
@@ -581,7 +581,7 @@
     .then(function(data){
       if (!data.ok) { alert(data.error || 'Error saving NER label.'); return; }
       var w = wordById[state.nerPopupWordId];
-      if (w) { w.corrected_ner_label = label || null; }
+      if (w) { w.corrected_label = label || null; }
       nerClosePopup();
       renderOverlays();
     });
