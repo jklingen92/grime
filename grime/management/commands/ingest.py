@@ -5,7 +5,8 @@ PDF mode (single file)::
 
     python manage.py ingest colorado_ledger.pdf
     python manage.py ingest colorado_ledger.pdf --output media/documents/colorado_ledger/
-    python manage.py ingest colorado_ledger.pdf --skip-pages 2
+    python manage.py ingest colorado_ledger.pdf --pages 3-7
+    python manage.py ingest colorado_ledger.pdf --pages 1-5,8,10
     python manage.py ingest colorado_ledger.pdf --dry-run
 
 PDF mode splits the PDF into single-page PDFs, creates a parent Document plus
@@ -20,19 +21,14 @@ two-column tabular ledger (name | remainder).
 
 Directory mode::
 
-    python manage.py ingest media/documents/colorado_ledger/
     python manage.py ingest /path/to/scans/
     python manage.py ingest /path/to/scans/ --force
 
-Files whose stem matches ``<parent>_pNNNN`` (e.g. ``ledger_p0001.pdf``,
-``ledger_p0001.png``) are grouped as pages under a Document named after
-``<parent>``.  Standalone image files in the directory become pages under a
-Document named after the directory.  Any remaining standalone files (e.g.
-loose PDFs) each become their own Document.
+Every file in the directory (sorted by name) becomes a page under a single
+parent Document named after the directory.
 """
 
 import io
-import re
 from pathlib import Path
 
 from django.conf import settings
@@ -44,15 +40,42 @@ from grime.models import Document, DocumentPage, OCRPass, Word
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
-# Matches burst-chunk suffixes like _p0001 or _p001-020 produced by PDF bursting.
-_CHUNK_RE = re.compile(r"^(.+?)_p(\d+)(?:-\d+)?$")
+
+def _parse_page_range(spec: str, total: int) -> list[int]:
+    """Parse a print-dialog style page range (e.g. ``1-5,8,10``) into a sorted list of page numbers.
+
+    Pages are 1-indexed.  Out-of-range values are clamped to ``[1, total]``.
+    Raises ``CommandError`` for malformed input.
+    """
+    pages: set[int] = set()
+    for raw in spec.split(","):
+        token = raw.strip()
+        if not token:
+            continue
+        if "-" in token:
+            lo_s, hi_s = token.split("-", 1)
+            try:
+                lo, hi = int(lo_s), int(hi_s)
+            except ValueError as exc:
+                raise CommandError(f"Invalid page range {token!r}") from exc
+            if lo > hi:
+                lo, hi = hi, lo
+            pages.update(range(max(1, lo), min(total, hi) + 1))
+        else:
+            try:
+                n = int(token)
+            except ValueError as exc:
+                raise CommandError(f"Invalid page number {token!r}") from exc
+            if 1 <= n <= total:
+                pages.add(n)
+    return sorted(pages)
 
 
 class Command(BaseCommand):
     help = (
         "Ingest a PDF or directory into Document + DocumentPage records.\n\n"
         "  ingest <pdf>        — split a PDF into pages\n"
-        "  ingest <directory>  — group files in a directory; _p0001 suffix → pages"
+        "  ingest <directory>  — every file becomes a page of one Document"
     )
 
     def add_arguments(self, parser):
@@ -70,11 +93,13 @@ class Command(BaseCommand):
             "default: MEDIA_ROOT/documents/<stem>/)",
         )
         parser.add_argument(
-            "--skip-pages",
-            type=int,
-            default=0,
-            metavar="N",
-            help="Skip the first N pages of the PDF (e.g. cover pages, table of contents)",
+            "--pages",
+            default=None,
+            metavar="RANGE",
+            help=(
+                "Page range to ingest, print-dialog style (e.g. ``1-5,8,10``). "
+                "PDF mode only; defaults to all pages."
+            ),
         )
 
     def handle(self, *args, **options):
@@ -105,7 +130,17 @@ class Command(BaseCommand):
         )
         dry_run = options["dry_run"]
         force = options["force"]
-        skip_pages = options["skip_pages"]
+
+        reader = PdfReader(pdf_path)
+        total = len(reader.pages)
+        if options["pages"]:
+            page_numbers = _parse_page_range(options["pages"], total)
+            if not page_numbers:
+                raise CommandError(
+                    f"--pages {options['pages']!r} matched no pages (PDF has {total})."
+                )
+        else:
+            page_numbers = list(range(1, total + 1))
 
         if not dry_run:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -113,13 +148,10 @@ class Command(BaseCommand):
         title = _title(stem)
         self.stdout.write(f"Document: {title!r}")
 
-        # Probe the first non-skipped page for embedded text + structure
+        # Probe the first selected page for embedded text + structure.
+        probe_i = page_numbers[0]
         with pdfplumber.open(pdf_path) as plumb:
-            if skip_pages >= len(plumb.pages):
-                raise CommandError(
-                    f"--skip-pages {skip_pages} >= total pages ({len(plumb.pages)})"
-                )
-            probe_page = plumb.pages[skip_pages]
+            probe_page = plumb.pages[probe_i - 1]
             probe_words = probe_page.extract_words()
             page_width_pt = probe_page.width
             page_height_pt = probe_page.height
@@ -170,19 +202,13 @@ class Command(BaseCommand):
         else:
             doc = None
 
-        reader = PdfReader(pdf_path)
-        total = len(reader.pages)
-        if skip_pages:
-            self.stdout.write(
-                f"\n  {total} page(s), skipping first {skip_pages} → {out_dir}\n"
-            )
-        else:
-            self.stdout.write(f"\n  {total} page(s) → {out_dir}\n")
+        self.stdout.write(
+            f"\n  {len(page_numbers)} of {total} page(s) → {out_dir}\n"
+        )
 
         created_count = skipped = 0
-        for i, page in enumerate(reader.pages, 1):
-            if i <= skip_pages:
-                continue
+        for i in page_numbers:
+            page = reader.pages[i - 1]
             page_filename = f"{stem}_p{i:04d}.pdf"
             page_path = out_dir / page_filename
             rel_str = _rel(page_path, media_root)
@@ -323,135 +349,59 @@ class Command(BaseCommand):
         media_root = Path(settings.MEDIA_ROOT)
         dry_run = options["dry_run"]
         force = options["force"]
+        if options["pages"]:
+            self.stderr.write(
+                self.style.WARNING("  --pages is ignored in directory mode.")
+            )
 
-        chunks: dict[str, list[tuple[int, Path]]] = {}
-        standalones: list[Path] = []
-        image_standalones: list[Path] = []
+        files = sorted(p for p in scan_dir.iterdir() if p.is_file())
+        if not files:
+            self.stdout.write(self.style.WARNING(f"  {scan_dir} contains no files."))
+            return
 
-        for path in sorted(scan_dir.iterdir()):
-            if not path.is_file():
-                continue
-            m = _CHUNK_RE.match(path.stem)
-            if m:
-                parent_stem, page_str = m.group(1), m.group(2)
-                chunks.setdefault(parent_stem, []).append((int(page_str), path))
-            elif path.suffix.lower() in _IMAGE_EXTS:
-                image_standalones.append(path)
-            else:
-                standalones.append(path)
+        title = _title(scan_dir.name)
+        self.stdout.write(
+            f"  {'(dry) ' if dry_run else ''}document  {title!r} ({len(files)} file(s))"
+        )
 
-        docs_created = pages_created = skipped = 0
+        if not dry_run:
+            doc, doc_created = Document.objects.get_or_create(title=title)
+        else:
+            doc_created = not Document.objects.filter(title=title).exists()
+            doc = None
 
-        # Non-image standalones → individual Documents.
-        for path in standalones:
-            if path.stem in chunks:
-                continue
+        pages_created = skipped = 0
+        for page_num, path in enumerate(files, 1):
             rel_str = _rel(path, media_root)
-            title = _title(path.stem)
 
-            if Document.objects.filter(file=rel_str).exists():
+            if not doc_created and DocumentPage.objects.filter(file=rel_str).exists():
                 if not force:
-                    self.stdout.write(f"  skip   {path.name} (Document already exists)")
+                    self.stdout.write(f"  skip   {path.name} (DocumentPage already exists)")
                     skipped += 1
                     continue
                 if not dry_run:
-                    Document.objects.filter(file=rel_str).delete()
+                    DocumentPage.objects.filter(file=rel_str).delete()
 
+            is_image = path.suffix.lower() in _IMAGE_EXTS
             self.stdout.write(
-                f"  {'(dry) ' if dry_run else ''}document  {path.name!r} → {title!r}"
+                f"  {'(dry) ' if dry_run else ''}page   p.{page_num:04d}  {path.name!r}"
             )
             if not dry_run:
-                Document.objects.create(title=title, file=rel_str)
-            docs_created += 1
-
-        # Image standalones → pages under a Document named for the directory.
-        if image_standalones:
-            dir_title = _title(scan_dir.name)
-            self.stdout.write(
-                f"  {'(dry) ' if dry_run else ''}document  (image folder) {dir_title!r}"
-            )
-
-            if not dry_run:
-                doc, doc_created = Document.objects.get_or_create(title=dir_title)
-            else:
-                doc_created = not Document.objects.filter(title=dir_title).exists()
-                doc = None
-
-            if doc_created:
-                docs_created += 1
-
-            for page_num, path in enumerate(image_standalones, 1):
-                rel_str = _rel(path, media_root)
-
-                if not doc_created and DocumentPage.objects.filter(file=rel_str).exists():
-                    if not force:
-                        self.stdout.write(f"  skip   {path.name} (DocumentPage already exists)")
-                        skipped += 1
-                        continue
-                    if not dry_run:
-                        DocumentPage.objects.filter(file=rel_str).delete()
-
-                self.stdout.write(
-                    f"  {'(dry) ' if dry_run else ''}page      {path.name!r} → p.{page_num}"
+                dp = DocumentPage.objects.create(
+                    document=doc,
+                    page_number=page_num,
+                    title=f"{title} — p. {page_num}",
+                    file=rel_str,
+                    text_source="ocr" if is_image else "",
                 )
-                if not dry_run:
-                    dp = DocumentPage.objects.create(
-                        document=doc,
-                        page_number=page_num,
-                        title=f"{dir_title} — p. {page_num}",
-                        file=rel_str,
-                        text_source="ocr",
-                    )
+                if is_image:
                     _save_page_image(dp, path)
-                pages_created += 1
-
-        # _pNNNN-suffixed chunks → pages under a Document named for the parent stem.
-        for parent_stem, chunk_list in sorted(chunks.items()):
-            parent_title = _title(parent_stem)
-
-            if not dry_run:
-                doc, doc_created = Document.objects.get_or_create(title=parent_title)
-            else:
-                doc_created = not Document.objects.filter(title=parent_title).exists()
-                doc = None
-
-            if doc_created:
-                self.stdout.write(
-                    f"  {'(dry) ' if dry_run else ''}document  (parent) {parent_title!r}"
-                )
-                docs_created += 1
-
-            for page_num, path in sorted(chunk_list):
-                rel_str = _rel(path, media_root)
-
-                if not doc_created and DocumentPage.objects.filter(file=rel_str).exists():
-                    if not force:
-                        self.stdout.write(
-                            f"  skip   {path.name} (DocumentPage already exists)"
-                        )
-                        skipped += 1
-                        continue
-                    if not dry_run:
-                        DocumentPage.objects.filter(file=rel_str).delete()
-
-                self.stdout.write(
-                    f"  {'(dry) ' if dry_run else ''}page      {path.name!r} → p.{page_num}"
-                )
-                if not dry_run:
-                    dp = DocumentPage.objects.create(
-                        document=doc,
-                        page_number=page_num,
-                        title=f"{parent_title} — p. {page_num}",
-                        file=rel_str,
-                    )
-                    if path.suffix.lower() in _IMAGE_EXTS:
-                        _save_page_image(dp, path)
-                pages_created += 1
+            pages_created += 1
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"\n{'Would create' if dry_run else 'Created'} "
-                f"{docs_created} document(s), {pages_created} page(s); skipped {skipped}."
+                f"1 document, {pages_created} page(s); skipped {skipped}."
             )
         )
 
