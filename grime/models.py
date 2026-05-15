@@ -269,14 +269,14 @@ class Word(models.Model):
         unique_together = [("page", "line_num", "word_num")]
 
     def __str__(self):
-        return self.corrected_text or self.ocr_text
+        return self.text
 
     @property
     def text(self) -> str:
         return self.corrected_text or self.ocr_text
 
     @property
-    def effective_ner_label(self) -> str | None:
+    def label(self) -> str | None:
         return self.corrected_ner_label or self.ner_label
 
 
