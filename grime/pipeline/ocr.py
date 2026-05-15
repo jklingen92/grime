@@ -1,10 +1,14 @@
 """
-OCR orchestration: engine dispatch, ditto resolution, and persistence.
+OCR orchestration: engine dispatch and persistence.
 
 Single source of truth for running OCR on a DocumentPage. Callers (viewer
 endpoint, management command, etc.) should go through ``run_page`` or
 ``rerun_selection`` rather than reaching into ``pipeline.tesseract`` or
 ``pipeline.textract`` directly.
+
+Any code path that adds, removes, or changes the OCR for a page should
+call :func:`post_ocr` once the DB writes are done.  Ditto resolution
+(and any future post-OCR cleanup) lives in there.
 
 Engine selection:
     ``engine=None``        — Textract first, fall back to Tesseract on error
@@ -19,6 +23,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractBaseUser
     from PIL.Image import Image as PILImage
 
     from grime.models import DocumentPage, OCRPass
@@ -29,69 +34,21 @@ ENGINE_TEXTRACT = "textract"
 ENGINE_TESSERACT = "tesseract"
 _VALID_ENGINES = (ENGINE_TEXTRACT, ENGINE_TESSERACT)
 
-_DITTO_MARK = '"'
 
+def post_ocr(
+    page: "DocumentPage", *, user: "Optional[AbstractBaseUser]" = None
+) -> list[dict]:
+    """Run post-OCR cleanup on ``page`` after any OCR change.
 
-def _resolve_dittos(words: list[dict]) -> list[dict]:
+    Currently resolves dittos against the page's Words.  Call this from
+    every code path that creates, deletes, or edits Words.  Returns the
+    list of ``{"id", "corrected_text", "is_ditto"}`` rows whose effective
+    text changed during cleanup so callers can echo the diff back to the
+    UI without a full reload.
     """
-    Replace ditto-mark words with the text projected from above at their horizontal position.
+    from grime.pipeline.ditto import resolve_page
 
-    Maintains a shadow list — a sorted sequence of (left, right, text) segments representing
-    the most recent word seen at each horizontal position across all lines processed so far.
-    Lines are processed top-to-bottom; within each line words are processed left-to-right.
-
-    When a ditto is encountered its text is set to whichever shadow segment has the greatest
-    horizontal overlap with it. The ditto's resolved text (or any normal word's text) then
-    overwrites that portion of the shadow, so chained dittos propagate correctly.
-    """
-    if not words:
-        return words
-
-    by_line: dict[int, list[dict]] = {}
-    for w in words:
-        by_line.setdefault(w["line_num"], []).append(w)
-
-    line_keys = sorted(
-        by_line, key=lambda k: sum(w["top"] for w in by_line[k]) / len(by_line[k])
-    )
-
-    # shadow: sorted list of (left, right, text) with no gaps; starts empty
-    shadow: list[tuple[int, int, str]] = []
-
-    def _query(d_left: int, d_right: int) -> str | None:
-        best_text, best_overlap = None, 0
-        for seg_left, seg_right, seg_text in shadow:
-            overlap = min(d_right, seg_right) - max(d_left, seg_left)
-            if overlap > best_overlap:
-                best_overlap, best_text = overlap, seg_text
-        return best_text
-
-    def _update(w_left: int, w_right: int, text: str) -> None:
-        nonlocal shadow
-        trimmed = []
-        for seg_left, seg_right, seg_text in shadow:
-            if seg_right <= w_left or seg_left >= w_right:
-                trimmed.append((seg_left, seg_right, seg_text))
-            else:
-                if seg_left < w_left:
-                    trimmed.append((seg_left, w_left, seg_text))
-                if seg_right > w_right:
-                    trimmed.append((w_right, seg_right, seg_text))
-        trimmed.append((w_left, w_right, text))
-        trimmed.sort(key=lambda s: s[0])
-        shadow = trimmed
-
-    for key in line_keys:
-        for w in sorted(by_line[key], key=lambda w: w["left"]):
-            w_left, w_right = w["left"], w["left"] + w["width"]
-            if w["text"].strip() == _DITTO_MARK:
-                resolved = _query(w_left, w_right)
-                if resolved is not None:
-                    w["text"] = resolved
-                    w["is_ditto"] = True
-            _update(w_left, w_right, w["text"])
-
-    return words
+    return resolve_page(page, user=user)
 
 
 def dispatch(
@@ -99,8 +56,9 @@ def dispatch(
 ) -> tuple[str, float, list[dict], str]:
     """Run OCR on a PIL image and return (text, mean_conf, words, used_engine).
 
-    Confidence is on a 0–100 scale (matches ``Word.conf``).  Words are
-    post-processed by ``_resolve_dittos`` before return.
+    Confidence is on a 0–100 scale (matches ``Word.conf``).  Raw OCR text
+    is returned untouched — ditto marks come back as ``"`` and are
+    resolved later by :func:`post_ocr` once the words have been saved.
 
     With ``engine=None`` the default order is Textract → Tesseract.  Explicit
     engine names surface their errors instead of falling back.
@@ -113,7 +71,6 @@ def dispatch(
             from grime.pipeline.textract import make_client, textract_page
 
             text, conf, words = textract_page(img, make_client())
-            _resolve_dittos(words)
             return text, conf, words, ENGINE_TEXTRACT
         except Exception as exc:
             if engine == ENGINE_TEXTRACT:
@@ -123,7 +80,6 @@ def dispatch(
     from grime.pipeline.tesseract import ocr_image
 
     text, conf, words = ocr_image(img)
-    _resolve_dittos(words)
     return text, conf, words, ENGINE_TESSERACT
 
 
@@ -166,6 +122,7 @@ def run_page(
         [Word(page=page, ocr_pass=ocr_pass, **w) for w in words],
         ignore_conflicts=True,
     )
+    post_ocr(page)
     return ocr_pass
 
 
@@ -235,4 +192,5 @@ def rerun_selection(
         )
         created.append(w)
 
+    post_ocr(page)
     return {"deleted_ids": deleted_ids, "new_words": created}

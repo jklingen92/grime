@@ -285,7 +285,11 @@ def word_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
     word.corrected_ocr_by = request.user if corrected else None
     word.corrected_ocr_at = timezone.now() if corrected else None
     word.save(update_fields=["corrected_text", "corrected_ocr_by", "corrected_ocr_at"])
-    return JsonResponse({"ok": True, "corrected_text": word.corrected_text})
+    updated = _run_post_ocr(word.page, request)
+    return JsonResponse(
+        {"ok": True, "corrected_text": word.corrected_text, "updated": updated}
+    )
+
 
 
 @require_POST
@@ -329,7 +333,10 @@ def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
         corrected_ocr_by=request.user if corrected else None,
         corrected_ocr_at=now,
     )
-    return JsonResponse({"ok": True, "word": _word_to_dict(word)})
+    updated = _run_post_ocr(page, request)
+    return JsonResponse(
+        {"ok": True, "word": _word_to_dict(word), "updated": updated}
+    )
 
 
 @require_POST
@@ -338,8 +345,10 @@ def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     if word is None:
         return JsonResponse({"error": "Word not found on this page"}, status=404)
     word_id = word.pk
+    page = word.page
     word.delete()
-    return JsonResponse({"ok": True, "deleted_id": word_id})
+    updated = _run_post_ocr(page, request)
+    return JsonResponse({"ok": True, "deleted_id": word_id, "updated": updated})
 
 
 @require_POST
@@ -459,45 +468,10 @@ def _parse_word_pks(raw: str | None) -> list[int]:
     return [int(p) for p in raw.split(",") if p.strip()]
 
 
-def _resolve_page_dittos(page: DocumentPage, request: HttpRequest) -> list[dict]:
-    """Run the shadow-based ditto resolver across all words on ``page`` and persist any
-    new corrections.  Returns one ``{"id", "corrected_text", "is_ditto"}`` row per word
-    whose effective text changed during this resolution pass.
-    """
-    from grime.pipeline.ocr import _resolve_dittos
+def _run_post_ocr(page: DocumentPage, request: HttpRequest) -> list[dict]:
+    from grime.pipeline.ocr import post_ocr
 
-    rows = list(
-        Word.objects.filter(page=page).values(
-            "id",
-            "line_num",
-            "left",
-            "top",
-            "width",
-            "height",
-            "ocr_text",
-            "corrected_text",
-        )
-    )
-    # _resolve_dittos walks `text`, so seed it with the effective text.
-    for row in rows:
-        row["text"] = row.pop("corrected_text") or row.pop("ocr_text")
-    before = {row["id"]: row["text"] for row in rows}
-    _resolve_dittos(rows)
-    changed = [row for row in rows if row["text"] != before[row["id"]]]
-
-    if changed:
-        now = timezone.now()
-        for row in changed:
-            Word.objects.filter(pk=row["id"]).update(
-                corrected_text=row["text"],
-                corrected_ocr_by=request.user,
-                corrected_ocr_at=now,
-                is_ditto=True,
-            )
-    return [
-        {"id": row["id"], "corrected_text": row["text"], "is_ditto": True}
-        for row in changed
-    ]
+    return post_ocr(page, user=request.user)
 
 
 @require_POST
@@ -524,7 +498,7 @@ def word_mark_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
             "corrected_ocr_at",
         ]
     )
-    updated = _resolve_page_dittos(word.page, request)
+    updated = _run_post_ocr(word.page, request)
     return JsonResponse({"ok": True, "word_pk": word.pk, "updated": updated})
 
 
@@ -540,7 +514,16 @@ def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
     found_ids = list(qs.values_list("pk", flat=True))
     deleted, _ = qs.delete()
-    return JsonResponse({"ok": True, "deleted_ids": found_ids, "deleted": deleted})
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    updated = _run_post_ocr(page, request) if page else []
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_ids": found_ids,
+            "deleted": deleted,
+            "updated": updated,
+        }
+    )
 
 
 @require_POST
@@ -575,7 +558,7 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
         corrected_ocr_at=None,
     )
     page = DocumentPage.objects.get(pk=page_pk)
-    updated = _resolve_page_dittos(page, request)
+    updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
 
 
