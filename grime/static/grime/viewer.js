@@ -718,7 +718,25 @@
 
   function updateTextPanels() {
     var ocr = document.getElementById('dp-corrected-text');
-    if (ocr) ocr.textContent = buildFullText();
+    if (!ocr) return;
+    ocr.innerHTML = '';
+    var lines = _buildLineMap();
+    lines.forEach(function (line) {
+      var lineDiv = document.createElement('div');
+      lineDiv.className = 'dp-text-line';
+      line.words.filter(function(w){return(w.corrected_text||w.text||'').trim();})
+        .forEach(function(w){
+          var wordSpan = document.createElement('span');
+          wordSpan.className = 'dp-text-word';
+          if (state.ocrSelectedIds.has(w.id)) wordSpan.classList.add('selected');
+          wordSpan.textContent = w.corrected_text!=null?w.corrected_text:w.text;
+          wordSpan.dataset.wordId = w.id;
+          lineDiv.appendChild(wordSpan);
+          var space = document.createTextNode(' ');
+          lineDiv.appendChild(space);
+        });
+      if (lineDiv.textContent.trim()) ocr.appendChild(lineDiv);
+    });
   }
 
   /* ── word class helper ─────────────────────────────────────── */
@@ -734,6 +752,7 @@
     state.ocrSelectedIds.clear();
     document.querySelectorAll('.ocr-word.selected').forEach(function(el){el.classList.remove('selected');});
     updateOcrMergeBar();
+    updateTextPanels();
   }
 
   function updateOcrMergeBar() {
@@ -753,6 +772,7 @@
       el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
     });
     updateOcrMergeBar();
+    updateTextPanels();
   }
 
   function ocrBtnLabel() {
@@ -823,6 +843,7 @@
     OCR_WORDS.forEach(function(w){if((w.left+w.width)>px1&&w.left<px2&&(w.top+w.height)>py1&&w.top<py2)state.ocrSelectedIds.add(w.id);});
     document.querySelectorAll('.ocr-word').forEach(function(el){el.classList.toggle('selected',state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));});
     updateOcrMergeBar();
+    updateTextPanels();
   }
 
   function recordUndo(e){state.undoStack.push(e);state.redoStack=[];}
@@ -952,6 +973,7 @@
       document.getElementById('ocr-merge-bar').style.display = 'none';
       renderOverlays();
       updateTextPanels();
+      updateOcrMergeBar();
     });
   }
   function bulkDelete() {
@@ -971,6 +993,7 @@
       document.getElementById('ocr-merge-bar').style.display = 'none';
       renderOverlays();
       updateTextPanels();
+      updateOcrMergeBar();
     });
   }
 
@@ -1164,6 +1187,7 @@
                 else state.ocrSelectedIds.add(wid);
                 wordEl.classList.toggle('selected', state.ocrSelectedIds.has(wid));
                 updateOcrMergeBar();
+                updateTextPanels();
               } else {
                 state.suppressClickClose=true;
                 openEditPopup(word,wordEl,e);
