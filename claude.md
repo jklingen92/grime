@@ -21,6 +21,7 @@ pages with tagged regions.
 
 # Developer preferences
 
+- Never write migrations or manipulate data in any way. 
 - Never use the Explore agent or spawn sub-agents for code searches. Use grep/find directly.
 - Before searching the codebase, ask me for the file path or symbol name so I can provide it.
 - Ask me before adding a one-off fix or patch to accomplish your task; chances are there's an architectural issue that needs to be resolved. 
