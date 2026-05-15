@@ -124,7 +124,7 @@ class DocumentPageAdmin(admin.ModelAdmin):
 class WordAdmin(admin.ModelAdmin):
     list_display = ("__str__", "page", "line_num", "word_num", "conf", "ner_label")
     list_filter = ("ner_label", "is_ditto")
-    search_fields = ("text", "corrected_text", "page__document__title")
+    search_fields = ("ocr_text", "corrected_text", "page__document__title")
     raw_id_fields = ("page", "ocr_pass", "ner_pass", "corrected_by", "corrected_ner_by")
 
 
