@@ -188,7 +188,7 @@ def rerun_selection(
             width=int(row["width"]),
             height=int(row["height"]),
             conf=float(row["conf"]),
-            text=row["text"],
+            ocr_text=row["text"],
         )
         created.append(w)
 

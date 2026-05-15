@@ -4,18 +4,25 @@ Grime is an archival document management platform — a reusable Django app
 for ingesting scanned documents, running OCR / NER pipelines, and annotating
 pages with tagged regions.
 
-## Models
+## Quick start
 
-| Model          | Role |
-|----------------|------|
-| `Document`     | A standalone archival document (PDF, scanned booklet, ledger). |
-| `DocumentPage` | A single page of a Document — the unit of OCR processing. |
-| `Word`         | One OCR-extracted word on a DocumentPage, with bbox, confidence, optional human correction, and optional BIO NER label. |
-| `Tag`          | A manually drawn region on a Document or DocumentPage with a label and word-level subcomponents. |
-| `OCRPass`      | Audit record for one OCR run on a DocumentPage. |
-| `NERPass`      | Audit record for one NER run on a DocumentPage. |
+```bash
+pip install -e ".[dev]"
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py ingest MY_DOCUMENT.pdf
+# Should return an endpoint like '/documents/1'
+
+python manage.py runserver
+# then visit http://127.0.0.1:8000/documents/1
+# or visit http://127.0.0.1:8000/admin, login, and 
+# navigate to you document
+```
 
 ## Management commands
+
+You can run ocr and ner page by page in the document viewer or you can
+bulk process documents from the command line using the following commands:
 
 ```bash
 python manage.py ocr        --document 42 [--page N] [--textract] [--force] [--dry-run]
@@ -24,31 +31,6 @@ python manage.py match_tags --label "member entry" [--source-document 3] [--targ
                             [--create-tags] [--force] [--min-score 0.5] [--tolerance 0.08]
 ```
 
-## Quick start
-
-```bash
-pip install -e ".[dev]"
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
-# then visit http://127.0.0.1:8000/admin/
-```
-
-## Optional dependencies
-
-| Extra      | Adds                                          |
-|------------|-----------------------------------------------|
-| `ocr`      | Tesseract (`pytesseract`, `opencv-python`, `numpy`) |
-| `textract` | AWS Textract via `boto3`                      |
-| `hf`       | HuggingFace historical NER (`transformers`, `torch`) |
-| `viz`      | `match_tags --video` rendering (`imageio[ffmpeg]`) |
-| `dev`      | All of the above                              |
-
-System prerequisites for the `ocr` extra:
-
-```bash
-sudo apt install tesseract-ocr poppler-utils
-```
 
 ## Status
 

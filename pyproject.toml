@@ -28,6 +28,7 @@ dependencies = [
     "Pillow",
     "pypdf",
     "pdf2image",
+    "pdfplumber",
     "django-environ",
 ]
 

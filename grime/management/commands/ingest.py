@@ -217,6 +217,9 @@ class Command(BaseCommand):
             )
         )
 
+        if not dry_run:
+            self.stdout.write(self.style.SUCCESS(f"View at {doc.get_absolute_url()}"))
+
     def _ingest_embedded_page(self, doc, page_path, i, title, rel_str, stem):
         """A page with an embedded text layer: extract text + render a preview image."""
         dp = DocumentPage.objects.create(
@@ -370,6 +373,9 @@ class Command(BaseCommand):
                 f"1 document, {pages_created} page(s); skipped {skipped}."
             )
         )
+
+        if not dry_run:
+            self.stdout.write(self.style.SUCCESS(f"View at {doc.get_absolute_url()}"))
 
 
 def _rel(path: Path, media_root: Path) -> str:
