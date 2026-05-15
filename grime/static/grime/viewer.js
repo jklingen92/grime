@@ -1403,6 +1403,31 @@
     if (e.deltaY < 0) dpZoomIn(); else dpZoomOut();
   }, { passive: false });
 
+  /* ── divider resizing ──────────────────────────────────────── */
+  var dividerDrag = null;
+  var divider = document.getElementById('dp-divider');
+  if (divider) {
+    divider.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      var rightPanel = state.activeTab === 'tagging'
+        ? document.getElementById('dp-tag-panel')
+        : document.getElementById('dp-text-panel');
+      if (!rightPanel) return;
+      var startX = e.clientX;
+      var startWidth = rightPanel.offsetWidth;
+      dividerDrag = { startX: startX, startWidth: startWidth, panel: rightPanel };
+    });
+  }
+  document.addEventListener('mousemove', function(e) {
+    if (!dividerDrag) return;
+    var dx = e.clientX - dividerDrag.startX;
+    var newWidth = Math.max(120, dividerDrag.startWidth - dx);
+    dividerDrag.panel.style.width = newWidth + 'px';
+  });
+  document.addEventListener('mouseup', function(e) {
+    dividerDrag = null;
+  });
+
   /* ── keyboard ──────────────────────────────────────────────── */
   document.addEventListener('keydown', function (e) {
     var tag = document.activeElement && document.activeElement.tagName;
