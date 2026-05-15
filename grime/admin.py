@@ -28,7 +28,13 @@ class DocumentPageInline(admin.TabularInline):
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ("title", "document_id", "page_count", "text_complete", "is_structured")
+    list_display = (
+        "title",
+        "document_id",
+        "page_count",
+        "text_complete",
+        "is_structured",
+    )
     list_filter = ("text_complete", "is_structured", "handwritten")
     search_fields = ("title", "document_id")
     readonly_fields = ("page_count",)
@@ -82,7 +88,13 @@ class WordInline(admin.TabularInline):
 
 @admin.register(DocumentPage)
 class DocumentPageAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "document", "page_number", "text_complete", "latest_ocr_method")
+    list_display = (
+        "__str__",
+        "document",
+        "page_number",
+        "text_complete",
+        "latest_ocr_method",
+    )
     list_filter = ("text_complete", "text_source", "handwritten")
     search_fields = ("document__title", "title", "document_id")
     raw_id_fields = ("document",)
@@ -122,7 +134,9 @@ class DocumentPageAdmin(admin.ModelAdmin):
 
         if page is not None:
             extra_context.update(self._build_viewer_context(page))
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+        return super().change_view(
+            request, object_id, form_url, extra_context=extra_context
+        )
 
     def _build_viewer_context(self, page: DocumentPage) -> dict:
         """

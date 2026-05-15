@@ -30,7 +30,6 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Inline Levenshtein — no extra dependency
 # ---------------------------------------------------------------------------
@@ -45,7 +44,9 @@ def _levenshtein(a: str, b: str) -> int:
     for i, ca in enumerate(a, 1):
         curr = [i]
         for j, cb in enumerate(b, 1):
-            curr.append(min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (0 if ca == cb else 1)))
+            curr.append(
+                min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (0 if ca == cb else 1))
+            )
         prev = curr
     return prev[-1]
 
@@ -313,7 +314,9 @@ def _process_tag_words(
     return content_slots, pos_slots, struct_slots
 
 
-def _build_kernel(tags: list, threshold_frac: float = 0.5, padding: float = 0.05) -> list[dict]:
+def _build_kernel(
+    tags: list, threshold_frac: float = 0.5, padding: float = 0.05
+) -> list[dict]:
     """
     Bbox-based kernel builder.
 
@@ -343,8 +346,12 @@ def _build_kernel(tags: list, threshold_frac: float = 0.5, padding: float = 0.05
                 sc_labels[wid] = sc.get("label", "")
 
     content_by_label: dict[str, list[dict]] = {}
-    all_struct_slots: list[dict] = []  # Track B: all structural slots, clustered by position
-    position_slots_all: list[dict] = []  # Track A: per-tag positional groups, clustered later
+    all_struct_slots: list[dict] = (
+        []
+    )  # Track B: all structural slots, clustered by position
+    position_slots_all: list[dict] = (
+        []
+    )  # Track A: per-tag positional groups, clustered later
     n_tags = len(tags)
 
     for tag in tags:
@@ -354,8 +361,12 @@ def _build_kernel(tags: list, threshold_frac: float = 0.5, padding: float = 0.05
         words = list(
             Word.objects.filter(page_id=tag.source_id)
             .annotate(
-                cx=ExpressionWrapper(F("left") + F("width") / 2.0, output_field=FloatField()),
-                cy=ExpressionWrapper(F("top") + F("height") / 2.0, output_field=FloatField()),
+                cx=ExpressionWrapper(
+                    F("left") + F("width") / 2.0, output_field=FloatField()
+                ),
+                cy=ExpressionWrapper(
+                    F("top") + F("height") / 2.0, output_field=FloatField()
+                ),
             )
             .filter(
                 cx__gte=tag.bbox_left - tag.bbox_width * padding,
@@ -382,7 +393,9 @@ def _build_kernel(tags: list, threshold_frac: float = 0.5, padding: float = 0.05
         words_copy = [dict(w) for w in words]
         _assign_line_ranks(words_copy)
 
-        content_slots, pos_slots, struct_slots = _process_tag_words(tag, words_copy, sc_labels)
+        content_slots, pos_slots, struct_slots = _process_tag_words(
+            tag, words_copy, sc_labels
+        )
         for ms in content_slots:
             content_by_label.setdefault(ms["sc_label"], []).append(ms)
         position_slots_all.extend(pos_slots)
@@ -545,7 +558,9 @@ def build_kernel(
 # ---------------------------------------------------------------------------
 
 
-def _filter_by_line_rel_x(words: list[dict], slot: dict, tolerance: float) -> list[dict]:
+def _filter_by_line_rel_x(
+    words: list[dict], slot: dict, tolerance: float
+) -> list[dict]:
     """Return words whose relative x position falls within the slot's line_rel_x range."""
     if not words or "line_rel_x_min" not in slot:
         return words
@@ -650,7 +665,9 @@ def search_page(
             else:  # position
                 page_lr = start_idx + slot["line_rank"]
                 if 0 <= page_lr < n_page_lines:
-                    words_in_range = _filter_by_line_rel_x(page_lines[page_lr], slot, tolerance)
+                    words_in_range = _filter_by_line_rel_x(
+                        page_lines[page_lr], slot, tolerance
+                    )
                     if words_in_range:
                         matched_slots.append({"slot": slot, "word": words_in_range[0]})
 

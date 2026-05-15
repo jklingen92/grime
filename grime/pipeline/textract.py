@@ -34,7 +34,11 @@ def textract_page(img: Image.Image, client) -> tuple[str, float, list[dict]]:
     word_by_id = {b["Id"]: b for b in word_blocks}
 
     text = "\n".join(b["Text"] for b in lines)
-    mean_conf = sum(b["Confidence"] for b in word_blocks) / len(word_blocks) if word_blocks else 0.0
+    mean_conf = (
+        sum(b["Confidence"] for b in word_blocks) / len(word_blocks)
+        if word_blocks
+        else 0.0
+    )
 
     words = []
     for line_i, line in enumerate(lines):

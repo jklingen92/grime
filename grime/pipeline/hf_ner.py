@@ -31,7 +31,9 @@ DEFAULT_CONFIDENCE_THRESHOLD = 0.80
 
 # Fine-tuned model directory — written by `train_model --type hf-ner`.
 # If it exists and contains model files, it is loaded instead of the base model.
-_FINE_TUNED_PATH = Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
+_FINE_TUNED_PATH = (
+    Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
+)
 
 # Module-level cache — loaded once per process.
 _pipeline = None
@@ -49,7 +51,11 @@ def _get_pipeline():
     global _pipeline
     if _pipeline is None:
         try:
-            from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+            from transformers import (
+                AutoModelForTokenClassification,
+                AutoTokenizer,
+                pipeline,
+            )
         except ImportError as exc:
             raise ImportError(
                 "HuggingFace NER requires the [hf] optional dependencies. "

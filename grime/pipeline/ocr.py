@@ -29,7 +29,9 @@ def preprocess(img: Image.Image) -> Image.Image:
 
     if img.width < 2000:
         scale = 2000 / img.width
-        img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
+        img = img.resize(
+            (int(img.width * scale), int(img.height * scale)), Image.LANCZOS
+        )
 
     img = ImageEnhance.Contrast(img).enhance(2.0)
 
@@ -75,7 +77,9 @@ VISUAL_CONTENT_THRESHOLD = 0.15
 HANDWRITING_THRESHOLD = 0.45
 
 
-def is_visual_content(img: Image.Image, threshold: float = VISUAL_CONTENT_THRESHOLD) -> bool:
+def is_visual_content(
+    img: Image.Image, threshold: float = VISUAL_CONTENT_THRESHOLD
+) -> bool:
     """
     Return True if the image appears to contain a photo or illustration.
 
@@ -122,7 +126,9 @@ def handwriting_score(img: Image.Image) -> float:
 
     if gray.shape[1] < 1000:
         scale = 1000 / gray.shape[1]
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
+        gray = cv2.resize(
+            gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4
+        )
 
     h, w = gray.shape
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -209,7 +215,9 @@ def _resolve_dittos(words: list[dict]) -> list[dict]:
         key = (w["block_num"], w["par_num"], w["line_num"])
         by_line.setdefault(key, []).append(w)
 
-    line_keys = sorted(by_line, key=lambda k: sum(w["top"] for w in by_line[k]) / len(by_line[k]))
+    line_keys = sorted(
+        by_line, key=lambda k: sum(w["top"] for w in by_line[k]) / len(by_line[k])
+    )
 
     # shadow: sorted list of (left, right, text) with no gaps; starts empty
     shadow: list[tuple[int, int, str]] = []
@@ -250,7 +258,9 @@ def _resolve_dittos(words: list[dict]) -> list[dict]:
     return words
 
 
-def ocr_image(img: Image.Image, config: str = TESS_CONFIG) -> tuple[str, float, list[dict]]:
+def ocr_image(
+    img: Image.Image, config: str = TESS_CONFIG
+) -> tuple[str, float, list[dict]]:
     """
     Preprocess and run Tesseract on a PIL Image.
 
@@ -261,7 +271,9 @@ def ocr_image(img: Image.Image, config: str = TESS_CONFIG) -> tuple[str, float, 
       word_num, left, top, width, height, conf, text
     """
     processed = preprocess(img)
-    data = pytesseract.image_to_data(processed, config=config, output_type=pytesseract.Output.DICT)
+    data = pytesseract.image_to_data(
+        processed, config=config, output_type=pytesseract.Output.DICT
+    )
     confidences = [c for c in data["conf"] if c != -1]
     mean_conf = round(sum(confidences) / len(confidences), 1) if confidences else 0.0
     words = [

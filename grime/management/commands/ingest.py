@@ -80,7 +80,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("path", help="PDF file or directory to ingest")
-        parser.add_argument("--dry-run", action="store_true", help="Report without writing")
+        parser.add_argument(
+            "--dry-run", action="store_true", help="Report without writing"
+        )
         parser.add_argument(
             "--force",
             action="store_true",
@@ -126,7 +128,9 @@ class Command(BaseCommand):
         media_root = Path(settings.MEDIA_ROOT)
         stem = pdf_path.stem
         out_dir = (
-            Path(options["output"]) if options["output"] else media_root / "documents" / stem
+            Path(options["output"])
+            if options["output"]
+            else media_root / "documents" / stem
         )
         dry_run = options["dry_run"]
         force = options["force"]
@@ -169,8 +173,12 @@ class Command(BaseCommand):
 
             if is_structured:
                 suggested = _detect_name_boundary(probe_words, page_width_pt)
-                self.stdout.write(f"  Detected name column boundary: {suggested:.1f} pts")
-                raw = input(f"  Enter boundary in pts [Enter = {suggested:.1f}]: ").strip()
+                self.stdout.write(
+                    f"  Detected name column boundary: {suggested:.1f} pts"
+                )
+                raw = input(
+                    f"  Enter boundary in pts [Enter = {suggested:.1f}]: "
+                ).strip()
                 if raw:
                     try:
                         boundary_pt = float(raw)
@@ -202,9 +210,7 @@ class Command(BaseCommand):
         else:
             doc = None
 
-        self.stdout.write(
-            f"\n  {len(page_numbers)} of {total} page(s) → {out_dir}\n"
-        )
+        self.stdout.write(f"\n  {len(page_numbers)} of {total} page(s) → {out_dir}\n")
 
         created_count = skipped = 0
         for i in page_numbers:
@@ -273,14 +279,18 @@ class Command(BaseCommand):
         )
         dp.extract_embedded_text()
         self.stdout.write(f"  p.{i:04d} → embedded text")
-        pil_pages = convert_from_path(str(page_path), dpi=150, first_page=1, last_page=1)
+        pil_pages = convert_from_path(
+            str(page_path), dpi=150, first_page=1, last_page=1
+        )
         buf = io.BytesIO()
         pil_pages[0].save(buf, format="PNG")
         dp.image.save(f"{stem}_p{i:04d}.png", ContentFile(buf.getvalue()), save=True)
 
     def _ingest_image_only_page(self, doc, page_path, i, title, rel_str, stem):
         """A page with no text layer: render image only; OCR runs separately."""
-        pil_pages = convert_from_path(str(page_path), dpi=300, first_page=1, last_page=1)
+        pil_pages = convert_from_path(
+            str(page_path), dpi=300, first_page=1, last_page=1
+        )
         buf = io.BytesIO()
         pil_pages[0].save(buf, format="PNG")
         dp = DocumentPage.objects.create(
@@ -324,7 +334,9 @@ class Command(BaseCommand):
             (w for w in page_words if w["x0"] < boundary_pt),
             key=lambda w: w["top"],
         )
-        pil_pages = convert_from_path(str(page_path), dpi=200, first_page=1, last_page=1)
+        pil_pages = convert_from_path(
+            str(page_path), dpi=200, first_page=1, last_page=1
+        )
         arr, _ = _deskew_image(np.array(pil_pages[0]))
         gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
         line_ys = _detect_row_lines(gray)
@@ -376,7 +388,9 @@ class Command(BaseCommand):
 
             if not doc_created and DocumentPage.objects.filter(file=rel_str).exists():
                 if not force:
-                    self.stdout.write(f"  skip   {path.name} (DocumentPage already exists)")
+                    self.stdout.write(
+                        f"  skip   {path.name} (DocumentPage already exists)"
+                    )
                     skipped += 1
                     continue
                 if not dry_run:
@@ -533,10 +547,14 @@ def _create_structured_words(
     page_w_px = round(page_width_pt * scale)
     row_count = len(line_ys) - 1
 
-    row_centers_pt = [((line_ys[i] + line_ys[i + 1]) / 2) / scale for i in range(row_count)]
+    row_centers_pt = [
+        ((line_ys[i] + line_ys[i + 1]) / 2) / scale for i in range(row_count)
+    ]
     word_buckets: dict[int, list[dict]] = {}
     for w in col0_words:
-        best = min(range(row_count), key=lambda i, top=w["top"]: abs(top - row_centers_pt[i]))
+        best = min(
+            range(row_count), key=lambda i, top=w["top"]: abs(top - row_centers_pt[i])
+        )
         word_buckets.setdefault(best, []).append(w)
 
     ocr_pass = OCRPass.objects.create(
@@ -555,7 +573,9 @@ def _create_structured_words(
         top_px = line_ys[row_i]
         bottom_px = line_ys[row_i + 1]
         row_h_px = max(1, bottom_px - top_px)
-        name_text = " ".join(w["text"] for w in sorted(row_words, key=lambda w: w["x0"]))
+        name_text = " ".join(
+            w["text"] for w in sorted(row_words, key=lambda w: w["x0"])
+        )
 
         words.append(
             Word(

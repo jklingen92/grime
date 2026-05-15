@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-
 _SLOT_COLORS = {
     "structural": "#4a9eda",
     "content": "#5cb85c",
@@ -67,10 +66,19 @@ def render_frame(
     """
     fig_w_px, fig_h_px = frame_size
     dpi = 100
-    fig = plt.figure(figsize=(fig_w_px / dpi, fig_h_px / dpi), dpi=dpi, facecolor=_PANEL_BG)
+    fig = plt.figure(
+        figsize=(fig_w_px / dpi, fig_h_px / dpi), dpi=dpi, facecolor=_PANEL_BG
+    )
 
     gs = fig.add_gridspec(
-        1, 2, width_ratios=[7, 3], wspace=0.02, left=0.01, right=0.99, top=0.99, bottom=0.01
+        1,
+        2,
+        width_ratios=[7, 3],
+        wspace=0.02,
+        left=0.01,
+        right=0.99,
+        top=0.99,
+        bottom=0.01,
     )
     ax_img = fig.add_subplot(gs[0])
     ax_info = fig.add_subplot(gs[1])
@@ -160,7 +168,9 @@ def render_frame(
 
         # Solid highlight on top for matched slots.
         if match:
-            word_list = match.get("words") or ([match["word"]] if "word" in match else [])
+            word_list = match.get("words") or (
+                [match["word"]] if "word" in match else []
+            )
             for w in word_list:
                 ax_img.add_patch(
                     patches.Rectangle(
@@ -239,7 +249,13 @@ def render_frame(
         for m in matched_slots
         if m["slot"]["slot_type"] == "content" and m["slot"].get("sc_label")
     ]
-    ax_info.plot([0.05, 0.95], [y, y], color="#333355", linewidth=0.5, transform=ax_info.transAxes)
+    ax_info.plot(
+        [0.05, 0.95],
+        [y, y],
+        color="#333355",
+        linewidth=0.5,
+        transform=ax_info.transAxes,
+    )
     y -= 0.04
     ax_info.text(
         0.05,
@@ -286,12 +302,24 @@ def render_frame(
             y -= 0.065
     else:
         ax_info.text(
-            0.05, y, "—", va="top", color=_TEXT_DIM, fontsize=10, transform=ax_info.transAxes
+            0.05,
+            y,
+            "—",
+            va="top",
+            color=_TEXT_DIM,
+            fontsize=10,
+            transform=ax_info.transAxes,
         )
         y -= 0.055
 
     # ── Slot checklist ────────────────────────────────────────────────────────
-    ax_info.plot([0.05, 0.95], [y, y], color="#333355", linewidth=0.5, transform=ax_info.transAxes)
+    ax_info.plot(
+        [0.05, 0.95],
+        [y, y],
+        color="#333355",
+        linewidth=0.5,
+        transform=ax_info.transAxes,
+    )
     y -= 0.04
     ax_info.text(
         0.05,
@@ -315,8 +343,24 @@ def render_frame(
         label = slot.get("sc_label") or slot.get("text") or slot["slot_type"]
         if len(label) > 17:
             label = label[:16] + "…"
-        ax_info.text(0.05, y, tick, va="top", color=tick_c, fontsize=9, transform=ax_info.transAxes)
-        ax_info.text(0.18, y, label, va="top", color=color, fontsize=8, transform=ax_info.transAxes)
+        ax_info.text(
+            0.05,
+            y,
+            tick,
+            va="top",
+            color=tick_c,
+            fontsize=9,
+            transform=ax_info.transAxes,
+        )
+        ax_info.text(
+            0.18,
+            y,
+            label,
+            va="top",
+            color=color,
+            fontsize=8,
+            transform=ax_info.transAxes,
+        )
         y -= 0.05
 
     # Render figure → numpy RGB

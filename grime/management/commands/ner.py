@@ -74,7 +74,9 @@ class Command(BaseCommand):
             pages_qs = pages_qs.filter(page_number=options["page"])
         pages = [p for p in pages_qs if p.text]
         if not pages:
-            self.stdout.write(self.style.WARNING(f"No pages with text found for '{doc}'."))
+            self.stdout.write(
+                self.style.WARNING(f"No pages with text found for '{doc}'.")
+            )
             return
         self._run_pages(pages, label=str(doc))
 
@@ -98,11 +100,15 @@ class Command(BaseCommand):
     def _run_pages(self, pages, label):
         self.stdout.write(f"{label} — {len(pages)} page(s) to process")
         if not self.dry_run:
-            self.stdout.write("Loading model (first run will download weights ~440 MB)…")
+            self.stdout.write(
+                "Loading model (first run will download weights ~440 MB)…"
+            )
         processed = skipped = 0
         for i, page in enumerate(pages, 1):
             page_label = (
-                f"p.{page.page_number:04d}" if page.page_number is not None else str(page)
+                f"p.{page.page_number:04d}"
+                if page.page_number is not None
+                else str(page)
             )
             self.stdout.write(f"  [{i}/{len(pages)}] {page_label}")
             skip, reason = self._should_skip(page)
@@ -116,7 +122,9 @@ class Command(BaseCommand):
                 continue
             try:
                 n_labelled = self._process_page(page)
-                self.stdout.write(self.style.SUCCESS(f"    OK — {n_labelled} word(s) labelled"))
+                self.stdout.write(
+                    self.style.SUCCESS(f"    OK — {n_labelled} word(s) labelled")
+                )
                 processed += 1
             except Exception as e:
                 self.stderr.write(self.style.WARNING(f"    Error: {e}"))

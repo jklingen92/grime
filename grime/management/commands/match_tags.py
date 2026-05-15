@@ -32,10 +32,14 @@ from grime.models import Document, DocumentPage, Tag, Word
 
 
 class Command(BaseCommand):
-    help = "Find document regions matching tagged examples using semantic kernel matching."
+    help = (
+        "Find document regions matching tagged examples using semantic kernel matching."
+    )
 
     def add_arguments(self, parser):
-        parser.add_argument("--label", required=True, metavar="LABEL", help="Tag label to match")
+        parser.add_argument(
+            "--label", required=True, metavar="LABEL", help="Tag label to match"
+        )
         parser.add_argument(
             "--source-document",
             metavar="ID",
@@ -44,7 +48,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--target-document",
             metavar="ID",
-            help=("Search this document for matches (default: same document as source tags)"),
+            help=(
+                "Search this document for matches (default: same document as source tags)"
+            ),
         )
         parser.add_argument(
             "--min-score",
@@ -115,7 +121,9 @@ class Command(BaseCommand):
         force = options["force"]
         allow_overlaps = options["allow_overlaps"]
         print_fields = (
-            {f.strip() for f in options["fields"].split(",")} if options["fields"] else None
+            {f.strip() for f in options["fields"].split(",")}
+            if options["fields"]
+            else None
         )
 
         # -- Load source tags ------------------------------------------------
@@ -124,7 +132,9 @@ class Command(BaseCommand):
             source_doc = self._resolve_document(options["source_document"])
             page_ct = ContentType.objects.get_for_model(DocumentPage)
             page_pks = list(source_doc.pages.values_list("pk", flat=True))
-            source_tags_qs = source_tags_qs.filter(source_type=page_ct, source_id__in=page_pks)
+            source_tags_qs = source_tags_qs.filter(
+                source_type=page_ct, source_id__in=page_pks
+            )
         source_tags = list(source_tags_qs)
         if not source_tags:
             raise CommandError(
@@ -136,12 +146,16 @@ class Command(BaseCommand):
                 )
                 + "."
             )
-        self.stdout.write(f"Found {len(source_tags)} source tag(s) with label '{label}'.")
+        self.stdout.write(
+            f"Found {len(source_tags)} source tag(s) with label '{label}'."
+        )
 
         # -- Build kernel ----------------------------------------------------
         kernel = build_kernel(source_tags)
         if not kernel:
-            raise CommandError("Could not build kernel — source tags have no subcomponent words.")
+            raise CommandError(
+                "Could not build kernel — source tags have no subcomponent words."
+            )
         self.stdout.write(
             f"Kernel: {len(kernel)} slots ({sum(1 for s in kernel if s['slot_type']=='structural')} structural, "
             f"{sum(1 for s in kernel if s['slot_type']=='content')} content, "
@@ -183,7 +197,11 @@ class Command(BaseCommand):
         if not pages:
             raise CommandError(
                 f"Document '{target_doc}' has no pages"
-                + (f" with page_number={options['page']}" if options["page"] is not None else "")
+                + (
+                    f" with page_number={options['page']}"
+                    if options["page"] is not None
+                    else ""
+                )
                 + "."
             )
         self.stdout.write(f"Searching {len(pages)} page(s) in '{target_doc}'…\n")
@@ -240,14 +258,23 @@ class Command(BaseCommand):
                 import statistics as _stats
 
                 page_label = (
-                    f"p.{page.page_number:04d}" if page.page_number is not None else str(page)
+                    f"p.{page.page_number:04d}"
+                    if page.page_number is not None
+                    else str(page)
                 )
-                self.stdout.write(f"\n── Matrix: {page_label} ({len(page_words)} words) ──")
+                self.stdout.write(
+                    f"\n── Matrix: {page_label} ({len(page_words)} words) ──"
+                )
                 lines = _assign_line_ranks(list(page_words))
                 for lr, line_words in enumerate(lines):
-                    mid_y = int(_stats.median(w["top"] + w["height"] / 2 for w in line_words))
+                    mid_y = int(
+                        _stats.median(w["top"] + w["height"] / 2 for w in line_words)
+                    )
                     sorted_words = sorted(line_words, key=lambda w: w["left"])
-                    tokens = [w.get("corrected_text") or w.get("text") or "" for w in sorted_words]
+                    tokens = [
+                        w.get("corrected_text") or w.get("text") or ""
+                        for w in sorted_words
+                    ]
                     self.stdout.write(f"  [{lr:3d}] y≈{mid_y:4d}  {' '.join(tokens)}")
                 self.stdout.write("")
 
@@ -276,7 +303,15 @@ class Command(BaseCommand):
                 ):
                     video_frames.append(
                         render_frame(
-                            _img, _words, _k, matched_slots, bbox_left, bbox_top, _rw, _rh, score
+                            _img,
+                            _words,
+                            _k,
+                            matched_slots,
+                            bbox_left,
+                            bbox_top,
+                            _rw,
+                            _rh,
+                            score,
                         )
                     )
 
@@ -290,7 +325,11 @@ class Command(BaseCommand):
             if not matches:
                 continue
 
-            page_label = f"p.{page.page_number:04d}" if page.page_number is not None else str(page)
+            page_label = (
+                f"p.{page.page_number:04d}"
+                if page.page_number is not None
+                else str(page)
+            )
             existing_tags = existing_by_page.setdefault(page.pk, [])
             created_this_run: set[int] = set()
             for m in matches:
@@ -303,8 +342,9 @@ class Command(BaseCommand):
                     )
                 else:
                     fields_str = ""
-                line = f"  {page_label}  ({m['left']}, {m['top']})  score={m['score']:.2f}" + (
-                    f"  [{fields_str}]" if fields_str else ""
+                line = (
+                    f"  {page_label}  ({m['left']}, {m['top']})  score={m['score']:.2f}"
+                    + (f"  [{fields_str}]" if fields_str else "")
                 )
                 m_right = m["left"] + ref_w
                 m_bottom = m["top"] + ref_h
@@ -318,9 +358,13 @@ class Command(BaseCommand):
                         or m["top"] > t.bbox_top + t.bbox_height
                     )
                 ]
-                preexisting_overlap = [t for t in overlapping if t.pk not in created_this_run]
+                preexisting_overlap = [
+                    t for t in overlapping if t.pk not in created_this_run
+                ]
                 samerun_overlap = [t for t in overlapping if t.pk in created_this_run]
-                has_manual_overlap = any(not t.autogenerated for t in preexisting_overlap)
+                has_manual_overlap = any(
+                    not t.autogenerated for t in preexisting_overlap
+                )
                 has_auto_overlap = any(t.autogenerated for t in preexisting_overlap)
                 if preexisting_overlap:
                     self.stdout.write(self.style.WARNING(line))
@@ -353,7 +397,9 @@ class Command(BaseCommand):
                                 {
                                     "word_id": w["id"],
                                     "label": sc["label"],
-                                    "text": w.get("corrected_text") or w.get("text") or "",
+                                    "text": w.get("corrected_text")
+                                    or w.get("text")
+                                    or "",
                                 }
                                 for sc in m["inferred_subcomponents"]
                                 for w in sc.get("words", [])
@@ -367,11 +413,15 @@ class Command(BaseCommand):
             if video_frames:
                 from grime.pipeline.tag_viz import frames_to_video
 
-                self.stdout.write(f"\nRendering {len(video_frames)} frame(s) → '{video_path}'…")
+                self.stdout.write(
+                    f"\nRendering {len(video_frames)} frame(s) → '{video_path}'…"
+                )
                 frames_to_video(video_frames, video_path, fps=video_fps)
                 self.stdout.write(self.style.SUCCESS(f"Video saved → {video_path}"))
             else:
-                self.stdout.write(self.style.WARNING("No frames captured (no anchor words found)."))
+                self.stdout.write(
+                    self.style.WARNING("No frames captured (no anchor words found).")
+                )
 
         if total_matches == 0:
             self.stdout.write(self.style.WARNING("No matches found."))

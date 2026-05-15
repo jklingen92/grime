@@ -95,7 +95,9 @@ class Command(BaseCommand):
         processed = skipped = 0
         for i, page in enumerate(pages, 1):
             page_label = (
-                f"p.{page.page_number:04d}" if page.page_number is not None else str(page)
+                f"p.{page.page_number:04d}"
+                if page.page_number is not None
+                else str(page)
             )
             self.stdout.write(f"  [{i}/{len(pages)}] {page_label}")
 
@@ -135,17 +137,23 @@ class Command(BaseCommand):
         if page.file and page.file.name:
             from pdf2image import convert_from_path
 
-            pages = convert_from_path(page.file.path, dpi=200, first_page=1, last_page=1)
+            pages = convert_from_path(
+                page.file.path, dpi=200, first_page=1, last_page=1
+            )
             if pages:
                 return pages[0]
-        raise CommandError(f"DocumentPage pk={page.pk} has no image or renderable file.")
+        raise CommandError(
+            f"DocumentPage pk={page.pk} has no image or renderable file."
+        )
 
     def _get_client(self):
         if self._client is None and not self.dry_run:
             try:
                 from grime.pipeline.textract import make_client
             except ImportError:
-                raise CommandError("boto3 is not installed. Run: pip install -e '.[textract]'")
+                raise CommandError(
+                    "boto3 is not installed. Run: pip install -e '.[textract]'"
+                )
             self._client = make_client(self.region)
         return self._client
 

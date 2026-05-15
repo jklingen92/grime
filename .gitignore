@@ -220,3 +220,6 @@ __marimo__/
 # Grime demo project local state
 /media/
 /demo/db.sqlite3
+
+# VSCode
+.vscode

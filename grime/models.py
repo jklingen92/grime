@@ -21,7 +21,6 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
-
 TEXT_SOURCE_CHOICES = [
     ("ocr", "OCR"),
     ("embedded", "Embedded"),
@@ -85,14 +84,18 @@ class DocumentPage(models.Model):
     ``image`` — PNG rendered from file at OCR time; populated by run_ocr()
     """
 
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="pages")
+    document = models.ForeignKey(
+        Document, on_delete=models.CASCADE, related_name="pages"
+    )
     page_number = models.PositiveIntegerField(null=True, blank=True)
 
     title = models.CharField(max_length=1000, blank=True)
     url = models.URLField(blank=True)
     text = models.TextField(blank=True)
     text_complete = models.BooleanField(default=False)
-    text_source = models.CharField(max_length=20, blank=True, choices=TEXT_SOURCE_CHOICES)
+    text_source = models.CharField(
+        max_length=20, blank=True, choices=TEXT_SOURCE_CHOICES
+    )
     handwritten = models.BooleanField(default=False)
     manually_flagged = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
@@ -210,9 +213,15 @@ class OCRPass(models.Model):
         (STATUS_SKIPPED, "Skipped"),
     ]
 
-    page = models.ForeignKey(DocumentPage, on_delete=models.CASCADE, related_name="ocr_passes")
-    method = models.CharField(max_length=100, help_text="Tool used, e.g. 'tesseract', 'textract'")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_COMPLETE)
+    page = models.ForeignKey(
+        DocumentPage, on_delete=models.CASCADE, related_name="ocr_passes"
+    )
+    method = models.CharField(
+        max_length=100, help_text="Tool used, e.g. 'tesseract', 'textract'"
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_COMPLETE
+    )
     confidence = models.FloatField(
         null=True, blank=True, help_text="Mean confidence for the page (0.0–100.0)"
     )
@@ -245,14 +254,18 @@ class NERPass(models.Model):
         (STATUS_SKIPPED, "Skipped"),
     ]
 
-    page = models.ForeignKey(DocumentPage, on_delete=models.CASCADE, related_name="ner_passes")
+    page = models.ForeignKey(
+        DocumentPage, on_delete=models.CASCADE, related_name="ner_passes"
+    )
     schema_name = models.CharField(
         max_length=100,
         blank=True,
         help_text="Template or schema used (e.g. 'hf-historical-ner')",
     )
     method = models.CharField(max_length=100, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_COMPLETE)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_COMPLETE
+    )
     confidence = models.FloatField(null=True, blank=True)
     used_llm = models.BooleanField(default=False)
     llm_model = models.CharField(max_length=100, blank=True)
@@ -280,7 +293,9 @@ class Word(models.Model):
     or null for O / unlabelled). Populated by ``python manage.py ner``.
     """
 
-    page = models.ForeignKey(DocumentPage, on_delete=models.CASCADE, related_name="words")
+    page = models.ForeignKey(
+        DocumentPage, on_delete=models.CASCADE, related_name="words"
+    )
     ocr_pass = models.ForeignKey(
         OCRPass,
         null=True,
