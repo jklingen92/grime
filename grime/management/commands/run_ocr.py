@@ -81,7 +81,7 @@ class Command(BaseCommand):
         return False, ""
 
     def _run_pages(self, pages, label):
-        from grime.pipeline.run_ocr import run_page
+        from grime.pipeline.ocr import run_page
 
         self.stdout.write(f"{label} — {len(pages)} page(s) to process")
 

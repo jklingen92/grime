@@ -607,7 +607,7 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
     if not page.image:
         return JsonResponse({"error": "Page has no image to re-OCR"}, status=400)
 
-    from grime.pipeline.run_ocr import rerun_selection
+    from grime.pipeline.ocr import rerun_selection
 
     try:
         result = rerun_selection(page, pks, engine=engine)
