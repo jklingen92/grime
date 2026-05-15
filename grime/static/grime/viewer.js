@@ -28,6 +28,7 @@
   var BULK_DITTO_URL     = C.bulkDittoUrl || null;
   var BULK_DELETE_URL    = C.bulkDeleteUrl || null;
   var RERUN_SELECTION_URL = C.rerunSelectionUrl || null;
+  var NER_RERUN_URL = C.nerRerunUrl || null;
   var PAGE_LIST      = C.pageList || null;
   var CURRENT_PAGE_PK = C.currentPagePk || null;
 
@@ -817,6 +818,36 @@
     });
   }
 
+  function nerBtnLabel() {
+    var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_label; });
+    return hasNer ? 'Rerun NER' : 'Run NER';
+  }
+
+  function runNer() {
+    if (!NER_RERUN_URL) return;
+    var btn = document.getElementById('dp-rerun-ner');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+    fetch(NER_RERUN_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN},
+      body: ''
+    }).then(function(r){ return r.json(); }).then(function(data) {
+      if (!data.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+        alert(data.error || 'NER failed.');
+        return;
+      }
+      data.words.forEach(function(w) {
+        var word = wordById[w.id];
+        if (word) { word.ner_label = w.ner_label; word.corrected_label = w.corrected_label; }
+      });
+      renderOverlays();
+      if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+    }).catch(function(){
+      if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+    });
+  }
+
   function rerunSelectionOcr() {
     if (!RERUN_SELECTION_URL || !state.ocrSelectedIds.size) return;
     var btn = document.getElementById('ocr-rerun-ocr');
@@ -1246,6 +1277,14 @@
       rerunOcrBtn.addEventListener('click', function(e){
         e.preventDefault();
         runOcr(state.ocrEngine || 'textract');
+      });
+    }
+    var rerunNerBtn = document.getElementById('dp-rerun-ner');
+    if (rerunNerBtn) {
+      rerunNerBtn.textContent = nerBtnLabel();
+      rerunNerBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        runNer();
       });
     }
     if (rerunCaretBtn && rerunMenu) {

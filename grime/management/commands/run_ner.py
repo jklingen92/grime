@@ -64,7 +64,7 @@ class Command(BaseCommand):
         self.dry_run = options["dry_run"]
         self.force = options["force"]
 
-        from grime.pipeline.hf_ner import DEFAULT_CONFIDENCE_THRESHOLD
+        from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD
 
         self.threshold = options["threshold"] or DEFAULT_CONFIDENCE_THRESHOLD
 
@@ -136,7 +136,7 @@ class Command(BaseCommand):
         )
 
     def _process_page(self, page) -> int:
-        from grime.pipeline.hf_ner import extract_entities, label_ocr_words
+        from grime.pipeline.ner import extract_entities, label_ocr_words
 
         if self.force:
             NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).delete()

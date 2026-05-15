@@ -29,6 +29,7 @@
           <a href="#" data-engine="tesseract">Tesseract</a>
         </div>
       </span>
+      <button id="dp-rerun-ner" type="button">Run NER</button>
       <button id="dp-boxes-toggle" type="button">Hide boxes</button>
       <button id="dp-draw-toggle" type="button">Add region (a)</button>
     </div>
@@ -213,6 +214,7 @@ window.VIEWER_CONFIG = {
   bulkDittoUrl:      "{{ ocr_bulk_ditto_url }}",
   bulkDeleteUrl:     "{{ ocr_bulk_delete_url }}",
   rerunSelectionUrl: "{{ ocr_rerun_selection_url }}",
+  nerRerunUrl:       "{{ ner_rerun_url }}",
 {% endif %}
 };
 </script>

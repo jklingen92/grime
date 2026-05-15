@@ -95,6 +95,11 @@ def get_viewer_urls() -> list:
             name="grime_documentpage_viewer_words_rerun_ocr",
         ),
         path(
+            "<int:page_pk>/viewer/words/rerun-ner/",
+            words_rerun_ner,
+            name="grime_documentpage_viewer_words_rerun_ner",
+        ),
+        path(
             "<int:page_pk>/viewer/tags/create/",
             tag_create,
             name="grime_documentpage_viewer_tag_create",
@@ -242,6 +247,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
         "ocr_rerun_selection_url": _url("grime_documentpage_viewer_words_rerun_ocr"),
+        "ner_rerun_url": _url("grime_documentpage_viewer_words_rerun_ner"),
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
         "ocr_reorder_url": "",
@@ -601,6 +607,54 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
             "new_words": [_word_to_dict(w) for w in result["new_words"]],
         }
     )
+
+
+@require_POST
+def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Run (or re-run) HuggingFace NER on a page and return updated word labels.
+
+    Clears existing NERPass records and ner_label values, then runs the HF NER
+    pipeline, saving results as a new NERPass. Returns the full word list with
+    updated ner_label fields so the viewer can refresh without a reload.
+    """
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    if not page.text:
+        return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
+
+    from grime.models import NERPass, Word
+    from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
+
+    SCHEMA_NAME = "hf-historical-ner"
+    try:
+        NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).delete()
+        Word.objects.filter(page=page).update(ner_label=None)
+        entities = extract_entities(page.text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+        ner_pass = NERPass.objects.create(
+            page=page,
+            schema_name=SCHEMA_NAME,
+            method="hf-historical-ner",
+            used_llm=False,
+            threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+            status=NERPass.STATUS_COMPLETE,
+        )
+        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
+        label_ocr_words(words, page.text, entities)
+        labelled = [w for w in words if w.ner_label]
+        if labelled:
+            for w in labelled:
+                w.ner_pass = ner_pass
+            Word.objects.bulk_update(labelled, ["ner_pass"])
+    except Exception as exc:
+        return JsonResponse({"error": f"NER failed: {exc}"}, status=500)
+
+    words = list(
+        Word.objects.filter(page=page)
+        .order_by("line_num", "word_num")
+        .values("id", "ner_label", "corrected_label")
+    )
+    return JsonResponse({"ok": True, "words": words})
 
 
 # ---------------------------------------------------------------------------
