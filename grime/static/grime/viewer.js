@@ -1347,6 +1347,8 @@
     // Selection bar
     var rerunBtn = document.getElementById('ocr-rerun-ocr');
     if (rerunBtn) rerunBtn.addEventListener('click',function(e){e.preventDefault();rerunSelectionOcr();});
+    var bulkDittoBtn = document.getElementById('ocr-bulk-ditto');
+    if (bulkDittoBtn) bulkDittoBtn.addEventListener('click',function(e){e.preventDefault();bulkDitto();});
     var bulkDeleteBtn = document.getElementById('ocr-bulk-delete');
     if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click',function(e){e.preventDefault();bulkDelete();});
     var mergeCancelBtn = document.getElementById('ocr-merge-cancel');

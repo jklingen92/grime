@@ -15,6 +15,7 @@ Endpoints implemented here:
     POST words/ner-correct/   — set Word.corrected_ner_label
     POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
     POST words/bulk-delete/   — delete multiple Words at once
+    POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
     POST words/rerun-ocr/     — re-OCR the union bbox of a Word selection
     POST tags/create/         — create a Tag on this page
     POST tags/update/         — edit an existing Tag
@@ -80,6 +81,11 @@ def get_viewer_urls() -> list:
             "<int:page_pk>/viewer/words/bulk-delete/",
             words_bulk_delete,
             name="grime_documentpage_viewer_words_bulk_delete",
+        ),
+        path(
+            "<int:page_pk>/viewer/words/bulk-ditto/",
+            words_bulk_ditto,
+            name="grime_documentpage_viewer_words_bulk_ditto",
         ),
         path(
             "<int:page_pk>/viewer/words/rerun-ocr/",
@@ -241,6 +247,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_delete_url": _url("grime_documentpage_viewer_word_delete"),
         "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
+        "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
         "ocr_rerun_selection_url": _url("grime_documentpage_viewer_words_rerun_ocr"),
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
@@ -250,7 +257,6 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_recluster_url": "",
         "ocr_clear_words_url": "",
         "ocr_resolve_dittos_url": "",
-        "ocr_bulk_ditto_url": "",
         "ocr_create_person_url": "",
         "rerun_ocr_url": "",
         "review_tags_url": "",
@@ -546,6 +552,42 @@ def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     found_ids = list(qs.values_list("pk", flat=True))
     deleted, _ = qs.delete()
     return JsonResponse({"ok": True, "deleted_ids": found_ids, "deleted": deleted})
+
+
+@require_POST
+def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Mark several Words as dittos at once, then re-resolve the page.
+
+    Each marked word's text becomes ``"`` and any human correction is cleared;
+    ``_resolve_page_dittos`` then walks the page top-to-bottom, projecting the
+    most recent word at each horizontal position downward so chained dittos
+    fill in correctly.  Words that resolved get their ``corrected_text`` and
+    ``is_ditto`` flag persisted.
+
+    Response shape matches the JS expectation: ``marked_pks`` lists the words
+    whose raw text was reset to ``"``; ``updated`` lists the words whose
+    effective text changed during resolution.
+    """
+    try:
+        pks = _parse_word_pks(request.POST.get("word_pks"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if not pks:
+        return JsonResponse({"error": "No word_pks provided"}, status=400)
+    qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
+    marked_pks = list(qs.values_list("pk", flat=True))
+    if not marked_pks:
+        return JsonResponse({"error": "No words found on this page"}, status=404)
+    qs.update(
+        text='"',
+        corrected_text=None,
+        is_ditto=False,
+        corrected_by=None,
+        corrected_at=None,
+    )
+    page = DocumentPage.objects.get(pk=page_pk)
+    updated = _resolve_page_dittos(page, request)
+    return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
 
 
 @require_POST

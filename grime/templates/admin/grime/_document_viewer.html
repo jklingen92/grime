@@ -173,6 +173,7 @@
 <div id="ocr-merge-bar">
   <label id="ocr-merge-label">2 words selected</label>
   <button id="ocr-rerun-ocr"   class="button">Rerun OCR</button>
+  <button id="ocr-bulk-ditto"  class="button">Ditto</button>
   <button id="ocr-bulk-delete" class="button" style="color:#a00">Delete</button>
   <button id="ocr-merge-cancel" class="button">Cancel</button>
   <span class="merge-bar-hint">Esc · ⌫</span>
@@ -202,6 +203,7 @@ window.VIEWER_CONFIG = {
   deleteUrl:         "{{ ocr_delete_url }}",
   addWordUrl:        "{{ ocr_add_word_url }}",
   markAsDittoUrl:    "{{ ocr_mark_as_ditto_url }}",
+  bulkDittoUrl:      "{{ ocr_bulk_ditto_url }}",
   bulkDeleteUrl:     "{{ ocr_bulk_delete_url }}",
   rerunSelectionUrl: "{{ ocr_rerun_selection_url }}",
 {% endif %}
