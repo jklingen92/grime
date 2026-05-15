@@ -247,7 +247,7 @@
 
   /* ── merge bar ────────────────────────────────────────────── */
   #ocr-merge-bar {
-    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 8px; right: 8px;
     background: #fff; border: 1px solid #bbb; border-radius: 6px;
     padding: 10px 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.22);
     z-index: 9998; display: none; align-items: center; gap: 10px; min-width: 300px;
