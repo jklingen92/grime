@@ -134,10 +134,9 @@ def run_page(
 
     Skip rules:
       - ``text_source`` ∈ {"embedded", "manual"} — those sources own their text.
-      - ``text_complete`` and not ``force`` — already done.
       - No ``image`` on the page.
 
-    On success, writes ``page.text`` / ``page.text_complete``, creates an
+    On success, writes ``page.text``, creates an
     ``OCRPass``, and bulk-creates ``Word`` rows.  Returns the new ``OCRPass``
     (or ``None`` on skip).
     """
@@ -147,8 +146,6 @@ def run_page(
 
     if page.text_source in ("embedded", "manual"):
         return None
-    if page.text_complete and not force:
-        return None
     img_field = getattr(page, "image", None)
     if not img_field:
         return None
@@ -157,8 +154,7 @@ def run_page(
     text, conf, words, used_engine = dispatch(img, engine=engine)
 
     page.text = text.strip()
-    page.text_complete = True
-    page.save(update_fields=["text", "text_complete"])
+    page.save(update_fields=["text"])
     ocr_pass = OCRPass.objects.create(
         page=page,
         method=used_engine,

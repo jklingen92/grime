@@ -111,14 +111,10 @@ class Command(BaseCommand):
             try:
                 if self.force:
                     Word.objects.filter(page=page).delete()
-                    OCRPass.objects.filter(page=page).delete()
-                    page.text_complete = False
                 ocr_pass = run_page(page, engine=self.engine, force=self.force)
                 if ocr_pass is None:
                     self.stdout.write(
-                        self.style.WARNING(
-                            "    skipped (no image or already complete)"
-                        )
+                        self.style.WARNING("    skipped (no image or already complete)")
                     )
                 else:
                     self.stdout.write(self.style.SUCCESS(f"    OK ({ocr_pass.method})"))

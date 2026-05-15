@@ -81,10 +81,6 @@ CONFIDENCE_THRESHOLD = 60.0
 # image is classified as visual content rather than pure text.
 VISUAL_CONTENT_THRESHOLD = 0.15
 
-# Character-height coefficient of variation above which an image is classified
-# as handwritten. Typed text is ~0.15–0.30; handwriting is ~0.40–0.70+.
-HANDWRITING_THRESHOLD = 0.45
-
 
 def is_visual_content(
     img: Image.Image, threshold: float = VISUAL_CONTENT_THRESHOLD
@@ -106,104 +102,6 @@ def is_visual_content(
         gray = np.clip((gray - lo) / (hi - lo) * 255, 0, 255)
     midtone_ratio = np.mean((gray > 50) & (gray < 200))
     return float(midtone_ratio) > threshold
-
-
-def handwriting_score(img: Image.Image) -> float:
-    """
-    Return a score in [0.0, 1.0] estimating how likely the image is handwritten.
-
-    Combines two signals, each derived from character-scale connected components
-    (form borders, page-spanning rules, and large headings are filtered out by
-    area bounds so only fill-in text remains):
-
-      1. Height CV — typed characters are very uniform in height; handwritten
-         characters vary even when neat (CV ~0.15–0.30 typed, ~0.40–0.70+ written).
-
-      2. Baseline irregularity — even neat handwriting has slight waviness in
-         where characters sit on the line; typewriter/print text is mechanically
-         level. Measured as the mean within-line std of bottom edges, normalised
-         by median character height.
-
-    The two scores are blended (35 % height, 65 % baseline) so that neat
-    handwriting that passes height CV alone is caught by baseline drift.
-
-    The normalisation constants are approximate — use --dry-run on a labelled
-    sample and adjust HANDWRITING_THRESHOLD (or the constants below) to taste.
-
-    Returns 0.0 for clearly typed, 1.0 for clearly handwritten.
-    Compare against HANDWRITING_THRESHOLD to get a boolean classification.
-    """
-    import cv2
-    import numpy as np
-
-    gray = np.array(img.convert("L"))
-
-    if gray.shape[1] < 1000:
-        scale = 1000 / gray.shape[1]
-        gray = cv2.resize(
-            gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4
-        )
-
-    h, w = gray.shape
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-
-    # Keep only character-scale components. Form borders, decorative rules, and
-    # large headings are too tall/wide; noise and punctuation dots are too small.
-    min_h, max_h = h * 0.01, h * 0.08
-    min_w, max_w = w * 0.005, w * 0.06
-
-    char_idx = [
-        i
-        for i in range(1, num_labels)
-        if min_h <= stats[i, cv2.CC_STAT_HEIGHT] <= max_h
-        and min_w <= stats[i, cv2.CC_STAT_WIDTH] <= max_w
-    ]
-
-    if len(char_idx) < 20:
-        return 0.5  # not enough character-scale components to classify
-
-    heights = np.array([float(stats[i, cv2.CC_STAT_HEIGHT]) for i in char_idx])
-    tops = np.array([float(stats[i, cv2.CC_STAT_TOP]) for i in char_idx])
-    bottoms = tops + heights
-
-    # --- Signal 1: height coefficient of variation ---
-    mean_h = float(heights.mean())
-    height_cv = float(heights.std() / mean_h) if mean_h > 0 else 0.0
-    height_score = float(np.clip((height_cv - 0.15) / 0.50, 0.0, 1.0))
-
-    # --- Signal 2: baseline irregularity ---
-    # Group components into text lines by clustering on vertical centre.
-    # For each line, measure how much the bottom edges deviate from the line
-    # median (normalised by median character height). Typed text is mechanically
-    # level (normalised std ≈ 0.02–0.08); even neat handwriting drifts more
-    # (≈ 0.10–0.30+).
-    centers_y = tops + heights / 2
-    order = np.argsort(centers_y)
-    sorted_centers = centers_y[order]
-    sorted_bottoms = bottoms[order]
-
-    median_h = float(np.median(heights))
-    gaps = np.diff(sorted_centers)
-    breaks = np.where(gaps > median_h * 0.7)[0]
-    line_starts = np.concatenate([[0], breaks + 1])
-    line_ends = np.concatenate([breaks + 1, [len(sorted_centers)]])
-
-    baseline_devs = []
-    for s, e in zip(line_starts, line_ends):
-        if e - s < 4:
-            continue
-        dev = float(np.std(sorted_bottoms[s:e]) / median_h)
-        baseline_devs.append(dev)
-
-    if baseline_devs:
-        # Typed: mean_dev ≈ 0.02–0.08. Neat handwriting: ≈ 0.10–0.30+.
-        baseline_score = float(np.clip(np.mean(baseline_devs) / 0.25, 0.0, 1.0))
-    else:
-        baseline_score = height_score
-
-    return 0.35 * height_score + 0.65 * baseline_score
 
 
 def ocr_image(

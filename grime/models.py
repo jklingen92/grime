@@ -33,25 +33,18 @@ class Document(models.Model):
     A standalone archival document (PDF, scanned booklet, ledger, etc.).
 
     Large documents should be burst into DocumentPage chunks for OCR or
-    structured extraction. If ``is_structured`` is True, ``column_schema``
-    holds an ordered list of column names used when extracting table data
-    into ``DocumentPage.structured_data``.
+    structured extraction.
     """
 
     title = models.CharField(max_length=1000)
     document_id = models.CharField(max_length=100, blank=True)
     url = models.URLField(blank=True)
     text = models.TextField(blank=True)
-    text_complete = models.BooleanField(default=False)
     text_source = models.CharField(
         max_length=20,
         blank=True,
         choices=TEXT_SOURCE_CHOICES,
         help_text="How the text field was populated; set at ingest and not changed automatically",
-    )
-    handwritten = models.BooleanField(
-        default=False,
-        help_text="Document is handwritten rather than typeset",
     )
     manually_flagged = models.BooleanField(
         default=False,
@@ -59,15 +52,6 @@ class Document(models.Model):
     )
     notes = models.TextField(blank=True)
     file = models.FileField(upload_to="documents/", null=True, blank=True)
-    is_structured = models.BooleanField(
-        default=False,
-        help_text="Pages contain tabular data; structured_data is extracted per page",
-    )
-    column_schema = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Ordered list of column names for structured documents (e.g. ['name', 'address'])",
-    )
 
     class Meta:
         ordering = ["title"]
@@ -96,21 +80,14 @@ class DocumentPage(models.Model):
     title = models.CharField(max_length=1000, blank=True)
     url = models.URLField(blank=True)
     text = models.TextField(blank=True)
-    text_complete = models.BooleanField(default=False)
     text_source = models.CharField(
         max_length=20, blank=True, choices=TEXT_SOURCE_CHOICES
     )
-    handwritten = models.BooleanField(default=False)
     manually_flagged = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
 
     file = models.FileField(upload_to="documents/", null=True, blank=True)
     image = models.ImageField(upload_to="document_pages/", null=True, blank=True)
-    structured_data = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Table rows extracted from this page; list of dicts keyed by Document.column_schema",
-    )
 
     class Meta:
         ordering = ["document", "page_number"]
@@ -134,9 +111,9 @@ class DocumentPage(models.Model):
         if not text.strip():
             return False
         self.text = text.strip()
-        self.text_complete = True
-        self.save(update_fields=["text", "text_complete"])
+        self.save(update_fields=["text"])
         return True
+
 
 class OCRPass(models.Model):
     """
