@@ -401,15 +401,18 @@ class Command(BaseCommand):
                 f"  {'(dry) ' if dry_run else ''}page   p.{page_num:04d}  {path.name!r}"
             )
             if not dry_run:
+                is_pdf = path.suffix.lower() == ".pdf"
                 dp = DocumentPage.objects.create(
                     document=doc,
                     page_number=page_num,
                     title=f"{title} — p. {page_num}",
                     file=rel_str,
-                    text_source="ocr" if is_image else "",
+                    text_source="ocr" if (is_image or is_pdf) else "",
                 )
                 if is_image:
                     _save_page_image(dp, path)
+                elif is_pdf:
+                    _render_pdf_image(dp, path)
             pages_created += 1
 
         self.stdout.write(
@@ -429,6 +432,14 @@ def _rel(path: Path, media_root: Path) -> str:
 
 def _title(stem: str) -> str:
     return stem.replace("_", " ").replace("-", " ").title()
+
+
+def _render_pdf_image(dp: DocumentPage, pdf_path: Path) -> None:
+    """Render the first page of a single-page PDF to dp.image as PNG."""
+    pil_pages = convert_from_path(str(pdf_path), dpi=300, first_page=1, last_page=1)
+    buf = io.BytesIO()
+    pil_pages[0].save(buf, format="PNG")
+    dp.image.save(pdf_path.stem + ".png", ContentFile(buf.getvalue()), save=True)
 
 
 def _save_page_image(dp: DocumentPage, img_path: Path) -> None:

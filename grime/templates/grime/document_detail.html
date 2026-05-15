@@ -1,0 +1,32 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ document.title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: "Roboto","Lucida Grande","DejaVu Sans","Bitstream Vera Sans",Verdana,Arial,sans-serif; font-size: 13px; background: #f8f8f8; }
+    #gd-header { background: #417690; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+    #gd-header a { color: #c8dce8; text-decoration: none; font-size: 0.85em; }
+    #gd-header a:hover { text-decoration: underline; }
+    #gd-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
+    #gd-body { padding: 12px 16px; }
+    #gd-no-pages { color: #666; padding: 24px 0; }
+  </style>
+</head>
+<body>
+<div id="gd-header">
+  <a href="{% url 'admin:grime_document_changelist' %}">Documents</a>
+  <span>›</span>
+  <h1>{{ document.title }}</h1>
+</div>
+<div id="gd-body">
+  {% if image_url is None and not document.pages.exists %}
+  <p id="gd-no-pages">This document has no pages yet.</p>
+  {% else %}
+  {% include "admin/grime/_document_viewer.html" %}
+  {% endif %}
+</div>
+</body>
+</html>

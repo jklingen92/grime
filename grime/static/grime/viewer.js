@@ -22,7 +22,6 @@
   var CONFIRM_ALL_URL = C.confirmAllUrl;
   var RECLUSTER_URL  = C.reclusterUrl;
   var CREATE_PERSON_URL = C.createPersonUrl;
-  var RERUN_OCR_URL      = C.rerunOcrUrl || null;
   var CLEAR_WORDS_URL    = C.clearWordsUrl || null;
   var RESOLVE_DITTOS_URL = C.resolveDittosUrl || null;
   var MARK_AS_DITTO_URL  = C.markAsDittoUrl || null;
@@ -864,6 +863,41 @@
     updateOcrMergeBar();
   }
 
+  function ocrBtnLabel() {
+    return OCR_WORDS.length ? 'Rerun OCR' : 'Run OCR';
+  }
+
+  function runOcr() {
+    if (!RERUN_SELECTION_URL) return;
+    var btn = document.getElementById('dp-rerun-ocr');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+    var body = state.ocrSelectedIds.size
+      ? 'word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))
+      : '';
+    fetch(RERUN_SELECTION_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN},
+      body: body
+    }).then(function(r){ return r.json(); }).then(function(data) {
+      if (!data.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); }
+        alert(data.error || 'OCR failed.');
+        return;
+      }
+      var del = new Set(data.deleted_ids);
+      OCR_WORDS = OCR_WORDS.filter(function(w){ return !del.has(w.id); });
+      data.deleted_ids.forEach(function(id){ delete wordById[id]; });
+      (data.new_words || []).forEach(function(w){ OCR_WORDS.push(w); wordById[w.id] = w; });
+      state.ocrSelectedIds.clear();
+      var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
+      renderOverlays();
+      updateTextPanels();
+      if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); }
+    }).catch(function(){
+      if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); }
+    });
+  }
+
   function rerunSelectionOcr() {
     if (!RERUN_SELECTION_URL || !state.ocrSelectedIds.size) return;
     var btn = document.getElementById('ocr-rerun-ocr');
@@ -1284,13 +1318,10 @@
       .catch(function(){btn.disabled=false;});
     });
     var rerunOcrBtn = document.getElementById('dp-rerun-ocr');
-    if (rerunOcrBtn && RERUN_OCR_URL) rerunOcrBtn.addEventListener('click',function(e){
-      e.preventDefault();var btn=this;btn.disabled=true;btn.textContent='Running OCR…';
-      fetch(RERUN_OCR_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},body:''})
-      .then(function(r){return r.json();})
-      .then(function(data){if(data.ok){window.location.reload();}else{btn.disabled=false;btn.textContent='Rerun OCR';alert('OCR failed: '+(data.error||'unknown'));} })
-      .catch(function(){btn.disabled=false;btn.textContent='Rerun OCR';});
-    });
+    if (rerunOcrBtn) {
+      rerunOcrBtn.textContent = ocrBtnLabel();
+      rerunOcrBtn.addEventListener('click', function(e){ e.preventDefault(); runOcr(); });
+    }
 
     // Mouse handlers
     document.getElementById('dp-viewer').addEventListener('mousedown', onViewerMousedown);

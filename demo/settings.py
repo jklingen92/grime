@@ -6,12 +6,19 @@ then visit http://127.0.0.1:8000/admin/.
 """
 
 from pathlib import Path
+import environ
+
+env = environ.Env(
+    DEBUG=(bool, False),
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "dev-only-do-not-use-in-production"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+environ.Env.read_env(BASE_DIR / ".env")
+
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env("DEBUG")
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -70,3 +77,8 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# AWS
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
+AWS_DEFAULT_REGION = env("AWS_DEFAULT_REGION", default="us-east-1")

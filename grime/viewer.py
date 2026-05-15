@@ -27,15 +27,17 @@ that try to touch a Word belonging to a different page.
 
 import json
 
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Max
 from django.http import HttpRequest, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
-from grime.models import DocumentPage, Tag, Word
+from grime.models import Document, DocumentPage, Tag, Word
 
 _VALID_NER_LABELS = {None, "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -213,7 +215,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
     )
 
     def _url(name: str) -> str:
-        return reverse(f"admin:{name}", args=[page.pk])
+        return reverse(f"grime:{name}", args=[page.pk])
 
     return {
         "image_url": image_url,
@@ -224,10 +226,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "prev_url_json": _safe_json(None),
         "next_url_json": _safe_json(None),
         "page_list_json": _safe_json(None),
-        # `ocr_record_pk` is the viewer template's flag for "OCR editing is on".
-        # We don't track an OCRRecord anymore but want the editing UI when the
-        # page has any words at all.
-        "ocr_record_pk": page.pk if words else None,
+        "ocr_record_pk": page.pk,
         "tag_source_type_id": page_ct.pk,
         "tag_source_id": page.pk,
         "doc_tag_count": Tag.objects.filter(
@@ -235,7 +234,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
             source_id__in=page.document.pages.values_list("pk", flat=True),
         ).count(),
         "autogen_unreviewed_count": 0,
-        "use_preprocessed_bbox": False,
+        "use_preprocessed_bbox": True,
         # Wired endpoints — the JS gates feature availability on whether each
         # URL is truthy.
         "tag_create_url": _url("grime_documentpage_viewer_tag_create"),
@@ -299,8 +298,8 @@ def word_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
 def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
     """Create a Word at a manually drawn bbox.
 
-    The new Word is appended to line_num=0 with the next available word_num,
-    matching klancestry's add-region behaviour.  Caller can reorder afterwards.
+    The new Word is appended to line_num=0 with the next available word_num.
+    Caller can reorder afterwards.
     """
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
@@ -605,24 +604,12 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
         pks = _parse_word_pks(request.POST.get("word_pks"))
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    if not pks:
-        return JsonResponse({"error": "No word_pks provided"}, status=400)
 
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
         return JsonResponse({"error": "Page not found"}, status=404)
     if not page.image:
         return JsonResponse({"error": "Page has no image to re-OCR"}, status=400)
-
-    words = list(Word.objects.filter(pk__in=pks, page_id=page_pk))
-    if not words:
-        return JsonResponse({"error": "No words found on this page"}, status=404)
-
-    padding = 4
-    left = max(0, min(w.left for w in words) - padding)
-    top = max(0, min(w.top for w in words) - padding)
-    right = max(w.left + w.width for w in words) + padding
-    bottom = max(w.top + w.height for w in words) + padding
 
     try:
         from PIL import Image as PILImage
@@ -635,20 +622,38 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
         )
 
     full_img = PILImage.open(page.image.path)
+
+    if pks:
+        words = list(Word.objects.filter(pk__in=pks, page_id=page_pk))
+        if not words:
+            return JsonResponse({"error": "No words found on this page"}, status=404)
+        padding = 4
+        left = max(0, min(w.left for w in words) - padding)
+        top = max(0, min(w.top for w in words) - padding)
+        right = max(w.left + w.width for w in words) + padding
+        bottom = max(w.top + w.height for w in words) + padding
+        block_num, par_num, line_num = (
+            words[0].block_num,
+            words[0].par_num,
+            words[0].line_num,
+        )
+        deleted_ids = [w.pk for w in words]
+        Word.objects.filter(pk__in=deleted_ids).delete()
+    else:
+        left, top, right, bottom = 0, 0, full_img.width, full_img.height
+        block_num, par_num, line_num = 0, 0, 0
+        deleted_ids = list(
+            Word.objects.filter(page_id=page_pk).values_list("pk", flat=True)
+        )
+        Word.objects.filter(page_id=page_pk).delete()
+
     crop = full_img.crop(
         (left, top, min(right, full_img.width), min(bottom, full_img.height))
     )
     try:
-        _text, _conf, new_words = ocr_image(crop)
+        _, _, new_words = ocr_image(crop)
     except Exception as exc:
         return JsonResponse({"error": f"OCR failed: {exc}"}, status=500)
-
-    block_num = words[0].block_num
-    par_num = words[0].par_num
-    line_num = words[0].line_num
-
-    deleted_ids = [w.pk for w in words]
-    Word.objects.filter(pk__in=deleted_ids).delete()
 
     created = []
     for i, row in enumerate(new_words):
@@ -668,3 +673,54 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
         created.append(_word_to_dict(w))
 
     return JsonResponse({"ok": True, "deleted_ids": deleted_ids, "new_words": created})
+
+
+# ---------------------------------------------------------------------------
+# Document detail view
+# ---------------------------------------------------------------------------
+
+
+@staff_member_required
+def document_page_view(request, doc_pk: int, page_pk: int | None = None):
+    doc = get_object_or_404(Document, pk=doc_pk)
+    pages = list(doc.pages.order_by("page_number"))
+
+    if not pages:
+        return render(
+            request, "grime/document_detail.html", {"document": doc, "image_url": None}
+        )
+
+    if page_pk is None:
+        return redirect("grime:document_page", doc_pk=doc_pk, page_pk=pages[0].pk)
+
+    page = get_object_or_404(DocumentPage, pk=page_pk, document=doc)
+    page_pks = [p.pk for p in pages]
+    idx = page_pks.index(page.pk)
+
+    def _page_url(pk: int) -> str:
+        return reverse("grime:document_page", args=[doc_pk, pk])
+
+    prev_pk = page_pks[idx - 1] if idx > 0 else None
+    next_pk = page_pks[idx + 1] if idx < len(page_pks) - 1 else None
+
+    print(prev_pk, next_pk)
+    ctx = build_viewer_context(page)
+    ctx.update(
+        {
+            "document": doc,
+            "prev_url": _page_url(prev_pk) if prev_pk else "",
+            "next_url": _page_url(next_pk) if next_pk else "",
+            "prev_url_json": _safe_json(_page_url(prev_pk) if prev_pk else None),
+            "next_url_json": _safe_json(_page_url(next_pk) if next_pk else None),
+            "page_list_json": _safe_json(
+                [
+                    {"pk": p.pk, "page_number": p.page_number, "url": _page_url(p.pk)}
+                    for p in pages
+                ]
+            ),
+            "page_position": idx + 1,
+            "total_count": len(pages),
+            "nav_prefix": "",
+        }
+    )
+    return render(request, "grime/document_detail.html", ctx)

@@ -75,6 +75,9 @@ class Document(models.Model):
     def __str__(self):
         return self.title
 
+    def get_absolute_url(self):
+        return f"/documents/{self.id}"
+
 
 class DocumentPage(models.Model):
     """
