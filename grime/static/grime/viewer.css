@@ -212,6 +212,7 @@
     position: fixed; background: #fff; border: 1px solid #bbb; border-radius: 4px;
     padding: 8px 10px; box-shadow: 0 3px 10px rgba(0,0,0,0.18); z-index: 9999;
     min-width: 160px; display: none; font-size: 0.85em;
+    transform: translateX(-100%);
   }
   #dp-ner-popup .dp-ner-word { font-weight: bold; margin-bottom: 6px; color: #333; }
   #dp-ner-popup select { width: 100%; margin-bottom: 6px; padding: 3px 4px; font-size: 0.9em; }
@@ -237,6 +238,7 @@
   #ocr-popup {
     position: fixed; background: #fff; border: 1px solid #bbb; border-radius: 4px;
     padding: 10px 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.18); z-index: 9999; min-width: 220px; display: none;
+    transform: translateX(-100%);
   }
   #ocr-popup .ocr-popup-original { font-size: 0.85em; color: #666; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ocr-popup input[type=text] { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 4px 6px; font-size: 0.95em; }
