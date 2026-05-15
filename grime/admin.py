@@ -2,18 +2,13 @@
 Admin registrations for the grime document management app.
 
 The DocumentPage change form embeds an inline document viewer that overlays
-Word bounding boxes and Tag rectangles on the page image. Interactive
-editing (OCR corrections, tag CRUD, NER label correction) requires AJAX
-endpoints that are not yet implemented — the viewer renders read-only for
-now and the edit URLs in VIEWER_CONFIG are left empty.
+Word bboxes and Tag rectangles on the page image and lets users edit them.
+Endpoint routing and JSON request handling live in ``grime.viewer``.
 """
 
-import json
-
 from django.contrib import admin
-from django.contrib.contenttypes.models import ContentType
-from django.utils.safestring import mark_safe
 
+from grime import viewer
 from grime.models import Document, DocumentPage, NERPass, OCRPass, Tag, Word
 
 
@@ -125,100 +120,17 @@ class DocumentPageAdmin(admin.ModelAdmin):
         latest = obj.ocr_passes.first()
         return latest.method if latest else "—"
 
+    def get_urls(self):
+        return viewer.get_viewer_urls() + super().get_urls()
+
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = dict(extra_context or {})
-        try:
-            page = DocumentPage.objects.get(pk=object_id)
-        except DocumentPage.DoesNotExist:
-            page = None
-
+        page = DocumentPage.objects.filter(pk=object_id).first()
         if page is not None:
-            extra_context.update(self._build_viewer_context(page))
+            extra_context.update(viewer.build_viewer_context(page))
         return super().change_view(
             request, object_id, form_url, extra_context=extra_context
         )
-
-    def _build_viewer_context(self, page: DocumentPage) -> dict:
-        """
-        Build the context the embedded document viewer needs.
-
-        For now the viewer is read-only: word bboxes and tag rectangles render,
-        but the AJAX edit endpoints are not implemented. All edit URLs are
-        empty strings; ``ocr_record_pk`` is None so the OCR-edit toolbar UI
-        does not render.
-        """
-        image_url = page.image.url if page.image else None
-        if not image_url:
-            return {"image_url": None}
-
-        words = list(
-            Word.objects.filter(page=page)
-            .order_by("block_num", "par_num", "line_num", "word_num")
-            .values(
-                "id",
-                "left",
-                "top",
-                "width",
-                "height",
-                "text",
-                "corrected_text",
-                "conf",
-                "is_ditto",
-                "ner_label",
-                "corrected_ner_label",
-                "block_num",
-                "par_num",
-                "line_num",
-                "word_num",
-            )
-        )
-        page_ct = ContentType.objects.get_for_model(DocumentPage)
-        tags = list(
-            Tag.objects.filter(source_type=page_ct, source_id=page.pk).values(
-                "id",
-                "label",
-                "bbox_left",
-                "bbox_top",
-                "bbox_width",
-                "bbox_height",
-                "subcomponents",
-                "created_by_id",
-            )
-        )
-
-        def _safe_json(payload) -> str:
-            return mark_safe(json.dumps(payload).replace("</", "<\\/"))
-
-        return {
-            "image_url": image_url,
-            "image_alt": str(page),
-            "ocr_words_json": _safe_json(words),
-            "tags_json": _safe_json(tags),
-            "citations_json": _safe_json([]),
-            "prev_url_json": _safe_json(None),
-            "next_url_json": _safe_json(None),
-            "page_list_json": _safe_json(None),
-            "ocr_record_pk": None,
-            "tag_source_type_id": page_ct.pk,
-            "tag_source_id": page.pk,
-            "doc_tag_count": Tag.objects.filter(
-                source_type=page_ct,
-                source_id__in=page.document.pages.values_list("pk", flat=True),
-            ).count(),
-            "autogen_unreviewed_count": 0,
-            "use_preprocessed_bbox": False,
-            "tag_create_url": "",
-            "tag_update_url": "",
-            "tag_delete_url": "",
-            "ner_correct_url": "",
-            "review_tags_url": "",
-            "rerun_ocr_url": "",
-            "prev_url": "",
-            "next_url": "",
-            "nav_prefix": "",
-            "nav_prev_label": "Previous",
-            "nav_next_label": "Next",
-        }
 
 
 @admin.register(Word)
