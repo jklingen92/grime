@@ -721,112 +721,6 @@
     if (ocr) ocr.textContent = buildFullText();
   }
 
-  /* ── rank / role extraction ────────────────────────────────── */
-  var RANKS = [
-    'Imperial Grand Wizard',
-    'Imperial Wizard','Grand Wizard','Grand Dragon','Grand Titan','Grand Hydra',
-    'Grand Cyclops','Grand Kleagle','King Kleagle','Imperial Kleagle',
-    'Exalted Cyclops','Night Hawk',
-    'Nighthawk','Kleagle','Cyclops','Klaliff','Kligrapp','Klabee',
-    'Kladd','Klarogo','Klexter','Titan','Hydra','Fury',
-    'Chief Warrant Officer','Warrant Officer',
-    'Brigadier General','Major General','Lieutenant General',
-    'Lieutenant Colonel','First Lieutenant','Second Lieutenant',
-    'First Sergeant','Master Sergeant','Technical Sergeant','Staff Sergeant',
-    'Sergeant Major','Private First Class',
-    'General','Colonel','Major','Captain','Lieutenant',
-    'Sergeant','Corporal','Private','Admiral','Commander','Ensign',
-    'Gen','Col','Maj','Capt','Lt','Sgt','Cpl','Pvt','Adm','Cmdr','PFC',
-    'Reverend','Doctor','Professor','Rev','Dr','Prof',
-  ];
-
-  function extractRank(tokens) {
-    var norm = tokens.map(function(t){ return t.replace(/[.,]/g,'').toLowerCase(); });
-    for (var ri = 0; ri < RANKS.length; ri++) {
-      var rParts = RANKS[ri].toLowerCase().split(' '), rLen = rParts.length;
-      for (var i = 0; i <= norm.length - rLen; i++) {
-        var match = true;
-        for (var j = 0; j < rLen; j++) { if (norm[i+j] !== rParts[j]) { match = false; break; } }
-        if (match) return { rank: RANKS[ri], remaining: tokens.slice(0,i).concat(tokens.slice(i+rLen)) };
-      }
-    }
-    return { rank: '', remaining: tokens };
-  }
-
-  /* ── person modal ──────────────────────────────────────────── */
-
-  function openPersonModal() {
-    if (!HAS_REPAIR) return;
-    var words = state.ocrSelectedIds.size ? OCR_WORDS.filter(function (w) { return state.ocrSelectedIds.has(w.id); }) : [];
-    var parsed = parseNameFromWords(words);
-    document.getElementById('dpp-first').value  = parsed.first;
-    document.getElementById('dpp-middle').value = parsed.middle;
-    document.getElementById('dpp-last').value   = parsed.last;
-    document.getElementById('dpp-role').value   = parsed.role || '';
-    var msg = document.getElementById('dp-person-msg'); msg.style.display = 'none'; msg.textContent = '';
-    var backdrop = document.getElementById('dp-person-backdrop');
-    backdrop.classList.add('open');
-    document.getElementById('dpp-first').focus();
-    if (!state.personGroupsLoaded) {
-      fetch(CREATE_PERSON_URL, { headers: { 'X-CSRFToken': CSRF_TOKEN } })
-        .then(function(r){return r.json();}).then(function(data){
-          if (!data.ok) return;
-          var sel = document.getElementById('dpp-group'); sel.innerHTML = '';
-          data.groups.forEach(function(g){var o=document.createElement('option');o.value=g.id;o.textContent=g.name;sel.appendChild(o);});
-          state.personGroupsLoaded = true;
-        });
-    }
-  }
-  function closePersonModal() { document.getElementById('dp-person-backdrop').classList.remove('open'); }
-
-  function parseNameFromWords(words) {
-    words = words.slice().sort(function(a,b){return a.line_num!==b.line_num?a.line_num-b.line_num:a.word_num-b.word_num;});
-    var allTokens = words.map(function(w){return(w.corrected_text!=null?w.corrected_text:w.text).trim();}).filter(Boolean);
-    var extracted = extractRank(allTokens);
-    var tokens = extracted.remaining;
-    function sc(s){return s.replace(/,/g,'');}
-    var first='',middle='',last='';
-    if (tokens.length===1) { last=tokens[0]; }
-    else if (tokens.length===2) { if(tokens[0].slice(-1)===','){last=tokens[0];first=tokens[1];}else{first=tokens[0];last=tokens[1];} }
-    else if (tokens.length>=3) { if(tokens[0].slice(-1)===','){last=tokens[0];first=tokens[1];middle=tokens.slice(2).join(' ');}else{first=tokens[0];middle=tokens.slice(1,-1).join(' ');last=tokens[tokens.length-1];} }
-    return { first: sc(first), middle: sc(middle), last: sc(last), role: extracted.rank };
-  }
-
-  function savePersonModal() {
-    if (!HAS_REPAIR) return;
-    var last = document.getElementById('dpp-last').value.trim();
-    if (!last) { document.getElementById('dpp-last').focus(); return; }
-    var saveBtn = document.getElementById('dpp-save'); saveBtn.disabled = true;
-    var words = state.ocrSelectedIds.size ? OCR_WORDS.filter(function(w){return state.ocrSelectedIds.has(w.id);}) : [];
-    var bbox = null;
-    if (words.length) {
-      var l=Math.min.apply(null,words.map(function(w){return w.left;}));
-      var t=Math.min.apply(null,words.map(function(w){return w.top;}));
-      var r=Math.max.apply(null,words.map(function(w){return w.left+w.width;}));
-      var b=Math.max.apply(null,words.map(function(w){return w.top+w.height;}));
-      bbox = {left:l,top:t,width:r-l,height:b-t};
-    }
-    var body = 'last_name='   + encodeURIComponent(last) +
-               '&first_name=' + encodeURIComponent(document.getElementById('dpp-first').value.trim()) +
-               '&middle_name='+ encodeURIComponent(document.getElementById('dpp-middle').value.trim()) +
-               '&role='       + encodeURIComponent(document.getElementById('dpp-role').value.trim()) +
-               '&group_pk='   + encodeURIComponent(document.getElementById('dpp-group').value) +
-               (bbox ? '&bbox_left='+bbox.left+'&bbox_top='+bbox.top+'&bbox_width='+bbox.width+'&bbox_height='+bbox.height : '');
-    fetch(CREATE_PERSON_URL, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN}, body: body })
-    .then(function(r){return r.json();}).then(function(data){
-      saveBtn.disabled = false;
-      if (!data.ok) {
-        var msg=document.getElementById('dp-person-msg'); msg.style.color='#a00'; msg.textContent=data.error||'Error.'; msg.style.display='block'; return;
-      }
-      closePersonModal();
-      var strip=document.getElementById('dp-person-confirm-strip');
-      strip.innerHTML='Membership created: <a href="'+data.individual.url+'" target="_blank">'+data.individual.str+'</a> &nbsp;·&nbsp; <a href="'+data.membership.url+'" target="_blank">View membership</a> &nbsp;<button onclick="this.parentNode.style.display=\'none\'" style="float:right;cursor:pointer">✕</button>';
-      strip.style.display='block';
-      clearOcrSelection();
-      renderOverlays(); updateBadge();
-    }).catch(function(){saveBtn.disabled=false;});
-  }
-
   /* ── word class helper ─────────────────────────────────────── */
   function wordClass(w) {
     if (w.corrected_text) return 'ocr-word ' + (w.is_ditto ? 'conf-ditto' : 'corrected');
@@ -923,9 +817,9 @@
     });
   }
 
-  function ocrSelectInRect(x1,y1,x2,y2) {
+  function ocrSelectInRect(x1,y1,x2,y2, shiftKey) {
     var s=getScale(), px1=x1/s, py1=y1/s, px2=x2/s, py2=y2/s;
-    state.ocrSelectedIds.clear();
+    if (!shiftKey) {state.ocrSelectedIds.clear();}
     OCR_WORDS.forEach(function(w){if((w.left+w.width)>px1&&w.left<px2&&(w.top+w.height)>py1&&w.top<py2)state.ocrSelectedIds.add(w.id);});
     document.querySelectorAll('.ocr-word').forEach(function(el){el.classList.toggle('selected',state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));});
     updateOcrMergeBar();
@@ -1036,10 +930,7 @@
       _applyDittoResult(word, el, data);
     });
   }
-  function reorderLine(dir){if(!state.ocrSelectedIds.size)return;fetch(REORDER_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},body:'word_pks='+encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))+'&direction='+dir}).then(function(r){return r.json();}).then(function(data){if(!data.ok)return;data.updated.forEach(function(w){var ex=wordById[w.id];if(ex)Object.assign(ex,w);});updateTextPanels();});}
-  function joinLine(){if(state.ocrSelectedIds.size<2)return;fetch(JOIN_LINE_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},body:'word_pks='+encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))}).then(function(r){return r.json();}).then(function(data){if(!data.ok)return;data.updated.forEach(function(w){var ex=wordById[w.id];if(ex)Object.assign(ex,w);});state.ocrSelectedIds.clear();document.getElementById('ocr-merge-bar').style.display='none';updateTextPanels();});}
   function confirmAll(){var btn=document.getElementById('dp-confirm-all');btn.disabled=true;btn.textContent='Confirming…';fetch(CONFIRM_ALL_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},body:''}).then(function(r){return r.json();}).then(function(data){if(!data.ok){btn.disabled=false;btn.textContent='Confirm all';return;}data.updated.forEach(function(u){var w=wordById[u.id];if(w)w.corrected_text=u.corrected_text;});renderOverlays();updateTextPanels();btn.textContent='Confirmed ('+data.updated.length+')';setTimeout(function(){btn.disabled=false;btn.textContent='Confirm all';},2000);}).catch(function(){btn.disabled=false;btn.textContent='Confirm all';});}
-  function saveMerge(){if(state.ocrSelectedIds.size<2)return;fetch(MERGE_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},body:'word_pks='+encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))+'&corrected_text='+encodeURIComponent(document.getElementById('ocr-merge-input').value.trim())}).then(function(r){return r.json();}).then(function(data){if(!data.ok)return;var del=new Set(data.deleted_ids);OCR_WORDS=OCR_WORDS.filter(function(w){return!del.has(w.id);});data.deleted_ids.forEach(function(id){delete wordById[id];});var mw=data.merged_word,keeper=wordById[mw.id];if(keeper)Object.assign(keeper,mw);state.ocrSelectedIds.clear();renderOverlays();updateTextPanels();document.getElementById('ocr-merge-bar').style.display='none';});}
   function bulkDitto() {
     if (!state.ocrSelectedIds.size || !BULK_DITTO_URL) return;
     var pks = Array.from(state.ocrSelectedIds);
@@ -1185,7 +1076,7 @@
       } else {
         if (!state.selectStart) return;
         var dx3=e.clientX-state.selectStart.x,dy3=e.clientY-state.selectStart.y;
-        if (!state.isDragging&&Math.sqrt(dx3*dx3+dy3*dy3)>5){state.isDragging=true;clearOcrSelection();}
+        if (!state.isDragging&&Math.sqrt(dx3*dx3+dy3*dy3)>5){state.isDragging=true;if(!e.shiftKey)clearOcrSelection();}
         if (state.isDragging){var vr3=document.getElementById('dp-viewer').getBoundingClientRect(),sr3=document.getElementById('dp-select-rect');sr3.style.left=Math.min(state.selectStart.x,e.clientX)-vr3.left+'px';sr3.style.top=Math.min(state.selectStart.y,e.clientY)-vr3.top+'px';sr3.style.width=Math.abs(e.clientX-state.selectStart.x)+'px';sr3.style.height=Math.abs(e.clientY-state.selectStart.y)+'px';sr3.style.display='block';}
       }
     }
@@ -1258,8 +1149,9 @@
       } else {
         if (!state.selectStart) return;
         if (state.isDragging) {
+          console.log(e.shiftKey)
           var vr5=document.getElementById('dp-viewer').getBoundingClientRect();
-          ocrSelectInRect(Math.min(state.selectStart.x,e.clientX)-vr5.left,Math.min(state.selectStart.y,e.clientY)-vr5.top,Math.max(state.selectStart.x,e.clientX)-vr5.left,Math.max(state.selectStart.y,e.clientY)-vr5.top);
+          ocrSelectInRect(Math.min(state.selectStart.x,e.clientX)-vr5.left,Math.min(state.selectStart.y,e.clientY)-vr5.top,Math.max(state.selectStart.x,e.clientX)-vr5.left,Math.max(state.selectStart.y,e.clientY)-vr5.top, e.shiftKey);
           document.getElementById('dp-select-rect').style.display='none';
         } else {
           var wordEl=state.selectStart.target.closest?state.selectStart.target.closest('.ocr-word'):(state.selectStart.target.classList.contains('ocr-word')?state.selectStart.target:null);
@@ -1278,7 +1170,7 @@
               }
             }
           }
-          else{clearOcrSelection();}
+          else{if(!e.shiftKey)clearOcrSelection();}
         }
         state.isDragging=false;state.selectStart=null;
       }
