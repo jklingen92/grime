@@ -223,3 +223,6 @@ __marimo__/
 
 # VSCode
 .vscode
+
+# Maintainer tools
+MAINTANENCE.md
