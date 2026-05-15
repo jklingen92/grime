@@ -547,8 +547,10 @@
     var popup = document.getElementById('dp-ner-popup');
     document.getElementById('dp-ner-word-text').textContent = w.corrected_text || w.text;
     document.getElementById('dp-ner-label-select').value = nerEffectiveLabel(w) || '';
-    popup.style.left = clientX + 'px';
-    popup.style.top  = clientY + 'px';
+    var wrap = document.getElementById('dp-viewer-wrap');
+    var rect = wrap.getBoundingClientRect();
+    popup.style.left = (rect.right - 8) + 'px';
+    popup.style.top  = (rect.top + 8) + 'px';
     popup.style.display = 'block';
   }
 
@@ -762,6 +764,9 @@
     if (n<2){bar.style.display='none';return;}
     var label=document.getElementById('ocr-merge-label');
     if (label) label.textContent=n+' word'+(n===1?'':'s')+' selected';
+    var wrap=document.getElementById('dp-viewer-wrap');
+    var rect=wrap.getBoundingClientRect();
+    bar.style.left=(rect.right-8)+'px';bar.style.top=(rect.top+8)+'px';
     bar.style.display='flex';
   }
 
@@ -871,8 +876,9 @@
     state.currentWord=word;state.currentEl=el;
     document.getElementById('ocr-popup-original').textContent='Original: '+word.text;
     document.getElementById('ocr-popup-input').value=word.corrected_text||'';
-    var x=event.clientX+10,y=event.clientY+10;if(x+240>window.innerWidth-16)x=window.innerWidth-256;
-    popup.style.left=x+'px';popup.style.top=y+'px';popup.style.display='block';
+    var wrap = document.getElementById('dp-viewer-wrap');
+    var rect = wrap.getBoundingClientRect();
+    popup.style.left=(rect.right-8)+'px';popup.style.top=(rect.top+8)+'px';popup.style.display='block';
     var confirmBtn=document.getElementById('ocr-popup-confirm'); if (confirmBtn) confirmBtn.style.display='';
     var delBtn=document.getElementById('ocr-popup-delete'); if (delBtn) delBtn.style.display='';
     var dittoBtn=document.getElementById('ocr-popup-ditto'); if (dittoBtn) dittoBtn.style.display='';
@@ -1167,8 +1173,8 @@
         state.currentWord=null;state.currentEl=null;
         var popup=document.getElementById('ocr-popup');
         document.getElementById('ocr-popup-original').textContent='New region';document.getElementById('ocr-popup-input').value='';document.getElementById('ocr-popup-confirm').style.display='none';document.getElementById('ocr-popup-delete').style.display='none';
-        var vRect=document.getElementById('dp-viewer').getBoundingClientRect(),px5=vRect.left+dx4+dw4+10,py5=vRect.top+dy4+10;if(px5+240>window.innerWidth-16)px5=window.innerWidth-256;
-        popup.style.left=px5+'px';popup.style.top=py5+'px';popup.style.display='block';popup._pendingRegion=pending;document.getElementById('ocr-popup-input').focus();
+        var wrap=document.getElementById('dp-viewer-wrap'),wRect=wrap.getBoundingClientRect();
+        popup.style.left=(wRect.right-8)+'px';popup.style.top=(wRect.top+8)+'px';popup.style.display='block';popup._pendingRegion=pending;document.getElementById('ocr-popup-input').focus();
       } else {
         if (!state.selectStart) return;
         if (state.isDragging) {
