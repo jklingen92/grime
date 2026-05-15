@@ -1149,7 +1149,6 @@
       } else {
         if (!state.selectStart) return;
         if (state.isDragging) {
-          console.log(e.shiftKey)
           var vr5=document.getElementById('dp-viewer').getBoundingClientRect();
           ocrSelectInRect(Math.min(state.selectStart.x,e.clientX)-vr5.left,Math.min(state.selectStart.y,e.clientY)-vr5.top,Math.max(state.selectStart.x,e.clientX)-vr5.left,Math.max(state.selectStart.y,e.clientY)-vr5.top, e.shiftKey);
           document.getElementById('dp-select-rect').style.display='none';
