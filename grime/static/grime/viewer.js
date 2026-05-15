@@ -745,6 +745,9 @@
     if (n<2){bar.style.display='none';return;}
     var label=document.getElementById('ocr-merge-label');
     if (label) label.textContent=n+' word'+(n===1?'':'s')+' selected';
+    var wrap=document.getElementById('dp-viewer-wrap');
+    var rect=wrap.getBoundingClientRect();
+    bar.style.left=(rect.right-8)+'px';bar.style.top=(rect.top+8)+'px';
     bar.style.display='flex';
   }
 
