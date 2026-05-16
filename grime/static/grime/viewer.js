@@ -887,6 +887,12 @@
     return out.join('\n');
   }
 
+  function syncTextPanelSelection() {
+    document.querySelectorAll('#dp-corrected-text .dp-text-word').forEach(function(el) {
+      el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+    });
+  }
+
   function updateTextPanels() {
     var ocr = document.getElementById('dp-corrected-text');
     if (!ocr) return;
@@ -913,7 +919,7 @@
                 el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
               });
               updateOcrMergeBar();
-              updateTextPanels();
+              syncTextPanelSelection(); // update classes in-place; don't rebuild the DOM
             });
           })(w.id);
           lineDiv.appendChild(wordSpan);
@@ -992,7 +998,7 @@
       el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
     });
     updateOcrMergeBar();
-    updateTextPanels();
+    syncTextPanelSelection(); // update classes in-place so the DOM target stays live for the click event
     sel.removeAllRanges();
     _textSelectionSuppressClick = true; // prevent the following click from clobbering this
   }
@@ -1625,9 +1631,23 @@
 
     // Text-panel search
     var searchInput = document.getElementById('dp-text-search');
+    var searchClear = document.getElementById('dp-text-search-clear');
     if (searchInput) {
-      searchInput.addEventListener('input', function() { applyTextSearch(this.value); });
-      searchInput.addEventListener('keydown', function(e) { if (e.key === 'Escape') { this.value = ''; applyTextSearch(''); } });
+      searchInput.addEventListener('input', function() {
+        var q = this.value;
+        if (searchClear) searchClear.style.display = q ? '' : 'none';
+        applyTextSearch(q);
+      });
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { this.value = ''; if (searchClear) searchClear.style.display = 'none'; applyTextSearch(''); }
+      });
+    }
+    if (searchClear) {
+      searchClear.addEventListener('click', function() {
+        if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+        searchClear.style.display = 'none';
+        applyTextSearch('');
+      });
     }
 
     // Text-panel native selection → document word selection
@@ -1696,7 +1716,7 @@
       if(state.suppressClickClose){state.suppressClickClose=false;return;}
       var popup=document.getElementById('ocr-popup');
       if(popup.style.display!=='none'&&!popup.contains(e.target)&&!popup._pendingRegion)closeEditPopup();
-      if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ocr-merge-bar'))clearOcrSelection();
+      if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ocr-merge-bar')&&!e.target.closest('#dp-text-panel'))clearOcrSelection();
       if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ner-select-bar')&&!e.target.closest('#dp-ner-popup'))clearNerSelection();
       var ocrMenu=document.getElementById('dp-rerun-ocr-menu');
       if(ocrMenu&&ocrMenu.classList.contains('open')&&!e.target.closest('.dp-split-btn'))ocrMenu.classList.remove('open');

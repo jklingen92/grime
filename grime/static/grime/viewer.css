@@ -113,6 +113,12 @@
     border-radius: 3px; background: #fff; outline: none;
   }
   #dp-text-search:focus { border-color: #888; }
+  #dp-text-search-clear {
+    padding: 0 5px; font-size: 0.9em; line-height: 1; cursor: pointer;
+    border: 1px solid #ccc; border-radius: 3px; background: #fff; color: #666;
+    flex-shrink: 0;
+  }
+  #dp-text-search-clear:hover { background: #f0f0f0; color: #333; }
   #dp-text-search-count { font-size: 0.75em; color: #666; white-space: nowrap; min-width: 3em; text-align: right; }
 
   /* ── toolbar ──────────────────────────────────────────────── */
