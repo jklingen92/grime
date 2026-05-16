@@ -4,6 +4,7 @@ export function createOcrModule(core) {
   var HAS_REPAIR = C.hasRepair;
 
   /* ── text panel ────────────────────────────────────────────── */
+  // Group OCR_WORDS into lines sorted by line_num / word_num.
   function _buildLineMap() {
     var lineMap = {};
     core.OCR_WORDS.forEach(function(w) {
@@ -18,12 +19,14 @@ export function createOcrModule(core) {
     return lines;
   }
 
+  // Mirror ocrSelectedIds onto the .selected class of text-panel word spans.
   function syncTextPanelSelection() {
     document.querySelectorAll('#dp-corrected-text .dp-text-word').forEach(function(el) {
       el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
     });
   }
 
+  // Rebuild the OCR text panel from current OCR_WORDS, applying search highlights.
   function updateTextPanels() {
     var ocr = document.getElementById('dp-corrected-text');
     if (!ocr) return;
@@ -32,14 +35,14 @@ export function createOcrModule(core) {
     lines.forEach(function(line) {
       var lineDiv = document.createElement('div');
       lineDiv.className = 'dp-text-line';
-      line.words.filter(function(w) { return (w.corrected_text || w.text || '').trim(); })
+      line.words.filter(function(w) { return (w.text || '').trim(); })
         .forEach(function(w) {
           var wordSpan = document.createElement('span');
           wordSpan.className = 'dp-text-word';
           if (state.ocrSelectedIds.has(w.id)) wordSpan.classList.add('selected');
-          if (_searchQuery && (w.corrected_text != null ? w.corrected_text : w.text || '').toLowerCase().indexOf(_searchQuery) >= 0)
+          if (_searchQuery && (w.text || '').toLowerCase().indexOf(_searchQuery) >= 0)
             wordSpan.classList.add('search-match');
-          wordSpan.textContent = w.corrected_text != null ? w.corrected_text : w.text;
+          wordSpan.textContent = w.text;
           wordSpan.dataset.wordId = w.id;
           (function(wid) {
             wordSpan.addEventListener('click', function(e) {
@@ -62,12 +65,13 @@ export function createOcrModule(core) {
   }
 
   var _searchQuery = '';
+  // Filter OCR_WORDS by query, select matching words and highlight them in the text panel.
   function applyTextSearch(query) {
     _searchQuery = (query || '').trim().toLowerCase();
     var matchIds = new Set();
     if (_searchQuery) {
       core.OCR_WORDS.forEach(function(w) {
-        var t = (w.corrected_text != null ? w.corrected_text : w.text || '').toLowerCase();
+        var t = (w.text || '').toLowerCase();
         if (t.indexOf(_searchQuery) >= 0 && w.id != null) matchIds.add(w.id);
       });
     }
@@ -97,6 +101,7 @@ export function createOcrModule(core) {
   }
 
   var _textSelectionSuppressClick = false;
+  // Select OCR words from a native browser text selection in the text panel.
   function onTextPanelMouseup(e) {
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
@@ -124,11 +129,13 @@ export function createOcrModule(core) {
   }
 
   /* ── word class + selection ────────────────────────────────── */
+  // Return the CSS class string for a word overlay based on correction and confidence.
   function wordClass(w) {
     if (w.corrected_text) return 'ocr-word ' + (w.is_ditto ? 'conf-ditto' : 'corrected');
     return 'ocr-word ' + (w.conf < 60 ? 'conf-low' : w.conf < 80 ? 'conf-mid' : 'conf-high');
   }
 
+  // Clear the OCR selection set and hide the merge bar.
   function clearSelection() {
     if (!HAS_REPAIR) return;
     state.ocrSelectedIds.clear();
@@ -137,10 +144,12 @@ export function createOcrModule(core) {
     updateTextPanels();
   }
 
+  // Show or hide the OCR multi-select action bar based on selection size.
   function updateOcrMergeBar() {
     core.updateSelectBar('ocr-merge-bar', 'ocr-merge-label', state.ocrSelectedIds.size);
   }
 
+  // Add all word ids to ocrSelectedIds and mark their overlays as selected.
   function selectAllOcrWords() {
     state.ocrSelectedIds.clear();
     core.OCR_WORDS.forEach(function(w) { if (w.id != null) state.ocrSelectedIds.add(w.id); });
@@ -152,8 +161,10 @@ export function createOcrModule(core) {
   }
 
   /* ── OCR run ───────────────────────────────────────────────── */
+  // Return "Run OCR" or "Rerun OCR" depending on whether words already exist.
   function ocrBtnLabel() { return core.OCR_WORDS.length ? 'Rerun OCR' : 'Run OCR'; }
 
+  // POST an OCR run (full page or selected words) with the given engine.
   function runOcr(engine) {
     if (!C.rerunSelectionUrl) return;
     var btn = document.getElementById('dp-rerun-ocr');
@@ -171,6 +182,7 @@ export function createOcrModule(core) {
     }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); } });
   }
 
+  // POST a rerun for the currently selected words, triggered from the selection bar.
   function rerunSelectionOcr() {
     if (!C.rerunSelectionUrl || !state.ocrSelectedIds.size) return;
     var btn = document.getElementById('ocr-rerun-ocr');
@@ -187,6 +199,7 @@ export function createOcrModule(core) {
   }
 
   /* ── rect selection ────────────────────────────────────────── */
+  // Select all words whose bounding boxes overlap the given viewer-local rect.
   function ocrSelectInRect(x1, y1, x2, y2, shiftKey) {
     var s = core.getScale(), px1 = x1/s, py1 = y1/s, px2 = x2/s, py2 = y2/s;
     if (!shiftKey) state.ocrSelectedIds.clear();
@@ -202,8 +215,10 @@ export function createOcrModule(core) {
   }
 
   /* ── undo / redo ───────────────────────────────────────────── */
+  // Push an undo entry and clear the redo stack.
   function recordUndo(e) { state.undoStack.push(e); state.redoStack = []; }
 
+  // DELETE the word with id, remove it from OCR_WORDS/wordById, and call cb when done.
   function _deleteWordById(id, cb) {
     core.postJson(C.deleteUrl, 'word_pk=' + encodeURIComponent(id)).then(function(data) {
       if (!data.ok) return;
@@ -216,6 +231,7 @@ export function createOcrModule(core) {
     });
   }
 
+  // POST a new word region and add it to OCR_WORDS/wordById, calling cb with the new word.
   function _addWordFromData(w, cb) {
     var body = 'left=' + w.left + '&top=' + w.top + '&width=' + w.width + '&height=' + w.height +
                '&corrected_text=' + encodeURIComponent(w.corrected_text || w.text || '');
@@ -227,6 +243,7 @@ export function createOcrModule(core) {
     });
   }
 
+  // Pop the top entry from `from`, apply its inverse, and push the inverse onto `to`.
   function _applyHistory(from, to) {
     if (!from.length) return;
     var e = from.pop();
@@ -244,10 +261,13 @@ export function createOcrModule(core) {
     }
   }
 
+  // Undo the last OCR edit.
   function undo() { _applyHistory(state.undoStack, state.redoStack); }
+  // Redo the last undone OCR edit.
   function redo() { _applyHistory(state.redoStack, state.undoStack); }
 
   /* ── edit popup ────────────────────────────────────────────── */
+  // Open the single-word correction popup for word/el.
   function openEditPopup(word, el) {
     if (!HAS_REPAIR) return;
     var popup = document.getElementById('ocr-popup');
@@ -263,6 +283,7 @@ export function createOcrModule(core) {
     document.getElementById('ocr-popup-input').select();
   }
 
+  // Hide the correction popup and clear currentWord/currentEl.
   function closeEditPopup() {
     var popup = document.getElementById('ocr-popup');
     popup.style.display = 'none'; popup._pendingRegion = null;
@@ -270,6 +291,7 @@ export function createOcrModule(core) {
     if (state.ocrSelectedIds.size >= 2) updateOcrMergeBar();
   }
 
+  // POST corrected_text for word, update the overlay class/title, and record an undo entry.
   function postCorrection(word, el, text, skipUndo) {
     if (!HAS_REPAIR) return;
     var prev = word.corrected_text;
@@ -286,6 +308,7 @@ export function createOcrModule(core) {
       });
   }
 
+  // Save the popup input as a correction (or create a new word region if pending).
   function saveEdit() {
     var input = document.getElementById('ocr-popup-input');
     var popup = document.getElementById('ocr-popup');
@@ -300,12 +323,14 @@ export function createOcrModule(core) {
     closeEditPopup();
   }
 
+  // Confirm the word's existing text as its corrected_text without editing.
   function confirmEdit() {
     if (!state.currentWord) return;
     postCorrection(state.currentWord, state.currentEl, state.currentWord.text);
     closeEditPopup();
   }
 
+  // Delete the current word, recording an undo entry.
   function deleteWord() {
     if (!state.currentWord) return;
     var snap = Object.assign({}, state.currentWord), id = state.currentWord.id;
@@ -314,6 +339,7 @@ export function createOcrModule(core) {
   }
 
   /* ── ditto ─────────────────────────────────────────────────── */
+  // Apply a server ditto response to the marked word and its resolved siblings.
   function _applyDittoResult(word, el, data) {
     word.text = '"'; word.corrected_text = null; word.is_ditto = false;
     if (el) {
@@ -331,6 +357,7 @@ export function createOcrModule(core) {
     core.renderOverlays(); updateTextPanels();
   }
 
+  // Mark the current word (or a pending drawn region) as a ditto mark.
   function markWordAsDitto() {
     if (!C.markAsDittoUrl) return;
     var popup = document.getElementById('ocr-popup');
@@ -361,6 +388,7 @@ export function createOcrModule(core) {
   }
 
   /* ── bulk operations ───────────────────────────────────────── */
+  // Confirm all unreviewed words on the page in one request.
   function confirmAll() {
     var btn = document.getElementById('dp-confirm-all');
     if (!btn) return;
@@ -374,6 +402,7 @@ export function createOcrModule(core) {
     }).catch(function() { btn.disabled = false; btn.textContent = 'Confirm all'; });
   }
 
+  // Mark all selected words as ditto marks in one request.
   function bulkDitto() {
     if (!state.ocrSelectedIds.size || !C.bulkDittoUrl) return;
     core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))).then(function(data) {
@@ -386,6 +415,7 @@ export function createOcrModule(core) {
     });
   }
 
+  // Delete all selected words after a confirmation prompt.
   function bulkDelete() {
     if (!state.ocrSelectedIds.size || !C.bulkDeleteUrl) return;
     var pks = Array.from(state.ocrSelectedIds);
@@ -402,12 +432,14 @@ export function createOcrModule(core) {
   }
 
   /* ── draw mode ─────────────────────────────────────────────── */
+  // Toggle visibility of all OCR word boxes.
   function toggleBoxes() {
     state.boxesHidden = !state.boxesHidden;
     document.getElementById('dp-viewer').classList.toggle('hide-boxes', state.boxesHidden);
     document.getElementById('dp-boxes-toggle').textContent = state.boxesHidden ? 'Show boxes' : 'Hide boxes';
   }
 
+  // Enter or exit the draw-a-new-region mode, updating the cursor and button state.
   function setDrawMode(active) {
     state.drawMode = active;
     var v = document.getElementById('dp-viewer'), btn = document.getElementById('dp-draw-toggle');
@@ -415,6 +447,7 @@ export function createOcrModule(core) {
     else { v.classList.remove('draw-mode'); btn.textContent = 'Add region (a)'; btn.style.background = ''; btn.style.color = ''; document.getElementById('dp-draw-rect').style.display = 'none'; state.drawOrigin = null; }
   }
 
+  // POST a new word region from the drawn rect and add it to OCR_WORDS.
   function saveAddRegion(pending, text) {
     var body = 'left=' + pending.left + '&top=' + pending.top + '&width=' + pending.width + '&height=' + pending.height + '&corrected_text=' + encodeURIComponent(text);
     core.postJson(C.addWordUrl, body).then(function(data) {
@@ -427,6 +460,7 @@ export function createOcrModule(core) {
   }
 
   /* ── render ────────────────────────────────────────────────── */
+  // Draw one overlay div per OCR word, coloured by confidence / correction state.
   function render(viewer, scale) {
     core.OCR_WORDS.forEach(function(w) {
       var div = document.createElement('div');
@@ -446,6 +480,7 @@ export function createOcrModule(core) {
   }
 
   /* ── mouse handlers ────────────────────────────────────────── */
+  // Begin a draw gesture or a drag-select depending on the current mode.
   function onMousedown(e) {
     if (state.drawMode) {
       e.preventDefault(); state.drawOrigin = core.viewerOffset(e);
@@ -457,6 +492,7 @@ export function createOcrModule(core) {
     }
   }
 
+  // Update the draw rect or the rubber-band selection rect while the mouse moves.
   function onMousemove(e) {
     if (state.drawMode) {
       if (!state.drawOrigin) return;
@@ -477,6 +513,7 @@ export function createOcrModule(core) {
     }
   }
 
+  // Finalise a draw or selection gesture, or open the popup for a single-word click.
   function onMouseup(e) {
     if (state.drawMode) {
       if (!state.drawOrigin) return;
@@ -525,6 +562,7 @@ export function createOcrModule(core) {
   }
 
   /* ── keyboard + global click ───────────────────────────────── */
+  // Handle Escape, Ctrl+A, 'a' (draw mode), and Delete for bulk deletion.
   function onKeydown(e) {
     var tag = document.activeElement && document.activeElement.tagName;
     var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
@@ -542,6 +580,7 @@ export function createOcrModule(core) {
     if ((e.key === 'Delete' || e.key === 'Backspace') && state.ocrSelectedIds.size >= 2) { e.preventDefault(); bulkDelete(); return; }
   }
 
+  // Close the popup or clear selection when clicking outside the viewer / popup.
   function onGlobalClick(e) {
     var popup = document.getElementById('ocr-popup');
     if (popup && popup.style.display !== 'none' && !popup.contains(e.target) && !popup._pendingRegion) closeEditPopup();
@@ -549,6 +588,7 @@ export function createOcrModule(core) {
   }
 
   /* ── setup UI ──────────────────────────────────────────────── */
+  // Attach all OCR DOM event listeners and register undo/redo hooks with core.
   function setupUI() {
     var confirmAllBtn = document.getElementById('dp-confirm-all');
     if (confirmAllBtn) confirmAllBtn.addEventListener('click', function(e) { e.preventDefault(); confirmAll(); });

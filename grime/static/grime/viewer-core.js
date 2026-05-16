@@ -41,6 +41,7 @@ export function initCore(C) {
   window._viewerState = state;
 
   /* ── utilities ─────────────────────────────────────────────── */
+  // POST form-encoded body and parse JSON response, injecting CSRF token.
   function postJson(url, body) {
     return fetch(url, {
       method: 'POST',
@@ -49,6 +50,7 @@ export function initCore(C) {
     }).then(function(r) { return r.json(); });
   }
 
+  // Show el flush with the right edge of the viewer wrap.
   function positionAtViewerEdge(el) {
     var rect = document.getElementById('dp-viewer-wrap').getBoundingClientRect();
     el.style.left = (rect.right - 8) + 'px';
@@ -56,6 +58,7 @@ export function initCore(C) {
     el.style.display = 'block';
   }
 
+  // Show or hide a floating selection bar depending on how many words are selected.
   function updateSelectBar(barId, labelId, n) {
     var bar = document.getElementById(barId);
     if (!bar) return;
@@ -66,6 +69,7 @@ export function initCore(C) {
     bar.style.display = 'flex';
   }
 
+  // Apply a server diff (deleted_ids / new_words) to OCR_WORDS and wordById in place.
   function applyOcrWordDiff(data) {
     var del = new Set(data.deleted_ids);
     OCR_WORDS = OCR_WORDS.filter(function(w) { return !del.has(w.id); });
@@ -73,6 +77,7 @@ export function initCore(C) {
     (data.new_words || []).forEach(function(w) { OCR_WORDS.push(w); wordById[w.id] = w; });
   }
 
+  // Run fn() with btn disabled and showing busyLabel, then restore btn regardless of outcome.
   function withBtn(btn, busyLabel, fn) {
     if (!btn) return fn();
     var prev = btn.textContent;
@@ -80,6 +85,7 @@ export function initCore(C) {
     return fn().finally(function() { btn.disabled = false; btn.textContent = prev; });
   }
 
+  // Position and show a rubber-band rect element between two client points.
   function updateRubberBand(rectEl, x0, y0, x1, y1, vr) {
     rectEl.style.left   = Math.min(x0, x1) - vr.left + 'px';
     rectEl.style.top    = Math.min(y0, y1) - vr.top  + 'px';
@@ -88,28 +94,33 @@ export function initCore(C) {
     rectEl.style.display = 'block';
   }
 
+  // Navigate to url, preserving the active tab in the query string.
   function navigate(url) {
     if (!url) return;
     window.location.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'tab=' + state.activeTab;
   }
 
+  // Return the reference pixel width used to map bbox coordinates to screen pixels.
   function getRefWidth() {
     var img = document.getElementById('dp-img');
     if (!img || !img.naturalWidth) return 1;
     return C.usePreprocessedBbox ? Math.max(img.naturalWidth, 2000) : img.naturalWidth;
   }
 
+  // Return the current ratio of rendered image width to reference width.
   function getScale() {
     var img = document.getElementById('dp-img');
     return img ? img.clientWidth / getRefWidth() : 1;
   }
 
+  // Return mouse position in viewer-local coordinates (unscaled pixels).
   function viewerOffset(e) {
     var r = document.getElementById('dp-viewer').getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
   /* ── zoom ──────────────────────────────────────────────────── */
+  // Apply state.zoomLevel to the image, re-render overlays and update the label.
   function applyZoom() {
     var img = document.getElementById('dp-img');
     if (!img) return;
@@ -122,6 +133,7 @@ export function initCore(C) {
     document.getElementById('dp-zoom-label').textContent = Math.round(state.zoomLevel * 100) + '%';
   }
 
+  // Fit the image to the available viewport area.
   function dpFit() {
     var img = document.getElementById('dp-img'), wrap = document.getElementById('dp-viewer-wrap');
     if (!img || !img.naturalWidth || !img.naturalHeight) return;
@@ -137,9 +149,11 @@ export function initCore(C) {
 
   /* ── module registry ───────────────────────────────────────── */
   var _modules = {};
+  // Register a tab module under name so the dispatcher can call its render/mouse/key hooks.
   function registerModule(name, mod) { _modules[name] = mod; }
 
   /* ── render dispatcher ─────────────────────────────────────── */
+  // Clear all overlay elements and re-render the active tab's overlays.
   function renderOverlays() {
     var viewer = document.getElementById('dp-viewer'), img = document.getElementById('dp-img');
     if (!viewer || !img || !img.naturalWidth) return;
@@ -151,6 +165,7 @@ export function initCore(C) {
   }
 
   /* ── tab management ────────────────────────────────────────── */
+  // Switch to named tab: clear outgoing selection, show/hide panels, activate incoming module.
   function dpShowTab(name) {
     var leaving = _modules[state.activeTab];
     if (leaving && leaving.clearSelection) leaving.clearSelection();
@@ -179,6 +194,7 @@ export function initCore(C) {
   }
   window.dpShowTab = dpShowTab;
 
+  // Update the tab badge with word/entity/label count for the active tab.
   function updateBadge() {
     var el = document.getElementById('dp-tab-badge');
     if (!el) return;
@@ -196,6 +212,7 @@ export function initCore(C) {
   }
 
   /* ── side-panel divider ────────────────────────────────────── */
+  // Apply state.sidePanelWidth to all three side panels.
   function applySidePanelWidth() {
     ['dp-text-panel', 'dp-ner-panel', 'dp-tag-panel'].forEach(function(id) {
       var el = document.getElementById(id);
@@ -220,11 +237,13 @@ export function initCore(C) {
   }
 
   /* ── mouse dispatcher ──────────────────────────────────────── */
+  // Forward viewer mousedown to the active tab module.
   function onViewerMousedown(e) {
     var mod = _modules[state.activeTab];
     if (mod && mod.onMousedown) mod.onMousedown(e);
   }
 
+  // Forward document mousemove to divider drag or the active tab module.
   function onDocMousemove(e) {
     if (dividerDrag) {
       state.sidePanelWidth = Math.max(120, dividerDrag.startWidth - (e.clientX - dividerDrag.startX));
@@ -235,12 +254,14 @@ export function initCore(C) {
     if (mod && mod.onMousemove) mod.onMousemove(e);
   }
 
+  // Forward document mouseup to divider drag end or the active tab module.
   function onDocMouseup(e) {
     if (dividerDrag) { dividerDrag = null; return; }
     var mod = _modules[state.activeTab];
     if (mod && mod.onMouseup) mod.onMouseup(e);
   }
 
+  // Attach viewer and document mouse event listeners.
   function bindMouseHandlers() {
     document.getElementById('dp-viewer').addEventListener('mousedown', onViewerMousedown);
     document.addEventListener('mousemove', onDocMousemove);
@@ -248,6 +269,7 @@ export function initCore(C) {
   }
 
   /* ── page select + nav ─────────────────────────────────────── */
+  // Wire up prev/next nav buttons and the page-select dropdown.
   function initPageSelect() {
     document.querySelectorAll('a.dp-nav-btn:not(.disabled)').forEach(function(btn) {
       btn.addEventListener('click', function(e) { e.preventDefault(); navigate(btn.getAttribute('href')); });

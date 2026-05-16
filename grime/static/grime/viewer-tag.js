@@ -3,6 +3,7 @@ export function createTagModule(core) {
   var C     = core.C;
 
   /* ── tag list ──────────────────────────────────────────────── */
+  // Rebuild the sidebar tag list from core.TAGS.
   function buildList() {
     var list = document.getElementById('dp-tag-list');
     if (!list) return;
@@ -25,6 +26,7 @@ export function createTagModule(core) {
   }
 
   /* ── tag overlays ──────────────────────────────────────────── */
+  // Draw .dp-tag-overlay divs for each tag in draw mode (outside of labeling phase).
   function renderTagOverlays() {
     var viewer = document.getElementById('dp-viewer');
     if (!viewer) return;
@@ -45,6 +47,7 @@ export function createTagModule(core) {
   }
 
   /* ── open existing ─────────────────────────────────────────── */
+  // Load an existing tag into pending state and enter labeling mode.
   function tagOpenExisting(tag) {
     state.tagEditingId      = tag.id;
     state.tagPendingLabel   = tag.label;
@@ -55,6 +58,7 @@ export function createTagModule(core) {
   }
 
   /* ── labeling mode ─────────────────────────────────────────── */
+  // Switch the tag panel to labeling mode, optionally pre-filling NER suggestions.
   function tagEnterLabelingMode() {
     state.tagPhase = 'labeling';
     state.tagSubSelectedIds.clear();
@@ -75,6 +79,7 @@ export function createTagModule(core) {
     labelInput.focus(); labelInput.select();
   }
 
+  // Reset all pending tag state and return to draw mode.
   function tagExitLabelingMode() {
     state.tagPhase = 'draw'; state.tagEditingId = null; state.tagPendingLabel = '';
     state.tagPendingSubcomps = []; state.tagPendingBbox = null;
@@ -92,6 +97,7 @@ export function createTagModule(core) {
   }
 
   /* ── veils ─────────────────────────────────────────────────── */
+  // Reposition the four veil overlays and the active-rect border around tagPendingBbox.
   function updateVeils() {
     if (!state.tagPendingBbox) return;
     var viewer = document.getElementById('dp-viewer'), scale = core.getScale();
@@ -115,6 +121,7 @@ export function createTagModule(core) {
   }
 
   /* ── subcomp display ───────────────────────────────────────── */
+  // Rebuild the subcomponent list in the panel from state.tagPendingSubcomps.
   function tagUpdateSubcompDisplay() {
     var list = document.getElementById('dp-tag-subcomp-list');
     list.innerHTML = '';
@@ -146,11 +153,13 @@ export function createTagModule(core) {
   }
 
   /* ── ditto helpers ─────────────────────────────────────────── */
+  // Return true if the text consists entirely of ditto-mark characters.
   function isDitto(text) {
     var t = text.trim();
     return /^["'«»''""″〃〞＂]+$/.test(t) || t === '""' || t === "''" || t === '``';
   }
 
+  // Find the nearest preceding tag with the given subcomponent label and return its non-ditto text.
   function resolveDitto(label, currentTop) {
     var candidates = core.TAGS.filter(function(t) { return t.bbox_top + t.bbox_height <= currentTop + 8; });
     candidates.sort(function(a, b) { return b.bbox_top - a.bbox_top; });
@@ -162,6 +171,7 @@ export function createTagModule(core) {
   }
 
   /* ── sub-label ─────────────────────────────────────────────── */
+  // Assign label to all currently selected sub-words, resolving dittos where needed.
   function tagConfirmSubLabel(label) {
     label = label.trim();
     if (!label || !state.tagSubSelectedIds.size) return;
@@ -170,7 +180,7 @@ export function createTagModule(core) {
       var existing = state.tagPendingSubcomps.find(function(s) { return s.word_id === wid; });
       if (existing) { existing.label = label; }
       else {
-        var text = (w.corrected_text != null ? w.corrected_text : w.text) || '';
+        var text = w.text || '';
         if (isDitto(text) && state.tagPendingBbox) { var resolved = resolveDitto(label, state.tagPendingBbox.top); if (resolved) text = resolved; }
         state.tagPendingSubcomps.push({ word_id: wid, label: label, text: text });
       }
@@ -181,6 +191,7 @@ export function createTagModule(core) {
     tagUpdateSubcompDisplay(); populateLabelDatalist();
   }
 
+  // Return the shared label of all selected sub-words, or '' if they differ.
   function _commonSelectedLabel() {
     var seen = null, all = true;
     state.tagSubSelectedIds.forEach(function(wid) {
@@ -191,6 +202,7 @@ export function createTagModule(core) {
     return (all && seen !== null) ? seen : '';
   }
 
+  // Show the sub-label input row when words are selected, hide it when the selection is empty.
   function tagMaybeShowSubInput() {
     var row = document.getElementById('dp-tag-sub-input-row');
     if (state.tagSubSelectedIds.size > 0) {
@@ -201,6 +213,7 @@ export function createTagModule(core) {
   }
 
   /* ── sub-word selection ────────────────────────────────────── */
+  // Toggle selection of a single sub-word by id, ignoring clicks outside the pending bbox.
   function tagSubWordClick(wordId, shiftKey) {
     if (!state.tagPendingBbox) return;
     var w = core.wordById[wordId]; if (!w) return;
@@ -212,6 +225,7 @@ export function createTagModule(core) {
     tagMaybeShowSubInput(); tagUpdateSubcompDisplay();
   }
 
+  // Select sub-words inside the given viewer-local rect that also lie within the pending bbox.
   function tagSubSelectInRect(x1, y1, x2, y2, shiftKey) {
     if (!state.tagPendingBbox) return;
     if (!shiftKey) state.tagSubSelectedIds.clear();
@@ -227,6 +241,7 @@ export function createTagModule(core) {
   }
 
   /* ── datalist ──────────────────────────────────────────────── */
+  // Populate the sub-label autocomplete datalist from all existing tags and pending subcomps.
   function populateLabelDatalist() {
     var dl = document.getElementById('dp-sub-label-list'); if (!dl) return;
     var seen = {};
@@ -237,6 +252,7 @@ export function createTagModule(core) {
   }
 
   /* ── save / delete ─────────────────────────────────────────── */
+  // POST create or update for the pending tag and exit labeling mode on success.
   function tagSave() {
     var label = document.getElementById('dp-tag-label-input').value.trim();
     if (!label) { document.getElementById('dp-tag-label-input').focus(); return; }
@@ -269,6 +285,7 @@ export function createTagModule(core) {
     }).catch(function() { btn.disabled = false; btn.textContent = 'Save ↵'; });
   }
 
+  // POST delete for the current tag and remove it from core.TAGS.
   function tagDelete() {
     if (!state.tagEditingId) return;
     if (!confirm('Delete this tag?')) return;
@@ -280,6 +297,7 @@ export function createTagModule(core) {
     });
   }
 
+  // Increment or decrement the document-level tag count badge.
   function adjustDocTagCount(delta) {
     var el = document.getElementById('dp-doc-tag-count-val'); if (!el) return;
     var n = (parseInt(el.textContent, 10) || 0) + delta; el.textContent = n;
@@ -288,6 +306,7 @@ export function createTagModule(core) {
   }
 
   /* ── render ────────────────────────────────────────────────── */
+  // In labeling phase: render ghost word overlays inside the bbox; otherwise render tag overlays.
   function render(viewer, scale) {
     if (state.tagPhase === 'labeling') {
       var taggedIds = new Set(state.tagPendingSubcomps.map(function(s) { return s.word_id; }));
@@ -307,7 +326,7 @@ export function createTagModule(core) {
         div.style.top    = Math.round(w.top    * scale) + 'px';
         div.style.width  = Math.round(w.width  * scale) + 'px';
         div.style.height = Math.round(w.height * scale) + 'px';
-        div.title = w.corrected_text || w.text;
+        div.title = w.text;
         viewer.appendChild(div);
       });
     } else {
@@ -316,6 +335,7 @@ export function createTagModule(core) {
   }
 
   /* ── mouse handlers ────────────────────────────────────────── */
+  // Begin a tag draw gesture or a sub-word selection gesture.
   function onMousedown(e) {
     if (state.tagPhase === 'draw') {
       e.preventDefault(); state.tagDrawStart = { x: e.clientX, y: e.clientY }; state.isDragging = false;
@@ -325,6 +345,7 @@ export function createTagModule(core) {
     }
   }
 
+  // Handle corner-resize drag, tag draw rubber-band, or sub-word selection rubber-band.
   function onMousemove(e) {
     if (state.tagResizing) {
       var scale = core.getScale();
@@ -360,6 +381,7 @@ export function createTagModule(core) {
     }
   }
 
+  // Finalise a draw, resize, or sub-selection gesture; open an existing tag on single click.
   function onMouseup(e) {
     if (state.tagResizing) { state.tagResizing = null; return; }
     if (state.tagPhase === 'draw') {
@@ -407,6 +429,7 @@ export function createTagModule(core) {
   }
 
   /* ── keyboard ──────────────────────────────────────────────── */
+  // Handle Enter (confirm sub-label or save), Escape (deselect or exit), Delete (remove subcomps).
   function onKeydown(e) {
     if (state.tagPhase !== 'labeling') return;
     var subInput   = document.getElementById('dp-tag-sub-input');
@@ -436,11 +459,13 @@ export function createTagModule(core) {
     }
   }
 
+  // Exit labeling mode (used by core when switching away from the label tab).
   function clearSelection() {
     if (state.tagPhase === 'labeling') tagExitLabelingMode();
   }
 
   /* ── setup UI ──────────────────────────────────────────────── */
+  // Attach tag panel button listeners and corner-resize handle listeners.
   function setupUI() {
     document.getElementById('dp-tag-save-btn').addEventListener('click', function(e) { e.preventDefault(); tagSave(); });
     document.getElementById('dp-tag-cancel-btn').addEventListener('click', function(e) { e.preventDefault(); tagExitLabelingMode(); });

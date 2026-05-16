@@ -4,39 +4,44 @@ export function createNerModule(core) {
   var NER_ENTITY_LABEL = { PER: 'name', LOC: 'address', ORG: 'organization' };
 
   /* ── helpers ───────────────────────────────────────────────── */
-  function nerEffectiveLabel(w) {
-    var raw = w.corrected_label || w.ner_label;
-    return raw || null;
+  // Return the active NER label for a word: corrected_label if set, else ner_label (mirrors Word.label).
+  function wordLabel(w) {
+    return w.corrected_label || w.ner_label || null;
   }
 
+  // Return the BIO-stripped entity type (PER/LOC/ORG) or null if the word has no label.
   function nerEntityType(w) {
-    var lbl = nerEffectiveLabel(w);
+    var lbl = wordLabel(w);
     return lbl ? lbl.replace(/^[BI]-/, '') : null;
   }
 
   /* ── popup ─────────────────────────────────────────────────── */
+  // Open the single-word NER edit popup for wordId.
   function nerOpenPopup(wordId) {
     state.nerPopupWordId = wordId;
     var w = core.wordById[wordId];
     if (!w) return;
     var popup = document.getElementById('dp-ner-popup');
-    document.getElementById('dp-ner-word-text').textContent = w.corrected_text || w.text;
-    document.getElementById('dp-ner-label-select').value = nerEffectiveLabel(w) || '';
+    document.getElementById('dp-ner-word-text').textContent = w.text;
+    document.getElementById('dp-ner-label-select').value = wordLabel(w) || '';
     core.positionAtViewerEdge(popup);
   }
 
+  // Hide the NER popup and clear the pending word id.
   function nerClosePopup() {
     document.getElementById('dp-ner-popup').style.display = 'none';
     state.nerPopupWordId = null;
   }
 
   /* ── selection ─────────────────────────────────────────────── */
+  // Clear the NER word selection set and hide the selection bar.
   function clearSelection() {
     state.nerSelectedIds.clear();
     updateNerSelectBar();
     if (state.activeTab === 'ner') core.renderOverlays();
   }
 
+  // Sync the NER selection bar visibility and count label; pre-fill the entity type dropdown.
   function updateNerSelectBar() {
     core.updateSelectBar('ner-select-bar', 'ner-select-label', state.nerSelectedIds.size);
     if (state.nerSelectedIds.size >= 2) {
@@ -54,6 +59,7 @@ export function createNerModule(core) {
     }
   }
 
+  // Add all words inside the given viewer-local rect to the NER selection.
   function nerSelectInRect(x1, y1, x2, y2, shiftKey) {
     var s = core.getScale(), px1 = x1/s, py1 = y1/s, px2 = x2/s, py2 = y2/s;
     if (!shiftKey) state.nerSelectedIds.clear();
@@ -65,6 +71,7 @@ export function createNerModule(core) {
     core.renderOverlays();
   }
 
+  // POST corrected_label for each selected word in document order (first → B-, rest → I-).
   function nerApplyBulkLabel(type) {
     if (!state.nerSelectedIds.size) return;
     var ids = Array.from(state.nerSelectedIds);
@@ -90,6 +97,7 @@ export function createNerModule(core) {
   }
 
   /* ── entity list ───────────────────────────────────────────── */
+  // Build a flat list of entity spans from OCR_WORDS, respecting BIO boundaries.
   function nerBuildEntities() {
     var ents = [];
     var sorted = core.OCR_WORDS.slice().sort(function(a, b) {
@@ -98,7 +106,7 @@ export function createNerModule(core) {
     });
     var cur = null;
     sorted.forEach(function(w) {
-      var raw = nerEffectiveLabel(w);
+      var raw = wordLabel(w);
       if (!raw) { cur = null; return; }
       var type = raw.replace(/^[BI]-/, '');
       var prefix = raw.charAt(0);
@@ -106,11 +114,12 @@ export function createNerModule(core) {
       else { cur.words.push(w); }
     });
     return ents.map(function(e) {
-      var text = e.words.map(function(w) { return w.corrected_text != null ? w.corrected_text : w.text; }).join(' ');
+      var text = e.words.map(function(w) { return w.text; }).join(' ');
       return { type: e.type, text: text, wordIds: e.words.map(function(w) { return w.id; }) };
     });
   }
 
+  // Rebuild the entity list sidebar, grouped by type and deduplicated by display text.
   function nerBuildEntityList() {
     var ents = nerBuildEntities();
     var byType = { PER: {}, LOC: {}, ORG: {} };
@@ -151,6 +160,7 @@ export function createNerModule(core) {
     });
   }
 
+  // Return the Set of word ids that match the currently highlighted entity key.
   function nerHighlightWordIdSet() {
     var ids = new Set();
     if (!state.nerHighlightKey) return ids;
@@ -164,6 +174,7 @@ export function createNerModule(core) {
   }
 
   /* ── NER suggestions (exposed via core for tag module) ─────── */
+  // Push NER-labelled words inside bbox into state.tagPendingSubcomps as subcomp suggestions.
   function nerSuggestSubcomps(bbox) {
     if (!bbox) return;
     core.OCR_WORDS.forEach(function(w) {
@@ -175,17 +186,18 @@ export function createNerModule(core) {
       if (!inRegion) return;
       var suggLabel = NER_ENTITY_LABEL[entityType] || entityType.toLowerCase();
       if (!state.tagPendingSubcomps.find(function(s) { return s.word_id === w.id; })) {
-        var text = (w.corrected_text != null ? w.corrected_text : w.text) || '';
-        state.tagPendingSubcomps.push({ word_id: w.id, label: suggLabel, text: text });
+        state.tagPendingSubcomps.push({ word_id: w.id, label: suggLabel, text: w.text || '' });
       }
     });
   }
 
   /* ── NER run ───────────────────────────────────────────────── */
+  // Return the appropriate button label depending on whether NER data already exists.
   function nerBtnLabel() {
     return core.OCR_WORDS.some(function(w) { return w.ner_label || w.corrected_label; }) ? 'Rerun NER' : 'Run NER';
   }
 
+  // POST a NER rerun request and update word labels in place.
   function runNer() {
     if (!C.nerRerunUrl) return;
     var btn = document.getElementById('dp-rerun-ner');
@@ -202,6 +214,7 @@ export function createNerModule(core) {
   }
 
   /* ── render ────────────────────────────────────────────────── */
+  // Draw one overlay div per OCR word, coloured by entity type and selection/highlight state.
   function render(viewer, scale) {
     var highlightWordIds = nerHighlightWordIdSet();
     core.OCR_WORDS.forEach(function(w) {
@@ -217,18 +230,20 @@ export function createNerModule(core) {
       div.style.top    = Math.round(w.top    * scale) + 'px';
       div.style.width  = Math.round(w.width  * scale) + 'px';
       div.style.height = Math.round(w.height * scale) + 'px';
-      div.title = (nerEffectiveLabel(w) || '') + ': ' + (w.corrected_text || w.text);
+      div.title = (wordLabel(w) || '') + ': ' + w.text;
       viewer.appendChild(div);
     });
   }
 
   /* ── mouse handlers ────────────────────────────────────────── */
+  // Begin a potential drag-select or single-word click.
   function onMousedown(e) {
     e.preventDefault();
     state.selectStart = { x: e.clientX, y: e.clientY, target: e.target };
     state.isDragging = false;
   }
 
+  // Draw the rubber-band rect while dragging.
   function onMousemove(e) {
     if (!state.selectStart) return;
     var dx = e.clientX - state.selectStart.x, dy = e.clientY - state.selectStart.y;
@@ -240,6 +255,7 @@ export function createNerModule(core) {
     }
   }
 
+  // Finish a drag-select or dispatch a single-word click/shift-click.
   function onMouseup(e) {
     if (!state.selectStart) return;
     var vr = document.getElementById('dp-viewer').getBoundingClientRect();
@@ -264,19 +280,23 @@ export function createNerModule(core) {
     e.stopPropagation();
   }
 
+  // Close the popup and clear selection on Escape.
   function onKeydown(e) {
     if (e.key === 'Escape') { nerClosePopup(); clearSelection(); }
   }
 
+  // Close the popup or clear selection when clicking outside the relevant elements.
   function onGlobalClick(e) {
     var popup = document.getElementById('dp-ner-popup');
     if (popup && popup.style.display !== 'none' && !popup.contains(e.target)) nerClosePopup();
     if (!e.target.closest('#dp-viewer') && !e.target.closest('#ner-select-bar') && !e.target.closest('#dp-ner-popup')) clearSelection();
   }
 
+  // Called when the NER tab becomes active; rebuild the entity list.
   function activate() { nerBuildEntityList(); }
 
   /* ── setup UI ──────────────────────────────────────────────── */
+  // Attach all NER DOM event listeners and expose NER helpers on core for the tag module.
   function setupUI() {
     var nerPopup = document.getElementById('dp-ner-popup');
     if (nerPopup) {
