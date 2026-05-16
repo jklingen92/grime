@@ -75,6 +75,7 @@ export function initCore(C) {
     OCR_WORDS = OCR_WORDS.filter(function(w) { return !del.has(w.id); });
     data.deleted_ids.forEach(function(id) { delete wordById[id]; });
     (data.new_words || []).forEach(function(w) { OCR_WORDS.push(w); wordById[w.id] = w; });
+    (data.updated || []).forEach(function(u) { var w = wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = u.is_ditto; } });
   }
 
   // Run fn() with btn disabled and showing busyLabel, then restore btn regardless of outcome.

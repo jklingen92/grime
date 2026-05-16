@@ -77,11 +77,12 @@ def resolve_page(
     """Resolve dittos across every Word on ``page`` and persist changes.
 
     Walks each Word's text (``corrected_text`` if set, else
-    ``ocr_text``).  For Words whose raw OCR text is a ditto mark, the
+    ``ocr_text``).  For Words whose raw OCR text is a ditto mark, or
+    that were previously resolved as dittos (``is_ditto=True``), the
     resolved value is written to ``corrected_text`` with ``is_ditto=True``
     and the supplied ``user`` recorded as the corrector.  Words whose raw
-    text is not a ditto mark are not touched — human corrections on
-    non-ditto words are preserved.
+    text is not a ditto mark and are not already marked as dittos are not
+    touched — human corrections on non-ditto words are preserved.
 
     Returns one ``{"id", "corrected_text", "is_ditto"}`` row per Word
     whose effective text changed.
@@ -96,14 +97,15 @@ def resolve_page(
     by_pk: dict[int, "Word"] = {}
     for w in words:
         by_pk[w.pk] = w
+        should_resolve = is_ditto_mark(w.ocr_text) or w.is_ditto
         rows.append(
             {
                 "id": w.pk,
                 "left": w.left,
                 "top": w.top,
                 "width": w.width,
-                "text": w.text,
-                "_raw_is_ditto": is_ditto_mark(w.ocr_text),
+                "text": DITTO_MARK if should_resolve else w.text,
+                "_raw_is_ditto": should_resolve,
                 "_effective_before": w.text,
             }
         )

@@ -474,7 +474,7 @@ export function createOcrModule(core) {
       div.style.top    = Math.round(w.top    * scale) + 'px';
       div.style.width  = Math.round(w.width  * scale) + 'px';
       div.style.height = Math.round(w.height * scale) + 'px';
-      div.title = (w.corrected_text ? '✓ ' + w.corrected_text : w.text) + ' (' + Math.round(w.conf) + '%)';
+      div.title = (w.corrected_text ? '✓ ' + w.corrected_text : w.text) + (w.is_ditto ? '' : ' (' + Math.round(w.conf) + '%)');
       viewer.appendChild(div);
     });
   }

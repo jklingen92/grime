@@ -301,5 +301,5 @@ def rerun_selection(
         )
         created.append(w)
 
-    post_ocr(page)
-    return {"deleted_ids": deleted_ids, "new_words": created}
+    updated = post_ocr(page)
+    return {"deleted_ids": deleted_ids, "new_words": created, "updated": updated}
