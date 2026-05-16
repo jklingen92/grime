@@ -215,9 +215,6 @@ export function createOcrModule(core) {
   }
 
   /* ── undo / redo ───────────────────────────────────────────── */
-  // Push an undo entry and clear the redo stack.
-  function recordUndo(e) { state.undoStack.push(e); state.redoStack = []; }
-
   // DELETE the word with id, remove it from OCR_WORDS/wordById, and call cb when done.
   function _deleteWordById(id, cb) {
     core.postJson(C.deleteUrl, 'word_pk=' + encodeURIComponent(id)).then(function(data) {
@@ -242,29 +239,6 @@ export function createOcrModule(core) {
       if (cb) cb(data.word);
     });
   }
-
-  // Pop the top entry from `from`, apply its inverse, and push the inverse onto `to`.
-  function _applyHistory(from, to) {
-    if (!from.length) return;
-    var e = from.pop();
-    if (e.type === 'correct') {
-      var w = core.wordById[e.wordId]; if (!w) return;
-      var el = document.querySelector("[data-word-id='" + e.wordId + "']");
-      to.push({ type: 'correct', wordId: e.wordId, prev: e.next, next: e.prev });
-      postCorrection(w, el, e.prev, true);
-    } else if (e.type === 'add') {
-      var s = Object.assign({}, core.wordById[e.wordId]);
-      to.push({ type: 'delete', wordData: s });
-      _deleteWordById(e.wordId);
-    } else if (e.type === 'delete') {
-      _addWordFromData(e.wordData, function(nw) { to.push({ type: 'add', wordId: nw.id }); });
-    }
-  }
-
-  // Undo the last OCR edit.
-  function undo() { _applyHistory(state.undoStack, state.redoStack); }
-  // Redo the last undone OCR edit.
-  function redo() { _applyHistory(state.redoStack, state.undoStack); }
 
   /* ── edit popup ────────────────────────────────────────────── */
   // Open the single-word correction popup for word/el.
@@ -295,7 +269,7 @@ export function createOcrModule(core) {
   function postCorrection(word, el, text, skipUndo) {
     if (!HAS_REPAIR) return;
     var prev = word.corrected_text;
-    if (!skipUndo) recordUndo({ type: 'correct', wordId: word.id, prev: prev, next: text });
+    if (!skipUndo) core.recordUndo({ type: 'ocr-correct', wordId: word.id, prev: prev, next: text });
     core.postJson(C.correctUrl, 'word_pk=' + encodeURIComponent(word.id) + '&corrected_text=' + encodeURIComponent(text))
       .then(function(data) {
         if (!data.ok) return;
@@ -335,7 +309,7 @@ export function createOcrModule(core) {
     if (!state.currentWord) return;
     var snap = Object.assign({}, state.currentWord), id = state.currentWord.id;
     closeEditPopup();
-    _deleteWordById(id, function() { recordUndo({ type: 'delete', wordData: snap }); });
+    _deleteWordById(id, function() { core.recordUndo({ type: 'ocr-delete', wordData: snap }); });
   }
 
   /* ── ditto ─────────────────────────────────────────────────── */
@@ -369,7 +343,7 @@ export function createOcrModule(core) {
         if (!data.ok) return;
         var word = data.word;
         core.OCR_WORDS.push(word); core.wordById[word.id] = word;
-        recordUndo({ type: 'add', wordId: word.id }); core.renderOverlays();
+        core.recordUndo({ type: 'ocr-add', wordId: word.id }); core.renderOverlays();
         core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(word.id)).then(function(data2) {
           if (!data2.ok) return;
           var el = document.querySelector('[data-word-id="' + word.id + '"]');
@@ -453,7 +427,7 @@ export function createOcrModule(core) {
     core.postJson(C.addWordUrl, body).then(function(data) {
       if (!data.ok) return;
       core.OCR_WORDS.push(data.word); core.wordById[data.word.id] = data.word;
-      recordUndo({ type: 'add', wordId: data.word.id });
+      core.recordUndo({ type: 'ocr-add', wordId: data.word.id });
       core.renderOverlays(); updateTextPanels();
       document.getElementById('dp-draw-rect').style.display = 'none';
     });
@@ -712,8 +686,20 @@ export function createOcrModule(core) {
       if (e.key === 'Escape') { e.preventDefault(); if (typeof closePersonModal === 'function') closePersonModal(); }
     });
 
-    core.setHook('undo', undo);
-    core.setHook('redo', redo);
+    core.registerUndoHandler('ocr-correct', function(e, pushInverse) {
+      var w = core.wordById[e.wordId]; if (!w) return;
+      var el = document.querySelector("[data-word-id='" + e.wordId + "']");
+      pushInverse({ type: 'ocr-correct', wordId: e.wordId, prev: e.next, next: e.prev });
+      postCorrection(w, el, e.prev, true);
+    });
+    core.registerUndoHandler('ocr-add', function(e, pushInverse) {
+      var snap = Object.assign({}, core.wordById[e.wordId]); if (!snap.id) return;
+      pushInverse({ type: 'ocr-delete', wordData: snap });
+      _deleteWordById(e.wordId);
+    });
+    core.registerUndoHandler('ocr-delete', function(e, pushInverse) {
+      _addWordFromData(e.wordData, function(nw) { pushInverse({ type: 'ocr-add', wordId: nw.id }); });
+    });
   }
 
   return {

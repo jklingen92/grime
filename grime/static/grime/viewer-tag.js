@@ -251,6 +251,47 @@ export function createTagModule(core) {
     Object.keys(seen).sort().forEach(function(lbl) { var opt = document.createElement('option'); opt.value = lbl; dl.appendChild(opt); });
   }
 
+  /* ── undo / redo helpers ────────────────────────────────────── */
+  // POST delete for id, remove from TAGS, and update doc count.
+  function _deleteTagById(id) {
+    core.postJson(C.tagDeleteUrl, 'tag_id=' + id).then(function(data) {
+      if (!data.ok) return;
+      core.TAGS = core.TAGS.filter(function(t) { return t.id !== id; });
+      adjustDocTagCount(-1); buildList(); core.renderOverlays(); core.updateBadge();
+    });
+  }
+
+  // POST update using a full tag snapshot (used for undo/redo).
+  function _updateTagFromSnapshot(tagData) {
+    var subcomps = tagData.subcomponents || [];
+    var body = 'tag_id=' + tagData.id + '&label=' + encodeURIComponent(tagData.label) +
+               '&bbox_left=' + tagData.bbox_left + '&bbox_top=' + tagData.bbox_top +
+               '&bbox_width=' + tagData.bbox_width + '&bbox_height=' + tagData.bbox_height +
+               '&subcomponents=' + encodeURIComponent(JSON.stringify(subcomps));
+    core.postJson(C.tagUpdateUrl, body).then(function(data) {
+      if (!data.ok) return;
+      var idx = core.TAGS.findIndex(function(t) { return t.id === data.tag.id; });
+      if (idx >= 0) core.TAGS[idx] = data.tag;
+      buildList(); core.renderOverlays();
+    });
+  }
+
+  // POST create using snapshot data, add to TAGS, and update doc count (used for undo/redo).
+  function _createTagFromSnapshot(tagData, cb) {
+    var subcomps = tagData.subcomponents || [];
+    var body = 'source_type_id=' + C.tagSourceTypeId + '&source_id=' + C.tagSourceId +
+               '&label=' + encodeURIComponent(tagData.label) +
+               '&bbox_left=' + tagData.bbox_left + '&bbox_top=' + tagData.bbox_top +
+               '&bbox_width=' + tagData.bbox_width + '&bbox_height=' + tagData.bbox_height +
+               '&subcomponents=' + encodeURIComponent(JSON.stringify(subcomps));
+    core.postJson(C.tagCreateUrl, body).then(function(data) {
+      if (!data.ok) return;
+      core.TAGS.push(data.tag); adjustDocTagCount(1);
+      buildList(); core.renderOverlays(); core.updateBadge();
+      if (cb) cb(data.tag);
+    });
+  }
+
   /* ── save / delete ─────────────────────────────────────────── */
   // POST create or update for the pending tag and exit labeling mode on success.
   function tagSave() {
@@ -259,6 +300,12 @@ export function createTagModule(core) {
     if (!state.tagPendingBbox) return;
     var subcomps = state.tagPendingSubcomps.slice();
     var btn = document.getElementById('dp-tag-save-btn'); btn.disabled = true; btn.textContent = 'Saving…';
+    var isUpdate = !!state.tagEditingId;
+    var prevSnap = null;
+    if (isUpdate) {
+      var _pt = core.TAGS.find(function(t) { return t.id === state.tagEditingId; });
+      if (_pt) { prevSnap = Object.assign({}, _pt); prevSnap.subcomponents = (_pt.subcomponents || []).slice(); }
+    }
     var url, body;
     if (state.tagEditingId) {
       url = C.tagUpdateUrl;
@@ -277,10 +324,15 @@ export function createTagModule(core) {
     core.postJson(url, body).then(function(data) {
       btn.disabled = false; btn.textContent = 'Save ↵';
       if (!data.ok) { alert(data.error || 'Error saving tag.'); return; }
-      if (state.tagEditingId) {
+      if (isUpdate) {
         var idx = core.TAGS.findIndex(function(t) { return t.id === state.tagEditingId; });
         if (idx >= 0) core.TAGS[idx] = data.tag;
-      } else { core.TAGS.push(data.tag); adjustDocTagCount(1); }
+        var nextSnap = Object.assign({}, data.tag); nextSnap.subcomponents = (data.tag.subcomponents || []).slice();
+        core.recordUndo({ type: 'tag-update', tagId: data.tag.id, prev: prevSnap, next: nextSnap });
+      } else {
+        core.TAGS.push(data.tag); adjustDocTagCount(1);
+        core.recordUndo({ type: 'tag-create', tagId: data.tag.id });
+      }
       populateLabelDatalist(); tagExitLabelingMode();
     }).catch(function() { btn.disabled = false; btn.textContent = 'Save ↵'; });
   }
@@ -289,11 +341,15 @@ export function createTagModule(core) {
   function tagDelete() {
     if (!state.tagEditingId) return;
     if (!confirm('Delete this tag?')) return;
+    var _dt = core.TAGS.find(function(t) { return t.id === state.tagEditingId; });
+    var snapCopy = _dt ? Object.assign({}, _dt, { subcomponents: (_dt.subcomponents || []).slice() }) : null;
     core.postJson(C.tagDeleteUrl, 'tag_id=' + state.tagEditingId).then(function(data) {
       if (!data.ok) { alert('Error deleting tag.'); return; }
       var id = state.tagEditingId;
       core.TAGS = core.TAGS.filter(function(t) { return t.id !== id; });
-      adjustDocTagCount(-1); tagExitLabelingMode();
+      adjustDocTagCount(-1);
+      if (snapCopy) core.recordUndo({ type: 'tag-delete', tagData: snapCopy });
+      tagExitLabelingMode();
     });
   }
 
@@ -487,6 +543,23 @@ export function createTagModule(core) {
         if (state.tagPhase !== 'labeling' || !state.tagPendingBbox) return;
         e.preventDefault(); e.stopPropagation();
         state.tagResizing = { corner: handle.dataset.corner, startX: e.clientX, startY: e.clientY, startBbox: Object.assign({}, state.tagPendingBbox) };
+      });
+    });
+
+    core.registerUndoHandler('tag-create', function(e, pushInverse) {
+      var snap = core.TAGS.find(function(t) { return t.id === e.tagId; });
+      if (!snap) return;
+      pushInverse({ type: 'tag-delete', tagData: Object.assign({}, snap, { subcomponents: (snap.subcomponents || []).slice() }) });
+      _deleteTagById(e.tagId);
+    });
+    core.registerUndoHandler('tag-update', function(e, pushInverse) {
+      if (!e.prev) return;
+      pushInverse({ type: 'tag-update', tagId: e.tagId, prev: e.next, next: e.prev });
+      _updateTagFromSnapshot(e.prev);
+    });
+    core.registerUndoHandler('tag-delete', function(e, pushInverse) {
+      _createTagFromSnapshot(e.tagData, function(newTag) {
+        pushInverse({ type: 'tag-create', tagId: newTag.id });
       });
     });
   }
