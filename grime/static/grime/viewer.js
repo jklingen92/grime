@@ -28,6 +28,7 @@
   var BULK_DITTO_URL     = C.bulkDittoUrl || null;
   var BULK_DELETE_URL    = C.bulkDeleteUrl || null;
   var RERUN_SELECTION_URL = C.rerunSelectionUrl || null;
+  var NER_RERUN_URL = C.nerRerunUrl || null;
   var PAGE_LIST      = C.pageList || null;
   var CURRENT_PAGE_PK = C.currentPagePk || null;
 
@@ -116,11 +117,15 @@
     document.getElementById('tab-ocr').classList.toggle('active', name === 'ocr');
     var actions   = document.getElementById('dp-ocr-actions');
     var sep       = document.getElementById('dp-sep-ocr');
+    var nerSep    = document.getElementById('dp-sep-ner');
+    var nerBtn    = document.getElementById('dp-rerun-ner');
     var tagP      = document.getElementById('dp-tag-panel');
     var txtP      = document.getElementById('dp-text-panel');
     var nerLegend = document.getElementById('dp-tag-ner-legend');
     if (name === 'ocr') {
       if (actions) { actions.classList.add('visible'); if (sep) sep.style.display = ''; }
+      if (nerSep) nerSep.style.display = 'none';
+      if (nerBtn) nerBtn.style.display = 'none';
       if (tagP) tagP.classList.remove('visible');
       if (txtP) txtP.classList.add('visible');
       clearOcrSelection();
@@ -130,6 +135,8 @@
         nerLegend.style.display = hasNer ? 'flex' : 'none';
       }
       if (actions) { actions.classList.remove('visible'); if (sep) sep.style.display = 'none'; }
+      if (nerSep) nerSep.style.display = '';
+      if (nerBtn) nerBtn.style.display = '';
       if (tagP) tagP.classList.add('visible');
       if (txtP) txtP.classList.remove('visible');
       clearOcrSelection();
@@ -817,6 +824,41 @@
     });
   }
 
+  function nerBtnLabel() {
+    var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_label; });
+    return hasNer ? 'Rerun NER' : 'Run NER';
+  }
+
+  function runNer() {
+    if (!NER_RERUN_URL) return;
+    var btn = document.getElementById('dp-rerun-ner');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+    fetch(NER_RERUN_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN},
+      body: ''
+    }).then(function(r){ return r.json(); }).then(function(data) {
+      if (!data.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+        alert(data.error || 'NER failed.');
+        return;
+      }
+      data.words.forEach(function(w) {
+        var word = wordById[w.id];
+        if (word) { word.ner_label = w.ner_label; word.corrected_label = w.corrected_label; }
+      });
+      var nerLegend = document.getElementById('dp-tag-ner-legend');
+      if (nerLegend) {
+        var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_label; });
+        nerLegend.style.display = hasNer ? 'flex' : 'none';
+      }
+      renderOverlays();
+      if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+    }).catch(function(){
+      if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
+    });
+  }
+
   function rerunSelectionOcr() {
     if (!RERUN_SELECTION_URL || !state.ocrSelectedIds.size) return;
     var btn = document.getElementById('ocr-rerun-ocr');
@@ -1246,6 +1288,14 @@
       rerunOcrBtn.addEventListener('click', function(e){
         e.preventDefault();
         runOcr(state.ocrEngine || 'textract');
+      });
+    }
+    var rerunNerBtn = document.getElementById('dp-rerun-ner');
+    if (rerunNerBtn) {
+      rerunNerBtn.textContent = nerBtnLabel();
+      rerunNerBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        runNer();
       });
     }
     if (rerunCaretBtn && rerunMenu) {
