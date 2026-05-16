@@ -1,0 +1,111 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Documents</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: "Roboto","Lucida Grande","DejaVu Sans","Bitstream Vera Sans",Verdana,Arial,sans-serif; font-size: 13px; background: #f8f8f8; color: #333; }
+
+    #gl-header { background: #417690; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+    #gl-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
+
+    #gl-body { padding: 20px 24px; max-width: 900px; }
+
+    /* Upload card */
+    #gl-upload { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px 20px; margin-bottom: 24px; }
+    #gl-upload h2 { margin: 0 0 12px; font-size: 0.95em; font-weight: 600; color: #417690; }
+    .gl-field { margin-bottom: 10px; }
+    .gl-field label { display: block; font-weight: 600; margin-bottom: 3px; }
+    .gl-field input[type="text"],
+    .gl-field input[type="file"] { width: 100%; padding: 5px 7px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; }
+    .gl-field .gl-help { color: #888; font-size: 0.85em; margin-top: 2px; }
+    .gl-field .gl-error { color: #ba2121; font-size: 0.85em; margin-top: 2px; }
+    #gl-upload button[type="submit"] { background: #417690; color: #fff; border: none; border-radius: 3px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+    #gl-upload button[type="submit"]:hover { background: #205067; }
+    #gl-upload-error { background: #fce4e4; border: 1px solid #e0a0a0; border-radius: 3px; padding: 8px 12px; margin-bottom: 12px; color: #ba2121; font-size: 0.9em; }
+
+    /* Document table */
+    #gl-docs h2 { margin: 0 0 10px; font-size: 0.95em; font-weight: 600; color: #417690; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+    th { background: #417690; color: #fff; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 0.9em; }
+    td { padding: 7px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f0f6fa; }
+    a { color: #205067; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .gl-muted { color: #888; }
+    .gl-empty { color: #888; padding: 20px 12px; }
+  </style>
+</head>
+<body>
+<div id="gl-header">
+  <h1>Documents</h1>
+</div>
+<div id="gl-body">
+
+  <!-- Upload form -->
+  <div id="gl-upload">
+    <h2>Upload document</h2>
+    {% if upload_error %}
+    <div id="gl-upload-error">{{ upload_error }}</div>
+    {% endif %}
+    <form method="post" action="{% url 'grime:document_upload' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="gl-field">
+        <label for="{{ form.pdf_file.id_for_label }}">{{ form.pdf_file.label }}</label>
+        {{ form.pdf_file }}
+        {% if form.pdf_file.errors %}
+          {% for err in form.pdf_file.errors %}<div class="gl-error">{{ err }}</div>{% endfor %}
+        {% else %}
+          <div class="gl-help">{{ form.pdf_file.help_text }}</div>
+        {% endif %}
+      </div>
+      <div class="gl-field">
+        <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+        {{ form.title }}
+        {% if form.title.errors %}
+          {% for err in form.title.errors %}<div class="gl-error">{{ err }}</div>{% endfor %}
+        {% else %}
+          <div class="gl-help">{{ form.title.help_text }}</div>
+        {% endif %}
+      </div>
+      <button type="submit">Ingest PDF</button>
+    </form>
+  </div>
+
+  <!-- Document list -->
+  <div id="gl-docs">
+    <h2>All documents ({{ documents|length }})</h2>
+    {% if documents %}
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Pages</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in documents %}
+        <tr>
+          <td><a href="{% url 'grime:document' doc_pk=doc.pk %}">{{ doc.title }}</a></td>
+          <td>
+            {% if doc.page_count %}
+              {{ doc.page_count }}
+            {% else %}
+              <span class="gl-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="gl-empty">No documents yet. Upload a PDF above to get started.</p>
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>
