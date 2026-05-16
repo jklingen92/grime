@@ -605,6 +605,7 @@ def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
             "ok": True,
             "deleted_ids": result["deleted_ids"],
             "new_words": [_word_to_dict(w) for w in result["new_words"]],
+            "updated": result["updated"],
         }
     )
 
