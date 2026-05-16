@@ -20,6 +20,7 @@ Word dicts are unified to the Textract shape:
 """
 
 import logging
+from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -35,17 +36,98 @@ ENGINE_TESSERACT = "tesseract"
 _VALID_ENGINES = (ENGINE_TEXTRACT, ENGINE_TESSERACT)
 
 
+def _detect_line_centers(words: list[dict], img_h: int) -> list[int]:
+    """
+    Return sorted y-coordinates of text line centers.
+
+    Builds a density profile where density[y] = number of word bounding boxes
+    that overlap pixel row y.  Each contiguous non-zero span in that profile
+    is one text line; its center is the y with the highest density in the span.
+    Words on the same visual line — even across columns with slightly different
+    top values — naturally form a single contiguous span as long as their
+    bounding boxes overlap vertically.
+    """
+    if not words:
+        return []
+
+    density = [0] * img_h
+    for w in words:
+        for y in range(max(0, w["top"]), min(img_h, w["top"] + w["height"])):
+            density[y] += 1
+
+    lines = []
+    region_start = None
+    for y in range(img_h):
+        if density[y] > 0 and region_start is None:
+            region_start = y
+        elif density[y] == 0 and region_start is not None:
+            peak = max(range(region_start, y), key=lambda r: density[r])
+            lines.append(peak)
+            region_start = None
+    if region_start is not None:
+        peak = max(range(region_start, img_h), key=lambda r: density[r])
+        lines.append(peak)
+
+    return lines
+
+
+def _reassign_line_nums(page: "DocumentPage") -> None:
+    """Reassign line_num and word_num for all Words on ``page``.
+
+    Uses a word-density profile to detect line centers, then assigns each
+    word to its nearest center.  Words are sorted left-to-right within each
+    line.  Done in two bulk-update passes to avoid unique-constraint
+    collisions during reassignment.
+    """
+    from grime.models import Word
+
+    word_rows = list(
+        Word.objects.filter(page=page).values("pk", "left", "top", "width", "height")
+    )
+    if not word_rows:
+        return
+
+    img_h = max(w["top"] + w["height"] for w in word_rows) + 1
+    line_centers = _detect_line_centers(word_rows, img_h)
+
+    def nearest(w: dict) -> int:
+        cy = w["top"] + w["height"] / 2
+        return min(range(len(line_centers)), key=lambda i: abs(line_centers[i] - cy))
+
+    line_groups: dict[int, list[dict]] = defaultdict(list)
+    for w in word_rows:
+        line_groups[nearest(w) if line_centers else 0].append(w)
+
+    final: list[Word] = []
+    for line_num, (_li, lw) in enumerate(
+        sorted(line_groups.items(), key=lambda kv: line_centers[kv[0]] if line_centers else 0)
+    ):
+        lw.sort(key=lambda w: w["left"])
+        for word_num, w in enumerate(lw):
+            final.append(Word(pk=w["pk"], line_num=line_num, word_num=word_num))
+
+    n = len(final)
+    # Pass 1: shift every row to a temporary range (n+i) that cannot collide
+    # with final values (max final line_num < n by construction).
+    temp = [Word(pk=f.pk, line_num=n + i, word_num=0) for i, f in enumerate(final)]
+    Word.objects.bulk_update(temp, ["line_num", "word_num"])
+    # Pass 2: write final values.
+    Word.objects.bulk_update(final, ["line_num", "word_num"])
+
+
 def post_ocr(
     page: "DocumentPage", *, user: "Optional[AbstractBaseUser]" = None
 ) -> list[dict]:
     """Run post-OCR cleanup on ``page`` after any OCR change.
 
-    Currently resolves dittos against the page's Words.  Call this from
-    every code path that creates, deletes, or edits Words.  Returns the
-    list of ``{"id", "corrected_text", "is_ditto"}`` rows whose effective
-    text changed during cleanup so callers can echo the diff back to the
-    UI without a full reload.
+    Reassigns line/word numbers via density-based line detection, then
+    resolves ditto marks.  Call this from every code path that creates,
+    deletes, or edits Words.  Returns the list of
+    ``{"id", "corrected_text", "is_ditto"}`` rows whose effective text
+    changed during ditto resolution.
     """
+    _reassign_line_nums(page)
+
     from grime.pipeline.ditto import resolve_page
 
     return resolve_page(page, user=user)
