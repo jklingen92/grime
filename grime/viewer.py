@@ -26,10 +26,13 @@ that try to touch a Word belonging to a different page.
 """
 
 import json
+import os
+import tempfile
+from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Max
+from django.db.models import Count, Max
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -37,6 +40,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
+from grime.forms import DocumentUploadForm
 from grime.models import Document, DocumentPage, Tag, Word
 
 _VALID_NER_LABELS = {None, "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
@@ -691,7 +695,6 @@ def document_page_view(request, doc_pk: int, page_pk: int | None = None):
     prev_pk = page_pks[idx - 1] if idx > 0 else None
     next_pk = page_pks[idx + 1] if idx < len(page_pks) - 1 else None
 
-    print(prev_pk, next_pk)
     ctx = build_viewer_context(page)
     ctx.update(
         {
@@ -712,3 +715,49 @@ def document_page_view(request, doc_pk: int, page_pk: int | None = None):
         }
     )
     return render(request, "grime/document_detail.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Landing page
+# ---------------------------------------------------------------------------
+
+
+@staff_member_required
+def document_list_view(request):
+    upload_error = None
+    form = DocumentUploadForm()
+
+    if request.method == "POST":
+        form = DocumentUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            uploaded = form.cleaned_data["pdf_file"]
+            title = form.cleaned_data.get("title") or None
+            stem = Path(uploaded.name).stem
+
+            tmp_dir = tempfile.mkdtemp()
+            tmp_path = Path(tmp_dir) / f"{stem}.pdf"
+            try:
+                with open(tmp_path, "wb") as fh:
+                    for chunk in uploaded.chunks():
+                        fh.write(chunk)
+                from grime.pipeline.ingest import ingest_pdf
+
+                doc, _, _ = ingest_pdf(tmp_path, title=title)
+            except Exception as exc:
+                upload_error = str(exc)
+                doc = None
+            finally:
+                tmp_path.unlink(missing_ok=True)
+                os.rmdir(tmp_dir)
+
+            if doc is not None:
+                return redirect("grime:document", doc_pk=doc.pk)
+
+    documents = (
+        Document.objects.annotate(page_count=Count("pages")).order_by("title")
+    )
+    return render(
+        request,
+        "grime/document_list.html",
+        {"documents": documents, "form": form, "upload_error": upload_error},
+    )
