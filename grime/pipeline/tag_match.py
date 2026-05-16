@@ -75,12 +75,13 @@ def _word_canonical(word_dict: dict) -> str:
 
 def _assign_line_ranks(words: list[dict]) -> list[list[dict]]:
     """
-    Group words by OCR line key, sort groups by median cy, merge groups
-    that are within ~60% of a line height vertically (handles two-column
-    layout where left/right columns have slightly different y due to page
-    curve), then assign each word a '_line_rank' and '_line_rel_x'.
+    Group words by line_num, sort top-to-bottom, and annotate each word
+    with '_line_rank' (0-based line index) and '_line_rel_x' (horizontal
+    position within the line, 0.0–1.0).
 
-    Returns the sorted list of merged line groups.
+    Returns the sorted list of line groups.  Line numbers are trusted to be
+    correct — density-based reassignment happens in ocr.post_ocr before
+    words reach this function.
     """
     line_groups: dict[int, list] = {}
     for w in words:
@@ -91,24 +92,8 @@ def _assign_line_ranks(words: list[dict]) -> list[list[dict]]:
         key=lambda g: statistics.median(w["top"] + w["height"] / 2 for w in g),
     )
 
-    # Merge threshold: fraction of the median word height below which two
-    # consecutive OCR lines are considered the same visual row.
-    all_heights = [w["height"] for w in words if w.get("height", 0) > 0]
-    line_h = statistics.median(all_heights) if all_heights else 20
-    merge_threshold = line_h * 0.6
-
-    merged: list[list[dict]] = []
-    for group in sorted_groups:
-        group_mid = statistics.median(w["top"] + w["height"] / 2 for w in group)
-        if merged:
-            prev_mid = statistics.median(w["top"] + w["height"] / 2 for w in merged[-1])
-            if group_mid - prev_mid <= merge_threshold:
-                merged[-1].extend(group)
-                continue
-        merged.append(list(group))
-
     lines_by_rank = []
-    for rank, line_words in enumerate(merged):
+    for rank, line_words in enumerate(sorted_groups):
         cxs = [w["left"] + w["width"] / 2 for w in line_words]
         lmin, lmax = min(cxs), max(cxs)
         lspan = lmax - lmin
