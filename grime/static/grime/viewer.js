@@ -887,6 +887,12 @@
     return out.join('\n');
   }
 
+  function syncTextPanelSelection() {
+    document.querySelectorAll('#dp-corrected-text .dp-text-word').forEach(function(el) {
+      el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+    });
+  }
+
   function updateTextPanels() {
     var ocr = document.getElementById('dp-corrected-text');
     if (!ocr) return;
@@ -900,14 +906,101 @@
           var wordSpan = document.createElement('span');
           wordSpan.className = 'dp-text-word';
           if (state.ocrSelectedIds.has(w.id)) wordSpan.classList.add('selected');
+          if (_searchQuery && (w.corrected_text!=null?w.corrected_text:w.text||'').toLowerCase().indexOf(_searchQuery) >= 0) wordSpan.classList.add('search-match');
           wordSpan.textContent = w.corrected_text!=null?w.corrected_text:w.text;
           wordSpan.dataset.wordId = w.id;
+          (function(wid) {
+            wordSpan.addEventListener('click', function(e) {
+              if (_textSelectionSuppressClick) { _textSelectionSuppressClick = false; return; }
+              if (!e.shiftKey) state.ocrSelectedIds.clear();
+              if (state.ocrSelectedIds.has(wid)) state.ocrSelectedIds.delete(wid);
+              else state.ocrSelectedIds.add(wid);
+              document.querySelectorAll('.ocr-word').forEach(function(el) {
+                el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+              });
+              updateOcrMergeBar();
+              syncTextPanelSelection(); // update classes in-place; don't rebuild the DOM
+            });
+          })(w.id);
           lineDiv.appendChild(wordSpan);
           var space = document.createTextNode(' ');
           lineDiv.appendChild(space);
         });
       if (lineDiv.textContent.trim()) ocr.appendChild(lineDiv);
     });
+  }
+
+  /* ── text-panel search ─────────────────────────────────────── */
+  var _searchQuery = '';
+
+  function applyTextSearch(query) {
+    _searchQuery = (query || '').trim().toLowerCase();
+    var matchIds = new Set();
+    if (_searchQuery) {
+      OCR_WORDS.forEach(function(w) {
+        var t = (w.corrected_text != null ? w.corrected_text : w.text || '').toLowerCase();
+        if (t.indexOf(_searchQuery) >= 0 && w.id != null) matchIds.add(w.id);
+      });
+    }
+    var count = matchIds.size;
+    var countEl = document.getElementById('dp-text-search-count');
+    if (countEl) countEl.textContent = _searchQuery ? (count ? count + ' match' + (count === 1 ? '' : 'es') : 'no matches') : '';
+
+    // Update search-match class in text panel
+    document.querySelectorAll('#dp-corrected-text .dp-text-word').forEach(function(el) {
+      el.classList.toggle('search-match', matchIds.has(parseInt(el.dataset.wordId)));
+    });
+
+    // Select matched words on document overlay (replace non-shift always here)
+    if (_searchQuery) {
+      state.ocrSelectedIds.clear();
+      matchIds.forEach(function(id) { state.ocrSelectedIds.add(id); });
+      document.querySelectorAll('.ocr-word').forEach(function(el) {
+        el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+      });
+      updateOcrMergeBar();
+      // scroll first match into view in text panel
+      var first = document.querySelector('#dp-corrected-text .dp-text-word.search-match');
+      if (first) first.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      state.ocrSelectedIds.clear();
+      document.querySelectorAll('.ocr-word.selected').forEach(function(el) { el.classList.remove('selected'); });
+      updateOcrMergeBar();
+    }
+    // Sync selected class on text words
+    document.querySelectorAll('#dp-corrected-text .dp-text-word').forEach(function(el) {
+      el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+    });
+  }
+
+  /* ── text-panel native selection → document word selection ─── */
+  var _textSelectionSuppressClick = false;
+
+  function onTextPanelMouseup(e) {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    var range = sel.getRangeAt(0);
+    var wordSpans = document.querySelectorAll('#dp-corrected-text .dp-text-word');
+    var hitIds = [];
+    wordSpans.forEach(function(span) {
+      var spanRange = document.createRange();
+      spanRange.selectNode(span);
+      if (range.compareBoundaryPoints(Range.END_TO_START, spanRange) <= 0 &&
+          range.compareBoundaryPoints(Range.START_TO_END, spanRange) >= 0) {
+        var id = parseInt(span.dataset.wordId);
+        if (!isNaN(id)) hitIds.push(id);
+      }
+    });
+    if (!hitIds.length) return;
+    if (!e.shiftKey) state.ocrSelectedIds.clear();
+    hitIds.forEach(function(id) { state.ocrSelectedIds.add(id); });
+    document.querySelectorAll('.ocr-word').forEach(function(el) {
+      el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+    });
+    updateOcrMergeBar();
+    syncTextPanelSelection(); // update classes in-place so the DOM target stays live for the click event
+    sel.removeAllRanges();
+    _textSelectionSuppressClick = true; // prevent the following click from clobbering this
   }
 
   /* ── word class helper ─────────────────────────────────────── */
@@ -1536,6 +1629,31 @@
     document.addEventListener('mousemove', onDocMousemove);
     document.addEventListener('mouseup',   onDocMouseup);
 
+    // Text-panel search
+    var searchInput = document.getElementById('dp-text-search');
+    var searchClear = document.getElementById('dp-text-search-clear');
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var q = this.value;
+        if (searchClear) searchClear.style.display = q ? '' : 'none';
+        applyTextSearch(q);
+      });
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { this.value = ''; if (searchClear) searchClear.style.display = 'none'; applyTextSearch(''); }
+      });
+    }
+    if (searchClear) {
+      searchClear.addEventListener('click', function() {
+        if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+        searchClear.style.display = 'none';
+        applyTextSearch('');
+      });
+    }
+
+    // Text-panel native selection → document word selection
+    var correctedText = document.getElementById('dp-corrected-text');
+    if (correctedText) correctedText.addEventListener('mouseup', onTextPanelMouseup);
+
     // Coordinate readout
     var coordEl = document.getElementById('dp-coord');
     var wrapEl  = document.getElementById('dp-viewer-wrap');
@@ -1598,7 +1716,7 @@
       if(state.suppressClickClose){state.suppressClickClose=false;return;}
       var popup=document.getElementById('ocr-popup');
       if(popup.style.display!=='none'&&!popup.contains(e.target)&&!popup._pendingRegion)closeEditPopup();
-      if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ocr-merge-bar'))clearOcrSelection();
+      if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ocr-merge-bar')&&!e.target.closest('#dp-text-panel'))clearOcrSelection();
       if(!e.target.closest('#dp-viewer')&&!e.target.closest('#ner-select-bar')&&!e.target.closest('#dp-ner-popup'))clearNerSelection();
       var ocrMenu=document.getElementById('dp-rerun-ocr-menu');
       if(ocrMenu&&ocrMenu.classList.contains('open')&&!e.target.closest('.dp-split-btn'))ocrMenu.classList.remove('open');
