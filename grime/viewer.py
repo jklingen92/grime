@@ -620,8 +620,6 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
         return JsonResponse({"error": "Page not found"}, status=404)
-    if not page.text:
-        return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
 
     from grime.models import NERPass, Word
     from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
@@ -629,8 +627,17 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
     SCHEMA_NAME = "hf-historical-ner"
     try:
         NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).delete()
+        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
+        if not words:
+            return JsonResponse({"error": "Page has no words to run NER on"}, status=400)
         Word.objects.filter(page=page).update(ner_label=None)
-        entities = extract_entities(page.text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+        text = page.text or " ".join(
+            (w.corrected_text if w.corrected_text is not None else w.ocr_text) or ""
+            for w in words
+        )
+        if not text.strip():
+            return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
+        entities = extract_entities(text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD)
         ner_pass = NERPass.objects.create(
             page=page,
             schema_name=SCHEMA_NAME,
@@ -639,8 +646,7 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
             threshold=DEFAULT_CONFIDENCE_THRESHOLD,
             status=NERPass.STATUS_COMPLETE,
         )
-        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
-        label_ocr_words(words, page.text, entities)
+        label_ocr_words(words, text, entities)
         labelled = [w for w in words if w.ner_label]
         if labelled:
             for w in labelled:

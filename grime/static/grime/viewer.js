@@ -118,12 +118,14 @@
     var actions   = document.getElementById('dp-ocr-actions');
     var sep       = document.getElementById('dp-sep-ocr');
     var nerSep    = document.getElementById('dp-sep-ner');
+    var nerBtn    = document.getElementById('dp-rerun-ner');
     var tagP      = document.getElementById('dp-tag-panel');
     var txtP      = document.getElementById('dp-text-panel');
     var nerLegend = document.getElementById('dp-tag-ner-legend');
     if (name === 'ocr') {
       if (actions) { actions.classList.add('visible'); if (sep) sep.style.display = ''; }
       if (nerSep) nerSep.style.display = 'none';
+      if (nerBtn) nerBtn.style.display = 'none';
       if (tagP) tagP.classList.remove('visible');
       if (txtP) txtP.classList.add('visible');
       clearOcrSelection();
@@ -134,6 +136,7 @@
       }
       if (actions) { actions.classList.remove('visible'); if (sep) sep.style.display = 'none'; }
       if (nerSep) nerSep.style.display = '';
+      if (nerBtn) nerBtn.style.display = '';
       if (tagP) tagP.classList.add('visible');
       if (txtP) txtP.classList.remove('visible');
       clearOcrSelection();
