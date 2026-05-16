@@ -117,11 +117,13 @@
     document.getElementById('tab-ocr').classList.toggle('active', name === 'ocr');
     var actions   = document.getElementById('dp-ocr-actions');
     var sep       = document.getElementById('dp-sep-ocr');
+    var nerSep    = document.getElementById('dp-sep-ner');
     var tagP      = document.getElementById('dp-tag-panel');
     var txtP      = document.getElementById('dp-text-panel');
     var nerLegend = document.getElementById('dp-tag-ner-legend');
     if (name === 'ocr') {
       if (actions) { actions.classList.add('visible'); if (sep) sep.style.display = ''; }
+      if (nerSep) nerSep.style.display = 'none';
       if (tagP) tagP.classList.remove('visible');
       if (txtP) txtP.classList.add('visible');
       clearOcrSelection();
@@ -131,6 +133,7 @@
         nerLegend.style.display = hasNer ? 'flex' : 'none';
       }
       if (actions) { actions.classList.remove('visible'); if (sep) sep.style.display = 'none'; }
+      if (nerSep) nerSep.style.display = '';
       if (tagP) tagP.classList.add('visible');
       if (txtP) txtP.classList.remove('visible');
       clearOcrSelection();
@@ -841,6 +844,11 @@
         var word = wordById[w.id];
         if (word) { word.ner_label = w.ner_label; word.corrected_label = w.corrected_label; }
       });
+      var nerLegend = document.getElementById('dp-tag-ner-legend');
+      if (nerLegend) {
+        var hasNer = OCR_WORDS.some(function(w){ return w.ner_label || w.corrected_label; });
+        nerLegend.style.display = hasNer ? 'flex' : 'none';
+      }
       renderOverlays();
       if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
     }).catch(function(){
