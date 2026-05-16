@@ -91,13 +91,13 @@
     flex: 1; min-height: 0; width: 100%; box-sizing: border-box;
     font-size: 0.82em; font-family: monospace; border: 1px solid #ddd;
     padding: 8px; background: #fafafa;
-    overflow-y: auto; color: #111; line-height: 1.6; border-radius: 3px;
+    overflow-y: auto; color: #111; line-height: 1.6; border-radius: 3px; cursor: text;
   }
   .dp-text-line {
     display: block; text-align: left;
   }
   .dp-text-word {
-    cursor: pointer; padding: 1px 2px; border-radius: 1px; transition: all 0.1s;
+    cursor: text; padding: 1px 2px; border-radius: 1px; transition: all 0.1s;
   }
   .dp-text-word:hover { background: rgba(0,0,0,0.05); }
   .dp-text-word.selected { background: rgba(230,126,0,0.3); font-weight: 500; outline: 1px solid rgba(230,126,0,0.7); }

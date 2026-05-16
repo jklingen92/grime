@@ -967,9 +967,27 @@
   }
 
   /* ── text-panel native selection → document word selection ─── */
+  var _textDragOrigin = null; // {x,y} of mousedown in text panel
+  var _textDragged = false;   // true once the mouse moved enough to be a drag
+
+  function onTextPanelMousedown(e) {
+    _textDragOrigin = { x: e.clientX, y: e.clientY };
+    _textDragged = false;
+  }
+
+  function onTextPanelMousemove(e) {
+    if (!_textDragOrigin) return;
+    var dx = e.clientX - _textDragOrigin.x, dy = e.clientY - _textDragOrigin.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 4) _textDragged = true;
+  }
+
   function onTextPanelMouseup(e) {
+    _textDragOrigin = null;
+    var wasDrag = _textDragged;
+    _textDragged = false;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
+    if (!wasDrag) return; // single click — let the word's click handler take it
     var range = sel.getRangeAt(0);
     var wordSpans = document.querySelectorAll('#dp-corrected-text .dp-text-word');
     var hitIds = [];
@@ -990,7 +1008,6 @@
     });
     updateOcrMergeBar();
     updateTextPanels();
-    // Clear browser selection so it doesn't fight with our visual state
     sel.removeAllRanges();
   }
 
@@ -1629,7 +1646,11 @@
 
     // Text-panel native selection → document word selection
     var correctedText = document.getElementById('dp-corrected-text');
-    if (correctedText) correctedText.addEventListener('mouseup', onTextPanelMouseup);
+    if (correctedText) {
+      correctedText.addEventListener('mousedown', onTextPanelMousedown);
+      correctedText.addEventListener('mousemove', onTextPanelMousemove);
+      correctedText.addEventListener('mouseup',   onTextPanelMouseup);
+    }
 
     // Coordinate readout
     var coordEl = document.getElementById('dp-coord');
