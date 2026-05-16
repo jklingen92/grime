@@ -96,10 +96,8 @@
     overflow-y: auto; color: #111; line-height: 1.6; border-radius: 3px;
   }
   .dp-text-line {
-    display: block; padding-bottom: 0.6em; margin-bottom: 0.6em;
-    border-bottom: 1px solid #eee;
+    display: block; text-align: left;
   }
-  .dp-text-line:last-child { border-bottom: none; }
   .dp-text-word {
     cursor: pointer; padding: 1px 2px; border-radius: 1px; transition: all 0.1s;
   }
