@@ -8,7 +8,8 @@
   <!-- tabs -->
   <div id="dp-tabs">
     <button class="dp-tab active" id="tab-ocr" onclick="dpShowTab('ocr')">OCR</button>
-    <button class="dp-tab" id="tab-tagging" onclick="dpShowTab('tagging')">Tagging</button>
+    <button class="dp-tab" id="tab-ner" onclick="dpShowTab('ner')">NER</button>
+    <button class="dp-tab" id="tab-label" onclick="dpShowTab('label')">Label</button>
   </div>
 
 
@@ -85,30 +86,49 @@
 
     <div id="dp-divider"></div>
 
-    <!-- tagging panel -->
+    <!-- NER panel -->
+    <div id="dp-ner-panel">
+      <h3>Entities</h3>
+      <div id="dp-ner-instructions">
+        <span>Click a word to edit · drag or shift-click to multi-select.</span>
+        <div id="dp-ner-legend-block">
+          <span class="dp-ner-legend-title">NER highlights</span>
+          <span><span class="dp-ner-swatch ner-PER"></span>Person</span>
+          <span><span class="dp-ner-swatch ner-LOC"></span>Location</span>
+          <span><span class="dp-ner-swatch ner-ORG"></span>Organization</span>
+        </div>
+      </div>
+      <div id="dp-ner-entity-list">
+        <div class="dp-ner-section" data-type="PER">
+          <div class="dp-ner-section-header"><span class="dp-ner-section-caret">▾</span> Person <span class="dp-ner-section-count"></span></div>
+          <div class="dp-ner-section-body"></div>
+        </div>
+        <div class="dp-ner-section" data-type="LOC">
+          <div class="dp-ner-section-header"><span class="dp-ner-section-caret">▾</span> Location <span class="dp-ner-section-count"></span></div>
+          <div class="dp-ner-section-body"></div>
+        </div>
+        <div class="dp-ner-section" data-type="ORG">
+          <div class="dp-ner-section-header"><span class="dp-ner-section-caret">▾</span> Organization <span class="dp-ner-section-count"></span></div>
+          <div class="dp-ner-section-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Label (template creation) panel -->
     <div id="dp-tag-panel">
       <!-- idle: tag list -->
       <div id="dp-tag-list-view">
-        <h3>Tags</h3>
+        <h3>Labels</h3>
         <div id="dp-tag-instructions">
-          <span>Drag on image to create a tag.</span>
-          <span>Click anywhere on a tag to edit it.</span>
-          <div id="dp-tag-ner-legend">
-            <span class="dp-ner-legend-title">NER highlights</span>
-            <span><span class="dp-ner-swatch ner-PER"></span>Person — click to correct</span>
-            <span><span class="dp-ner-swatch ner-LOC"></span>Location</span>
-            <span><span class="dp-ner-swatch ner-ORG"></span>Org</span>
-          </div>
-          <div id="dp-tag-count">
-
-          </div>
+          <span>Drag on image to create a label.</span>
+          <span>Click anywhere on a label to edit it.</span>
         </div>
-        <div id="dp-tag-list"><div id="dp-tag-empty">No tags yet.</div></div>
+        <div id="dp-tag-list"><div id="dp-tag-empty">No labels yet.</div></div>
       </div>
       <!-- labeling: label + subcomponents + actions -->
       <div id="dp-tag-label-view" style="display:none">
-        <h3 id="dp-tag-label-heading">New tag</h3>
-        <input id="dp-tag-label-input" type="text" placeholder="Tag label…" autocomplete="off">
+        <h3 id="dp-tag-label-heading">New label</h3>
+        <input id="dp-tag-label-input" type="text" placeholder="Label…" autocomplete="off">
         <div id="dp-tag-sub-input-row" style="display:none">
           <div style="display:flex;gap:4px;align-items:center">
             <input id="dp-tag-sub-input" type="text" list="dp-sub-label-list" placeholder="Label for selection…" autocomplete="off" style="flex:1;min-width:0">
@@ -189,6 +209,21 @@
   <button id="ocr-bulk-delete" class="button" style="color:#a00">Delete</button>
   <button id="ocr-merge-cancel" class="button">Cancel</button>
   <span class="merge-bar-hint">Esc · ⌫</span>
+</div>
+
+<!-- NER selection bar (multi-select actions) -->
+<div id="ner-select-bar">
+  <label id="ner-select-label">2 words selected</label>
+  <select id="ner-select-type">
+    <option value="">— label —</option>
+    <option value="PER">Person</option>
+    <option value="LOC">Location</option>
+    <option value="ORG">Organization</option>
+    <option value="NONE">None / clear</option>
+  </select>
+  <button id="ner-select-apply" class="button">Apply</button>
+  <button id="ner-select-cancel" class="button">Cancel</button>
+  <span class="merge-bar-hint">leftmost → B-, rest → I-</span>
 </div>
 
 {% if image_url %}
