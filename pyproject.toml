@@ -1,6 +1,6 @@
 [project]
 name = "grime"
-version = "0.1.0"
+version = "0.1.1"
 description = "Archival document management as a reusable Django app"
 readme = "README.md"
 license = { file = "LICENSE" }
