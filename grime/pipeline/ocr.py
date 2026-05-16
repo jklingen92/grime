@@ -40,12 +40,11 @@ def _detect_line_centers(words: list[dict], img_h: int) -> list[int]:
     """
     Return sorted y-coordinates of text line centers.
 
-    Builds a density profile where density[y] = number of word bounding boxes
-    that overlap pixel row y.  Each contiguous non-zero span in that profile
-    is one text line; its center is the y with the highest density in the span.
-    Words on the same visual line — even across columns with slightly different
-    top values — naturally form a single contiguous span as long as their
-    bounding boxes overlap vertically.
+    Builds a density profile (density[y] = word bboxes overlapping row y),
+    smooths it with a box filter to eliminate within-line bumps caused by
+    words on the same row having slightly different top values, then returns
+    local maxima of the smoothed profile.  Residual nearby maxima closer than
+    half the median word height are merged, keeping the highest-density one.
     """
     if not words:
         return []
@@ -55,18 +54,46 @@ def _detect_line_centers(words: list[dict], img_h: int) -> list[int]:
         for y in range(max(0, w["top"]), min(img_h, w["top"] + w["height"])):
             density[y] += 1
 
-    lines = []
-    region_start = None
+    heights = sorted(w["height"] for w in words)
+    word_h = max(1, heights[len(heights) // 2])
+
+    # Box-filter half-width: large enough to smooth within-line top variation
+    # (~30% of word height) while preserving inter-line valleys.
+    half_w = max(1, word_h // 4)
+    prefix = [0] * (img_h + 1)
     for y in range(img_h):
-        if density[y] > 0 and region_start is None:
-            region_start = y
-        elif density[y] == 0 and region_start is not None:
-            peak = max(range(region_start, y), key=lambda r: density[r])
-            lines.append(peak)
-            region_start = None
-    if region_start is not None:
-        peak = max(range(region_start, img_h), key=lambda r: density[r])
-        lines.append(peak)
+        prefix[y + 1] = prefix[y] + density[y]
+
+    smoothed = []
+    for y in range(img_h):
+        lo = max(0, y - half_w)
+        hi = min(img_h, y + half_w + 1)
+        smoothed.append((prefix[hi] - prefix[lo]) / (hi - lo))
+
+    # Local maxima of smoothed profile
+    candidates = [
+        y
+        for y in range(1, img_h - 1)
+        if smoothed[y] > 0
+        and smoothed[y] >= smoothed[y - 1]
+        and smoothed[y] >= smoothed[y + 1]
+        and (smoothed[y] > smoothed[y - 1] or smoothed[y] > smoothed[y + 1])
+    ]
+
+    if not candidates:
+        return []
+
+    # Merge residual nearby maxima within half a word height
+    min_sep = max(2, word_h // 2)
+    lines = []
+    group = [candidates[0]]
+    for c in candidates[1:]:
+        if c - group[-1] <= min_sep:
+            group.append(c)
+        else:
+            lines.append(max(group, key=lambda y: smoothed[y]))
+            group = [c]
+    lines.append(max(group, key=lambda y: smoothed[y]))
 
     return lines
 
