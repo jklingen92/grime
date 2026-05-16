@@ -1,10 +1,16 @@
   /* ── outer layout ─────────────────────────────────────────── */
-  #dp-outer { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 1.5em; }
+  #dp-outer { display: flex; align-items: flex-start; margin-bottom: 1.5em; }
   #dp-viewer-wrap {
     flex: 1; min-width: 0; position: relative;
     border: 1px solid #ddd; overflow: auto; max-height: 80vh; background: #f5f5f5;
   }
   #dp-viewer { position: relative; display: inline-block; line-height: 0; }
+  #dp-divider {
+    width: 8px; flex-shrink: 0; cursor: col-resize; user-select: none;
+    background: linear-gradient(90deg, transparent 0%, #ddd 40%, #ddd 60%, transparent 100%);
+    transition: background 0.15s; align-self: stretch;
+  }
+  #dp-divider:hover { background: linear-gradient(90deg, transparent 0%, #bbb 40%, #bbb 60%, transparent 100%); }
   #dp-img { display: block; }
   #dp-coord {
     position: fixed; display: none; pointer-events: none; z-index: 9000;
@@ -14,7 +20,7 @@
 
   /* ── side panels ──────────────────────────────────────────── */
   #dp-tag-panel, #dp-text-panel {
-    flex: 0 0 260px; display: none; flex-direction: column; gap: 6px; max-height: 80vh;
+    flex: 0 0 auto; width: 260px; display: none; flex-direction: column; gap: 6px; max-height: 80vh; min-width: 120px;
   }
   #dp-tag-panel.visible  { display: flex; }
   #dp-text-panel.visible { display: flex; }
@@ -88,11 +94,9 @@
     font-size: 0.82em; font-family: monospace; border: 1px solid #ddd;
     padding: 8px; background: #fafafa;
     overflow-y: auto; color: #111; line-height: 1.6; border-radius: 3px;
-    display: flex; flex-direction: column; gap: 4px;
   }
   .dp-text-line {
-    padding: 4px 6px; background: #fff; border-radius: 2px; border-left: 3px solid #ddd;
-    display: flex; flex-wrap: wrap; gap: 2px; align-items: baseline;
+    display: block; text-align: left;
   }
   .dp-text-word {
     cursor: pointer; padding: 1px 2px; border-radius: 1px; transition: all 0.1s;
