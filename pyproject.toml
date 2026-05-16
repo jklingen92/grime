@@ -26,6 +26,7 @@ dev = [
     "imageio[ffmpeg]",
     "black",
     "pre-commit",
+    "django-extensions",
 ]
 
 [build-system]
