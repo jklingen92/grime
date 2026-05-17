@@ -10,6 +10,7 @@
     <button class="dp-tab active" id="tab-ocr" onclick="dpShowTab('ocr')">OCR</button>
     <button class="dp-tab" id="tab-ner" onclick="dpShowTab('ner')">NER</button>
     <button class="dp-tab" id="tab-label" onclick="dpShowTab('label')">Label</button>
+    <button class="dp-tab" id="tab-image" onclick="dpShowTab('image')">Image</button>
   </div>
 
 
@@ -60,6 +61,8 @@
 
     <div class="dp-toolbar-sep"></div>
     <span id="dp-tab-badge" style="font-size:0.82em;color:#666"></span>
+
+    <button id="dp-image-save-btn" type="button" style="display:none;margin-left:auto;background:#fff3cd;border-color:#ffc107;color:#856404">Save adjusted image</button>
   </div>
 
   <!-- viewer + panels -->
@@ -143,6 +146,43 @@
           <button id="dp-tag-cancel-btn" type="button">Cancel ⎋</button>
           <button id="dp-tag-delete-btn" type="button" style="display:none">Delete</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Image panel -->
+    <div id="dp-image-panel">
+      <h3>Image adjustments</h3>
+      <div id="dp-image-instructions">
+        <span>Drag sliders for a live preview. Click <em>Save adjusted image</em> in the toolbar to persist.</span>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-brightness">Brightness</label>
+        <input id="dp-image-brightness" type="range" min="-100" max="100" step="1" value="0">
+        <span id="dp-image-brightness-val" class="dp-image-val">0</span>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-contrast">Contrast</label>
+        <input id="dp-image-contrast" type="range" min="0" max="200" step="1" value="100">
+        <span id="dp-image-contrast-val" class="dp-image-val">1.00</span>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-gamma">Gamma</label>
+        <input id="dp-image-gamma" type="range" min="10" max="300" step="1" value="100">
+        <span id="dp-image-gamma-val" class="dp-image-val">1.00</span>
+      </div>
+      <div class="dp-image-section-title">Levels</div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-black">Black</label>
+        <input id="dp-image-black" type="range" min="0" max="254" step="1" value="0">
+        <span id="dp-image-black-val" class="dp-image-val">0</span>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-white">White</label>
+        <input id="dp-image-white" type="range" min="1" max="255" step="1" value="255">
+        <span id="dp-image-white-val" class="dp-image-val">255</span>
+      </div>
+      <div id="dp-image-actions">
+        <button id="dp-image-reset-btn" type="button">Reset</button>
       </div>
     </div>
 
@@ -232,6 +272,15 @@
 </div>
 
 {% if image_url %}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="dp-image-filter" color-interpolation-filters="sRGB">
+    <feComponentTransfer>
+      <feFuncR id="dp-image-filter-r" type="table" tableValues="0 1"/>
+      <feFuncG id="dp-image-filter-g" type="table" tableValues="0 1"/>
+      <feFuncB id="dp-image-filter-b" type="table" tableValues="0 1"/>
+    </feComponentTransfer>
+  </filter>
+</svg>
 <script>
 window.VIEWER_CONFIG = {
   citations:       {{ citations_json }},
@@ -250,6 +299,12 @@ window.VIEWER_CONFIG = {
   tagSourceId:     {{ tag_source_id }},
   csrfToken:       "{{ csrf_token }}",
   usePreprocessedBbox: {% if use_preprocessed_bbox %}true{% else %}false{% endif %},
+  imageUrl:           "{{ image_url }}",
+  originalImageUrl:   "{{ original_image_url }}",
+  imageHasCorrected:  {% if image_has_corrected %}true{% else %}false{% endif %},
+  imageAdjustments:   {{ image_adjustments_json }},
+  imageSaveUrl:       "{{ image_save_url }}",
+  imageResetUrl:      "{{ image_reset_url }}",
 {% if ocr_record_pk %}
   correctUrl:        "{{ ocr_correct_url }}",
   deleteUrl:         "{{ ocr_delete_url }}",

@@ -20,11 +20,14 @@ Endpoints implemented here:
     POST tags/create/         — create a Tag on this page
     POST tags/update/         — edit an existing Tag
     POST tags/delete/         — delete a Tag
+    POST image/save/          — bake brightness/contrast/levels into corrected_image
+    POST image/reset/         — clear corrected_image and revert to original
 
 Word ops are scoped to the page in the URL — the view rejects requests
 that try to touch a Word belonging to a different page.
 """
 
+import io
 import json
 import os
 import tempfile
@@ -118,6 +121,16 @@ def get_viewer_urls() -> list:
             tag_delete,
             name="grime_documentpage_viewer_tag_delete",
         ),
+        path(
+            "<int:page_pk>/viewer/image/save/",
+            image_save,
+            name="grime_documentpage_viewer_image_save",
+        ),
+        path(
+            "<int:page_pk>/viewer/image/reset/",
+            image_reset,
+            name="grime_documentpage_viewer_image_reset",
+        ),
     ]
 
 
@@ -180,9 +193,10 @@ def _tag_to_dict(tag: Tag) -> dict:
 
 def build_viewer_context(page: DocumentPage) -> dict:
     """Build the template context the viewer needs to render and call its endpoints."""
-    image_url = page.image.url if page.image else None
+    image_url = page.display_image.url if page.display_image else None
     if not image_url:
         return {"image_url": None}
+    original_image_url = page.image.url if page.image else image_url
 
     words = list(
         Word.objects.filter(page=page)
@@ -222,6 +236,9 @@ def build_viewer_context(page: DocumentPage) -> dict:
 
     return {
         "image_url": image_url,
+        "original_image_url": original_image_url,
+        "image_has_corrected": bool(page.corrected_image),
+        "image_adjustments_json": _safe_json(page.image_adjustments),
         "image_alt": str(page),
         "ocr_words_json": _safe_json([_word_to_dict(w) for w in words]),
         "tags_json": _safe_json(tags),
@@ -243,6 +260,8 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "tag_create_url": _url("grime_documentpage_viewer_tag_create"),
         "tag_update_url": _url("grime_documentpage_viewer_tag_update"),
         "tag_delete_url": _url("grime_documentpage_viewer_tag_delete"),
+        "image_save_url": _url("grime_documentpage_viewer_image_save"),
+        "image_reset_url": _url("grime_documentpage_viewer_image_reset"),
         "ner_correct_url": _url("grime_documentpage_viewer_word_ner_correct"),
         "ocr_correct_url": _url("grime_documentpage_viewer_word_correct"),
         "ocr_add_word_url": _url("grime_documentpage_viewer_word_add"),
@@ -460,6 +479,125 @@ def tag_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     if not deleted:
         return JsonResponse({"error": "Tag not found on this page"}, status=404)
     return JsonResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Image adjustment endpoints
+# ---------------------------------------------------------------------------
+
+
+# Identity adjustments. Must match the DEFAULTS object in viewer-image.js after
+# the slider->params conversion done there (brightness/100, contrast/100, etc.).
+_DEFAULT_IMAGE_PARAMS = {
+    "brightness": 0.0,
+    "contrast": 1.0,
+    "gamma": 1.0,
+    "black": 0,
+    "white": 255,
+}
+
+
+def _build_image_lut(params: dict) -> list[int]:
+    """Per-channel 0-255 LUT. Mirrors buildLut() in viewer-image.js exactly."""
+    black = max(0, min(255, int(params.get("black", 0))))
+    white = max(black + 1, min(255, int(params.get("white", 255))))
+    gamma = max(0.01, float(params.get("gamma", 1.0)))
+    contrast = float(params.get("contrast", 1.0))
+    brightness = float(params.get("brightness", 0.0))
+    span = white - black
+    inv_gamma = 1.0 / gamma
+    lut = []
+    for i in range(256):
+        x = (i - black) / span
+        if x < 0.0:
+            x = 0.0
+        elif x > 1.0:
+            x = 1.0
+        x = x ** inv_gamma
+        x = (x - 0.5) * contrast + 0.5
+        x = x + brightness
+        if x < 0.0:
+            x = 0.0
+        elif x > 1.0:
+            x = 1.0
+        lut.append(int(round(x * 255)))
+    return lut
+
+
+def _apply_image_adjustments(im, params: dict):
+    lut = _build_image_lut(params)
+    if im.mode not in ("L", "RGB", "RGBA"):
+        im = im.convert("RGB")
+    return im.point(lut)
+
+
+@require_POST
+def image_save(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Bake brightness/contrast/levels params into ``corrected_image``."""
+    from django.core.files.base import ContentFile
+    from PIL import Image
+
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    if not page.image:
+        return JsonResponse({"error": "Page has no source image"}, status=400)
+
+    try:
+        body = json.loads((request.body or b"{}").decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    params = {**_DEFAULT_IMAGE_PARAMS, **(body or {})}
+
+    with Image.open(page.image.path) as im:
+        im.load()
+        adjusted = _apply_image_adjustments(im, params)
+        buf = io.BytesIO()
+        adjusted.save(buf, format="PNG")
+
+    fname = f"{Path(page.image.name).stem}-corrected.png"
+    if page.corrected_image:
+        page.corrected_image.delete(save=False)
+    page.corrected_image.save(fname, ContentFile(buf.getvalue()), save=False)
+    page.image_adjustments = params
+    page.corrected_image_by = request.user
+    page.corrected_image_at = timezone.now()
+    page.save(
+        update_fields=[
+            "corrected_image",
+            "image_adjustments",
+            "corrected_image_by",
+            "corrected_image_at",
+        ]
+    )
+    return JsonResponse(
+        {"ok": True, "image_url": page.corrected_image.url, "adjustments": params}
+    )
+
+
+@require_POST
+def image_reset(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Drop ``corrected_image`` and revert to the original ``image``."""
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    if page.corrected_image:
+        page.corrected_image.delete(save=False)
+    page.corrected_image = None
+    page.image_adjustments = None
+    page.corrected_image_by = None
+    page.corrected_image_at = None
+    page.save(
+        update_fields=[
+            "corrected_image",
+            "image_adjustments",
+            "corrected_image_by",
+            "corrected_image_at",
+        ]
+    )
+    return JsonResponse(
+        {"ok": True, "image_url": page.image.url if page.image else None}
+    )
 
 
 # ---------------------------------------------------------------------------
