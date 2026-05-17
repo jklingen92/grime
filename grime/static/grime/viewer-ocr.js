@@ -167,35 +167,41 @@ export function createOcrModule(core) {
   // POST an OCR run (full page or selected words) with the given engine.
   function runOcr(engine) {
     if (!C.rerunSelectionUrl) return;
-    var btn = document.getElementById('dp-rerun-ocr');
-    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
-    var parts = ['engine=' + encodeURIComponent(engine || 'textract')];
-    if (state.ocrSelectedIds.size)
-      parts.push('word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(',')));
-    core.postJson(C.rerunSelectionUrl, parts.join('&')).then(function(data) {
-      if (!data.ok) { if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); } alert(data.error || 'OCR failed.'); return; }
-      core.applyOcrWordDiff(data);
-      state.ocrSelectedIds.clear();
-      var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
-      core.renderOverlays(); updateTextPanels();
-      if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); }
-    }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); } });
+    var gate = core.imageEnsureSaved || function(cb) { cb(); };
+    gate(function() {
+      var btn = document.getElementById('dp-rerun-ocr');
+      if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+      var parts = ['engine=' + encodeURIComponent(engine || 'textract')];
+      if (state.ocrSelectedIds.size)
+        parts.push('word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(',')));
+      core.postJson(C.rerunSelectionUrl, parts.join('&')).then(function(data) {
+        if (!data.ok) { if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); } alert(data.error || 'OCR failed.'); return; }
+        core.applyOcrWordDiff(data);
+        state.ocrSelectedIds.clear();
+        var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
+        core.renderOverlays(); updateTextPanels();
+        if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); }
+      }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = ocrBtnLabel(); } });
+    });
   }
 
   // POST a rerun for the currently selected words, triggered from the selection bar.
   function rerunSelectionOcr() {
     if (!C.rerunSelectionUrl || !state.ocrSelectedIds.size) return;
-    var btn = document.getElementById('ocr-rerun-ocr');
-    if (btn) { btn.disabled = true; btn.textContent = 'Rerunning…'; }
-    var body = 'engine=textract&word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(','));
-    core.postJson(C.rerunSelectionUrl, body).then(function(data) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; }
-      if (!data.ok) { alert(data.error || 'Rerun OCR failed.'); return; }
-      core.applyOcrWordDiff(data);
-      state.ocrSelectedIds.clear();
-      var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
-      core.renderOverlays(); updateTextPanels();
-    }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; } });
+    var gate = core.imageEnsureSaved || function(cb) { cb(); };
+    gate(function() {
+      var btn = document.getElementById('ocr-rerun-ocr');
+      if (btn) { btn.disabled = true; btn.textContent = 'Rerunning…'; }
+      var body = 'engine=textract&word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(','));
+      core.postJson(C.rerunSelectionUrl, body).then(function(data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; }
+        if (!data.ok) { alert(data.error || 'Rerun OCR failed.'); return; }
+        core.applyOcrWordDiff(data);
+        state.ocrSelectedIds.clear();
+        var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
+        core.renderOverlays(); updateTextPanels();
+      }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = 'Rerun OCR'; } });
+    });
   }
 
   /* ── rect selection ────────────────────────────────────────── */

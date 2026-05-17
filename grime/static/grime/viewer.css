@@ -346,6 +346,14 @@
   #ocr-merge-bar label { font-size: 0.85em; color: #555; white-space: nowrap; }
   #ocr-merge-bar input[type=text] { flex: 1; padding: 4px 6px; font-size: 0.95em; box-sizing: border-box; }
   #ocr-merge-bar .merge-bar-hint { font-size: 0.75em; color: #999; white-space: nowrap; }
+  #dp-image-unsaved-bar {
+    position: fixed;
+    background: #fff; border: 1px solid #ffc107; border-radius: 6px;
+    padding: 10px 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+    z-index: 9998; display: none; align-items: center; gap: 10px; min-width: 360px;
+    transform: translateX(-100%);
+  }
+  #dp-image-unsaved-bar label { font-size: 0.85em; color: #856404; white-space: nowrap; }
 
   /* ── person modal ─────────────────────────────────────────── */
   #dp-person-backdrop {

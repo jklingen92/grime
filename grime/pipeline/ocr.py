@@ -211,7 +211,7 @@ def run_page(
 
     if page.text_source in ("embedded", "manual"):
         return None
-    img_field = getattr(page, "image", None)
+    img_field = page.display_image
     if not img_field:
         return None
 
@@ -256,10 +256,10 @@ def rerun_selection(
 
     from grime.models import Word
 
-    if not page.image:
+    if not page.display_image:
         raise ValueError("Page has no image to re-OCR")
 
-    full_img = PILImage.open(page.image.path)
+    full_img = PILImage.open(page.display_image.path)
 
     if word_pks:
         words = list(Word.objects.filter(pk__in=word_pks, page_id=page.pk))

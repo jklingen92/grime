@@ -139,44 +139,67 @@ export function createImageModule(core) {
     applyFilter();
   }
 
+  // Returns a Promise<boolean> — true if the save (or reset) succeeded.
   function save() {
     var btn = document.getElementById('dp-image-save-btn');
     var p = slidersToParams(state.imageAdjustments);
 
     // Identity == clearing corrected_image on the server.
     if (isIdentity(p)) {
-      core.withBtn(btn, 'Saving…', function() {
+      return core.withBtn(btn, 'Saving…', function() {
         return fetch(C.imageResetUrl, {
           method: 'POST',
           headers: { 'X-CSRFToken': C.csrfToken },
         }).then(function(r) { return r.json(); }).then(function(data) {
-          if (!data.ok) { alert(data.error || 'Reset failed.'); return; }
+          if (!data.ok) { alert(data.error || 'Reset failed.'); return false; }
           state.imageSavedAdjustments = Object.assign({}, DEFAULTS);
           state.imageHasCorrected = false;
           applyFilter();
+          return true;
         });
       });
-      return;
     }
 
-    core.withBtn(btn, 'Saving…', function() {
+    return core.withBtn(btn, 'Saving…', function() {
       return fetch(C.imageSaveUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': C.csrfToken },
         body: JSON.stringify(p),
       }).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data.ok) { alert(data.error || 'Save failed.'); return; }
+        if (!data.ok) { alert(data.error || 'Save failed.'); return false; }
         state.imageSavedAdjustments = Object.assign({}, state.imageAdjustments);
         state.imageHasCorrected = true;
-        // Cache-bust so the browser reloads from the freshly written file.
         var bust = data.image_url + (data.image_url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         C.imageUrl = bust;
         var img = document.getElementById('dp-img');
         if (img) { img.setAttribute('src', bust); img.style.filter = ''; }
         var sb = document.getElementById('dp-image-save-btn');
         if (sb) sb.style.display = 'none';
+        return true;
       });
     });
+  }
+
+  // If adjustments are clean, run onContinue() immediately. Otherwise show the
+  // unsaved-adjustments bar and route the user's choice to onContinue() (after
+  // an optional save) or abort. Used by other modules (e.g. OCR) before any
+  // action that reads pixels from the server.
+  function imageEnsureSaved(onContinue) {
+    if (!isDirty()) { onContinue(); return; }
+    var bar    = document.getElementById('dp-image-unsaved-bar');
+    var saveB  = document.getElementById('dp-image-unsaved-save');
+    var skipB  = document.getElementById('dp-image-unsaved-skip');
+    var cancB  = document.getElementById('dp-image-unsaved-cancel');
+    if (!bar || !saveB || !skipB || !cancB) { onContinue(); return; }
+    core.positionAtViewerEdge(bar);
+    bar.style.display = 'flex';
+    function cleanup() {
+      bar.style.display = 'none';
+      saveB.onclick = skipB.onclick = cancB.onclick = null;
+    }
+    saveB.onclick = function() { cleanup(); save().then(function(ok) { if (ok) onContinue(); }); };
+    skipB.onclick = function() { cleanup(); onContinue(); };
+    cancB.onclick = function() { cleanup(); };
   }
 
   function setupUI() {
@@ -188,6 +211,7 @@ export function createImageModule(core) {
     if (resetBtn) resetBtn.addEventListener('click', function(e) { e.preventDefault(); resetLocal(); });
     var saveBtn = document.getElementById('dp-image-save-btn');
     if (saveBtn) saveBtn.addEventListener('click', function(e) { e.preventDefault(); save(); });
+    core.imageEnsureSaved = imageEnsureSaved;
     syncSliders();
     applyFilter();
   }
