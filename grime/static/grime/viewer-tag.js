@@ -400,8 +400,8 @@ export function createTagModule(core) {
         }
       } else if (!state.isDragging) {
         var nerEl = e.target.closest ? e.target.closest('.dp-ner-overlay') : null;
-        if (nerEl && nerEl.dataset.wordId) {
-          if (core.nerOpenPopup) core.nerOpenPopup(parseInt(nerEl.dataset.wordId));
+        if (nerEl && nerEl.dataset.wordIds) {
+          if (core.nerOpenPopup) core.nerOpenPopup(nerEl.dataset.wordIds.split(',').map(Number));
         } else {
           var vrc = document.getElementById('dp-viewer').getBoundingClientRect(), sc = core.getScale();
           var cpx = (e.clientX - vrc.left) / sc, cpy = (e.clientY - vrc.top) / sc;

@@ -176,23 +176,6 @@
 {% endif %}
 
 <!-- NER repair popup -->
-<div id="dp-ner-popup">
-  <div class="dp-ner-word" id="dp-ner-word-text"></div>
-  <select id="dp-ner-label-select">
-    <option value="">— none —</option>
-    <option value="B-PER">B-PER (person start)</option>
-    <option value="I-PER">I-PER (person cont.)</option>
-    <option value="B-LOC">B-LOC (location start)</option>
-    <option value="I-LOC">I-LOC (location cont.)</option>
-    <option value="B-ORG">B-ORG (org start)</option>
-    <option value="I-ORG">I-ORG (org cont.)</option>
-  </select>
-  <div class="dp-ner-actions">
-    <button id="dp-ner-save-btn">Save</button>
-    <button id="dp-ner-cancel-btn">Cancel</button>
-  </div>
-</div>
-
 <!-- OCR edit popup -->
 <div id="ocr-popup">
   <div class="ocr-popup-original" id="ocr-popup-original"></div>
@@ -216,19 +199,18 @@
   <span class="merge-bar-hint">Esc · ⌫</span>
 </div>
 
-<!-- NER selection bar (multi-select actions) -->
+<!-- NER selection bar -->
 <div id="ner-select-bar">
-  <label id="ner-select-label">2 words selected</label>
+  <label id="ner-select-label"></label>
   <select id="ner-select-type">
     <option value="">— label —</option>
     <option value="PER">Person</option>
     <option value="LOC">Location</option>
     <option value="ORG">Organization</option>
-    <option value="NONE">None / clear</option>
   </select>
   <button id="ner-select-apply" class="button">Apply</button>
+  <button id="ner-select-delete" class="button" style="color:#a00">Delete</button>
   <button id="ner-select-cancel" class="button">Cancel</button>
-  <span class="merge-bar-hint">leftmost → B-, rest → I-</span>
 </div>
 
 {% if image_url %}

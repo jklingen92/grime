@@ -275,19 +275,6 @@
   .dp-ner-overlay.entity-highlight { outline: 2.5px solid #ffd54f !important; background: rgba(255,213,79,0.30) !important; z-index: 19; }
   .dp-ner-overlay:hover { z-index: 21; outline-width: 2.5px; }
 
-  /* NER repair popup */
-  #dp-ner-popup {
-    position: fixed; background: #fff; border: 1px solid #bbb; border-radius: 4px;
-    padding: 8px 10px; box-shadow: 0 3px 10px rgba(0,0,0,0.18); z-index: 9999;
-    min-width: 160px; display: none; font-size: 0.85em;
-    transform: translateX(-100%);
-  }
-  #dp-ner-popup .dp-ner-word { font-weight: bold; margin-bottom: 6px; color: #333; }
-  #dp-ner-popup select { width: 100%; margin-bottom: 6px; padding: 3px 4px; font-size: 0.9em; }
-  #dp-ner-popup .dp-ner-actions { display: flex; gap: 6px; }
-  #dp-ner-popup button { padding: 2px 8px; font-size: 0.85em; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; }
-  #dp-ner-popup button:hover { background: #f0f0f0; }
-
   /* ── OCR instructions panel ───────────────────────────────── */
   #dp-ocr-instructions {
     font-size: 0.78em; color: #666; margin-bottom: 8px;
