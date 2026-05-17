@@ -52,6 +52,8 @@ dev = [
     "black",
     "pre-commit",
     "django-extensions",
+    "honcho",
+    "celery[redis]",
 ]
 
 [build-system]
