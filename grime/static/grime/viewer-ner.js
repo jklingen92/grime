@@ -71,6 +71,14 @@ export function createNerModule(core) {
     core.renderOverlays();
   }
 
+  /* ── undo / redo helper ────────────────────────────────────────── */
+  // POST a NER label for a single word and update word.corrected_label in place.
+  function _postNerLabel(wordId, label) {
+    var w = core.wordById[wordId]; if (!w) return Promise.resolve();
+    return core.postJson(C.nerCorrectUrl, 'word_id=' + wordId + '&label=' + encodeURIComponent(label || 'NONE'))
+      .then(function(data) { if (data && data.ok) w.corrected_label = label; });
+  }
+
   // POST corrected_label for each selected word in document order (first → B-, rest → I-).
   function nerApplyBulkLabel(type) {
     if (!state.nerSelectedIds.size) return;
@@ -81,17 +89,19 @@ export function createNerModule(core) {
       if (wa.left !== wb.left) return wa.left - wb.left;
       return wa.top - wb.top;
     });
-    var requests = ids.map(function(id, idx) {
-      var label = (type === 'NONE' || !type) ? 'NONE' : (idx === 0 ? 'B-' : 'I-') + type;
-      return core.postJson(C.nerCorrectUrl, 'word_id=' + id + '&label=' + encodeURIComponent(label))
+    var changes = ids.map(function(id, idx) {
+      var w = core.wordById[id];
+      var next = (type === 'NONE' || !type) ? null : (idx === 0 ? 'B-' : 'I-') + type;
+      return { wordId: id, prev: w ? (w.corrected_label || null) : null, next: next };
+    });
+    var requests = changes.map(function(c) {
+      return core.postJson(C.nerCorrectUrl, 'word_id=' + c.wordId + '&label=' + encodeURIComponent(c.next || 'NONE'))
         .then(function(data) {
-          if (data && data.ok) {
-            var w = core.wordById[id];
-            if (w) w.corrected_label = (label === 'NONE') ? null : label;
-          }
+          if (data && data.ok) { var w = core.wordById[c.wordId]; if (w) w.corrected_label = c.next; }
         });
     });
     Promise.all(requests).then(function() {
+      core.recordUndo({ type: 'ner-bulk-correct', changes: changes });
       state.nerSelectedIds.clear(); updateNerSelectBar(); nerBuildEntityList(); core.renderOverlays();
     });
   }
@@ -311,11 +321,14 @@ export function createNerModule(core) {
     if (saveBtn) saveBtn.addEventListener('click', function() {
       if (state.nerPopupWordId == null) return;
       var label = document.getElementById('dp-ner-label-select').value || 'NONE';
+      var w = core.wordById[state.nerPopupWordId];
+      var prev = w ? (w.corrected_label || null) : null;
+      var next = (label === 'NONE') ? null : label;
       core.postJson(C.nerCorrectUrl, 'word_id=' + state.nerPopupWordId + '&label=' + encodeURIComponent(label))
         .then(function(data) {
           if (!data.ok) { alert(data.error || 'Error saving NER label.'); return; }
-          var w = core.wordById[state.nerPopupWordId];
-          if (w) w.corrected_label = (label === 'NONE') ? null : (label || null);
+          if (w) w.corrected_label = next;
+          core.recordUndo({ type: 'ner-correct', wordId: state.nerPopupWordId, prev: prev, next: next });
           nerClosePopup(); nerBuildEntityList(); core.renderOverlays();
         });
     });
@@ -336,6 +349,17 @@ export function createNerModule(core) {
       rerunNerBtn.textContent = nerBtnLabel();
       rerunNerBtn.addEventListener('click', function(e) { e.preventDefault(); runNer(); });
     }
+
+    core.registerUndoHandler('ner-correct', function(e, pushInverse) {
+      pushInverse({ type: 'ner-correct', wordId: e.wordId, prev: e.next, next: e.prev });
+      _postNerLabel(e.wordId, e.prev).then(function() { nerBuildEntityList(); core.renderOverlays(); });
+    });
+    core.registerUndoHandler('ner-bulk-correct', function(e, pushInverse) {
+      var inv = e.changes.map(function(c) { return { wordId: c.wordId, prev: c.next, next: c.prev }; });
+      pushInverse({ type: 'ner-bulk-correct', changes: inv });
+      Promise.all(e.changes.map(function(c) { return _postNerLabel(c.wordId, c.prev); }))
+        .then(function() { nerBuildEntityList(); core.renderOverlays(); });
+    });
 
     core.nerSuggestSubcomps = nerSuggestSubcomps;
     core.nerOpenPopup       = nerOpenPopup;
