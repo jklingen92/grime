@@ -22,6 +22,7 @@ Endpoints implemented here:
     POST tags/delete/         — delete a Tag
     POST image/save/          — bake brightness/contrast/levels into corrected_image
     POST image/reset/         — clear corrected_image and revert to original
+    POST image/autocontrast/  — analyse histogram and return suggested black/white levels
 
 Word ops are scoped to the page in the URL — the view rejects requests
 that try to touch a Word belonging to a different page.
@@ -130,6 +131,11 @@ def get_viewer_urls() -> list:
             "<int:page_pk>/viewer/image/reset/",
             image_reset,
             name="grime_documentpage_viewer_image_reset",
+        ),
+        path(
+            "<int:page_pk>/viewer/image/autocontrast/",
+            image_autocontrast,
+            name="grime_documentpage_viewer_image_autocontrast",
         ),
     ]
 
@@ -262,6 +268,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "tag_delete_url": _url("grime_documentpage_viewer_tag_delete"),
         "image_save_url": _url("grime_documentpage_viewer_image_save"),
         "image_reset_url": _url("grime_documentpage_viewer_image_reset"),
+        "image_autocontrast_url": _url("grime_documentpage_viewer_image_autocontrast"),
         "ner_correct_url": _url("grime_documentpage_viewer_word_ner_correct"),
         "ocr_correct_url": _url("grime_documentpage_viewer_word_correct"),
         "ocr_add_word_url": _url("grime_documentpage_viewer_word_add"),
@@ -493,6 +500,12 @@ _DEFAULT_IMAGE_PARAMS = {
     "gamma": 1.0,
     "black": 0,
     "white": 255,
+    "grayscale": False,
+    "invert": False,
+    "threshold": None,
+    "sharpen": False,
+    "rotate90": 0,
+    "rotate_fine": 0.0,
 }
 
 
@@ -524,16 +537,60 @@ def _build_image_lut(params: dict) -> list[int]:
 
 
 def _apply_image_adjustments(im, params: dict):
+    from PIL import Image as _Image, ImageFilter, ImageOps
+
     if im.mode not in ("L", "RGB", "RGBA"):
         im = im.convert("RGB")
+
+    # 1. LUT (brightness / contrast / gamma / levels)
     lut = _build_image_lut(params)
     bands = im.getbands()
-    # Apply the adjustment LUT to colour channels only; leave alpha unchanged.
     identity = list(range(256))
     full = []
     for b in bands:
         full.extend(identity if b == "A" else lut)
-    return im.point(full)
+    im = im.point(full)
+
+    # 2. Grayscale — convert to L then back to RGB so downstream steps stay uniform
+    if params.get("grayscale"):
+        if im.mode == "RGBA":
+            gray = im.convert("L").convert("RGBA")
+            gray.putalpha(im.split()[3])
+            im = gray
+        else:
+            im = im.convert("L").convert("RGB")
+
+    # 3. Invert — ImageOps.invert doesn't support RGBA, so split the alpha out
+    if params.get("invert"):
+        if im.mode == "RGBA":
+            r, g, b, a = im.split()
+            rgb = ImageOps.invert(_Image.merge("RGB", (r, g, b)))
+            im = _Image.merge("RGBA", (*rgb.split(), a))
+        else:
+            im = ImageOps.invert(im.convert("RGB"))
+
+    # 4. Threshold / binarize
+    threshold = params.get("threshold")
+    if threshold is not None:
+        t = int(threshold)
+        gray = im.convert("L")
+        thresholded = gray.point(lambda p: 255 if p > t else 0)
+        im = thresholded.convert("RGBA" if im.mode == "RGBA" else "RGB")
+
+    # 5. Sharpen (unsharp mask — no live preview, only baked on save)
+    if params.get("sharpen"):
+        work = im if im.mode in ("L", "RGB") else im.convert("RGB")
+        im = work.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+
+    # 6. Rotate (positive = clockwise; Pillow rotates CCW so we negate)
+    rotate90 = int(params.get("rotate90") or 0) % 4
+    rotate_fine = float(params.get("rotate_fine") or 0.0)
+    total_cw = rotate90 * 90 + rotate_fine
+    if total_cw:
+        fill = (255, 255, 255) if im.mode in ("RGB", "RGBA") else 255
+        im = im.rotate(-total_cw, expand=True, fillcolor=fill, resample=_Image.BICUBIC)
+
+    return im
 
 
 @require_POST
@@ -603,6 +660,49 @@ def image_reset(request: HttpRequest, page_pk: int) -> JsonResponse:
     return JsonResponse(
         {"ok": True, "image_url": page.image.url if page.image else None}
     )
+
+
+@require_POST
+def image_autocontrast(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Analyse the source image histogram and return suggested black/white levels.
+
+    Uses a 1 % cutoff on each end of the luminance distribution, matching what
+    PIL.ImageOps.autocontrast(cutoff=1) would apply internally.  The returned
+    ``black`` / ``white`` values can be dropped straight into the JS slider state.
+    """
+    from PIL import Image
+
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    if not page.image:
+        return JsonResponse({"error": "Page has no source image"}, status=400)
+
+    with Image.open(page.image.path) as im:
+        gray = im.convert("L")
+        hist = gray.histogram()  # 256 counts
+
+    total = sum(hist)
+    cutoff = total * 0.01
+
+    black = 0
+    cumsum = 0
+    for i, count in enumerate(hist):
+        cumsum += count
+        if cumsum >= cutoff:
+            black = i
+            break
+
+    white = 255
+    cumsum = 0
+    for i, count in enumerate(reversed(hist)):
+        cumsum += count
+        if cumsum >= cutoff:
+            white = 255 - i
+            break
+
+    white = max(black + 1, white)
+    return JsonResponse({"ok": True, "black": black, "white": white})
 
 
 # ---------------------------------------------------------------------------
