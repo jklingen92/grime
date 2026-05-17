@@ -89,6 +89,20 @@ class DocumentPage(models.Model):
     file = models.FileField(upload_to="documents/", null=True, blank=True)
     image = models.ImageField(upload_to="document_pages/", null=True, blank=True)
 
+    corrected_image = models.ImageField(
+        upload_to="document_pages/corrected/", null=True, blank=True,
+        help_text="User-adjusted version of `image`; baked from `image_adjustments`.",
+    )
+    image_adjustments = models.JSONField(
+        null=True, blank=True,
+        help_text="Brightness/contrast/levels params used to produce corrected_image",
+    )
+    corrected_image_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    corrected_image_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["document", "page_number"]
 
@@ -96,6 +110,10 @@ class DocumentPage(models.Model):
         if self.page_number is not None:
             return f"{self.document} — p. {self.page_number}"
         return f"{self.document} — {self.title or f'page {self.pk}'}"
+
+    @property
+    def display_image(self):
+        return self.corrected_image or self.image
 
     def extract_embedded_text(self) -> bool:
         """Extract the text layer from self.file (PDF) and save to self.text.

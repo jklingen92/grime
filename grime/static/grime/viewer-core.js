@@ -8,7 +8,7 @@ export function initCore(C) {
     activeTab: (function() {
       var t = new URLSearchParams(window.location.search).get('tab');
       if (t === 'tagging') t = 'label';
-      return (t === 'ocr' || t === 'ner' || t === 'label') ? t : 'ocr';
+      return (t === 'ocr' || t === 'ner' || t === 'label' || t === 'image') ? t : 'ocr';
     })(),
     zoomLevel:          1.0,
     tagPhase:           'draw',
@@ -171,7 +171,7 @@ export function initCore(C) {
     var leaving = _modules[state.activeTab];
     if (leaving && leaving.clearSelection) leaving.clearSelection();
     state.activeTab = name;
-    ['ocr', 'ner', 'label'].forEach(function(n) {
+    ['ocr', 'ner', 'label', 'image'].forEach(function(n) {
       var t = document.getElementById('tab-' + n);
       if (t) t.classList.toggle('active', name === n);
     });
@@ -182,12 +182,14 @@ export function initCore(C) {
     var tagP    = document.getElementById('dp-tag-panel');
     var nerP    = document.getElementById('dp-ner-panel');
     var txtP    = document.getElementById('dp-text-panel');
+    var imgP    = document.getElementById('dp-image-panel');
     if (actions) { actions.classList.toggle('visible', name === 'ocr'); if (sep) sep.style.display = (name === 'ocr') ? '' : 'none'; }
     if (nerSep) nerSep.style.display = (name === 'ner') ? '' : 'none';
     if (nerBtn) nerBtn.style.display = (name === 'ner') ? '' : 'none';
     if (txtP)   txtP.classList.toggle('visible', name === 'ocr');
     if (nerP)   nerP.classList.toggle('visible', name === 'ner');
     if (tagP)   tagP.classList.toggle('visible', name === 'label');
+    if (imgP)   imgP.classList.toggle('visible', name === 'image');
     var entering = _modules[name];
     if (entering && entering.activate) entering.activate();
     renderOverlays();
@@ -215,7 +217,7 @@ export function initCore(C) {
   /* ── side-panel divider ────────────────────────────────────── */
   // Apply state.sidePanelWidth to all three side panels.
   function applySidePanelWidth() {
-    ['dp-text-panel', 'dp-ner-panel', 'dp-tag-panel'].forEach(function(id) {
+    ['dp-text-panel', 'dp-ner-panel', 'dp-tag-panel', 'dp-image-panel'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.style.width = state.sidePanelWidth + 'px';
     });
@@ -229,6 +231,7 @@ export function initCore(C) {
     divider.addEventListener('mousedown', function(e) {
       var panelId = state.activeTab === 'label' ? 'dp-tag-panel'
                   : state.activeTab === 'ner'   ? 'dp-ner-panel'
+                  : state.activeTab === 'image' ? 'dp-image-panel'
                   : 'dp-text-panel';
       var panel = document.getElementById(panelId);
       if (!panel) return;
