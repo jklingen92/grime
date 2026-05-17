@@ -1,20 +1,26 @@
 """
-HuggingFace NER pipeline for historical newspaper text.
+HuggingFace NER pipeline for document text.
 
-Uses ``dell-research-harvard/historical_newspaper_ner``, a transformer model
-fine-tuned on historical American OCR'd newspaper text.
+Models are selected by key from MODEL_REGISTRY. The default (``general``) is
+``dslim/bert-base-NER``, a CoNLL-2003-trained model suited to mixed modern
+documents. The ``historical`` key preserves the original newspaper-specific
+model for backwards compatibility.
 
-Published F1 scores on the test set: PER=94.3, ORG=80.7, LOC=90.8, Overall=86.5
+Published F1 scores:
+  general   (dslim/bert-base-NER)                          92.6 % CoNLL-2003
+  historical (dell-research-harvard/historical_newspaper_ner) 86.5 % historical newspapers
+  large     (Jean-Baptiste/roberta-large-ner-english)       97.5 % CoNLL-2003
+  fast      (dslim/distilbert-NER)                         ~91 % CoNLL-2003
 
-The model is loaded once and cached in-process. First call will download the
-model weights (~440 MB) and cache them in the HuggingFace hub cache directory.
+Each model is loaded once and cached in-process. First call downloads weights
+and caches them in the HuggingFace hub cache directory.
 
 Usage::
 
-    from pipeline.ner import extract_persons
+    from grime.pipeline.ner import extract_entities, DEFAULT_MODEL
 
-    persons = extract_persons(article.text)
-    # [{"name": "John Smith", "score": 0.97}, ...]
+    entities = extract_entities(page.text)                 # uses DEFAULT_MODEL
+    entities = extract_entities(page.text, model="large")  # explicit
 
 Requires the ``[hf]`` optional dependencies::
 
@@ -26,30 +32,40 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "dell-research-harvard/historical_newspaper_ner"
+MODEL_REGISTRY: dict[str, str] = {
+    "general": "dslim/bert-base-NER",
+    "historical": "dell-research-harvard/historical_newspaper_ner",
+    "large": "Jean-Baptiste/roberta-large-ner-english",
+    "fast": "dslim/distilbert-NER",
+}
+
+DEFAULT_MODEL = "general"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.80
 
-# Fine-tuned model directory — written by `train_model --type hf-ner`.
-# If it exists and contains model files, it is loaded instead of the base model.
-_FINE_TUNED_PATH = (
-    Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
-)
+_FINE_TUNED_BASE = Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
 
-# Module-level cache — loaded once per process.
-_pipeline = None
+# Per-model pipeline cache — loaded once per process per model key.
+_pipelines: dict[str, object] = {}
 
 
-def _resolve_model_path() -> str:
-    """Return the fine-tuned model path if available, else the base model name."""
-    if _FINE_TUNED_PATH.exists() and any(_FINE_TUNED_PATH.iterdir()):
-        logger.info("Loading fine-tuned HF NER model from %s", _FINE_TUNED_PATH)
-        return str(_FINE_TUNED_PATH)
-    return MODEL_NAME
+def _resolve_model_path(model_key: str) -> str:
+    """Return the fine-tuned path for this model if available, else the registry HF ID."""
+    fine_tuned = _FINE_TUNED_BASE / model_key
+    if fine_tuned.exists() and any(fine_tuned.iterdir()):
+        logger.info("Loading fine-tuned HF NER model from %s", fine_tuned)
+        return str(fine_tuned)
+    model_id = MODEL_REGISTRY.get(model_key)
+    if model_id is None:
+        raise ValueError(
+            f"Unknown NER model key {model_key!r}. "
+            f"Valid keys: {', '.join(MODEL_REGISTRY)}"
+        )
+    return model_id
 
 
-def _get_pipeline():
-    global _pipeline
-    if _pipeline is None:
+def _get_pipeline(model_key: str = DEFAULT_MODEL):
+    global _pipelines
+    if model_key not in _pipelines:
         try:
             from transformers import (
                 AutoModelForTokenClassification,
@@ -62,32 +78,37 @@ def _get_pipeline():
                 "Install with: pip install -e '.[hf]'"
             ) from exc
 
-        model_path = _resolve_model_path()
+        model_path = _resolve_model_path(model_key)
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = AutoModelForTokenClassification.from_pretrained(model_path)
-        _pipeline = pipeline(
+        _pipelines[model_key] = pipeline(
             "ner",
             model=model,
             tokenizer=tokenizer,
             aggregation_strategy="simple",
         )
-    return _pipeline
+    return _pipelines[model_key]
 
 
-def reload_pipeline():
+def reload_pipeline(model_key: str | None = None) -> None:
     """
     Force the pipeline to reload on next call.
 
-    Call this after running ``train_model --type hf-ner`` if you want
-    the fine-tuned model to be used in the current process without restarting.
+    Pass a model key to reload only that model, or None to clear all cached
+    pipelines. Call this after running ``train_model --type hf-ner`` if you
+    want the fine-tuned model to take effect without restarting the process.
     """
-    global _pipeline
-    _pipeline = None
+    global _pipelines
+    if model_key is None:
+        _pipelines.clear()
+    else:
+        _pipelines.pop(model_key, None)
 
 
 def extract_entities(
     text: str,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    model: str = DEFAULT_MODEL,
 ) -> list[dict]:
     """
     Extract all named entities (PER, LOC, ORG) from text, returning character offsets
@@ -110,7 +131,7 @@ def extract_entities(
     if not text or not text.strip():
         return []
 
-    nlp = _get_pipeline()
+    nlp = _get_pipeline(model)
     results = []
     offset = 0
 
@@ -193,9 +214,10 @@ def label_ocr_words(words: list, text: str, entities: list[dict]) -> None:
 def extract_persons(
     text: str,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    model: str = DEFAULT_MODEL,
 ) -> list[dict]:
     """
-    Extract person names from historical newspaper OCR text.
+    Extract person names from text.
 
     The model has a 512-token context window. To avoid silently truncating
     long articles, the text is split on blank lines into paragraphs and each
@@ -217,7 +239,7 @@ def extract_persons(
     if not text or not text.strip():
         return []
 
-    nlp = _get_pipeline()
+    nlp = _get_pipeline(model)
 
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
 
