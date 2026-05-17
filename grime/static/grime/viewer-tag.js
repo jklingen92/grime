@@ -85,10 +85,10 @@ export function createTagModule(core) {
     state.tagPendingSubcomps = []; state.tagPendingBbox = null;
     state.tagSubSelectedIds.clear(); state.tagSubDrawStart = null;
     state.isDragging = false; state.tagResizing = null;
-    // Discard any in-session subcomp undo entries — they belong to this pending tag only.
-    var isSubcomp = function(e) { return e.type === 'tag-subcomp-change'; };
-    state.undoStack = state.undoStack.filter(function(e) { return !isSubcomp(e); });
-    state.redoStack = state.redoStack.filter(function(e) { return !isSubcomp(e); });
+    // Discard in-session subcomp/bbox undo entries — they belong to this pending tag only.
+    var isTransient = function(e) { return e.type === 'tag-subcomp-change' || e.type === 'tag-bbox-change'; };
+    state.undoStack = state.undoStack.filter(function(e) { return !isTransient(e); });
+    state.redoStack = state.redoStack.filter(function(e) { return !isTransient(e); });
     document.getElementById('dp-tag-label-view').style.display = 'none';
     document.getElementById('dp-tag-list-view').style.display = '';
     document.getElementById('dp-tag-sub-input-row').style.display = 'none';
@@ -457,7 +457,12 @@ export function createTagModule(core) {
 
   // Finalise a draw, resize, or sub-selection gesture; open an existing tag on single click.
   function onMouseup(e) {
-    if (state.tagResizing) { state.tagResizing = null; return; }
+    if (state.tagResizing) {
+      var prevBbox = state.tagResizing.startBbox, nextBbox = Object.assign({}, state.tagPendingBbox);
+      if (JSON.stringify(prevBbox) !== JSON.stringify(nextBbox))
+        core.recordUndo({ type: 'tag-bbox-change', prev: prevBbox, next: nextBbox });
+      state.tagResizing = null; return;
+    }
     if (state.tagPhase === 'draw') {
       document.getElementById('dp-tag-draw-rect').style.display = 'none';
       if (state.isDragging && state.tagDrawStart) {
@@ -579,6 +584,11 @@ export function createTagModule(core) {
       pushInverse({ type: 'tag-subcomp-change', prev: e.next, next: e.prev });
       state.tagPendingSubcomps = _cloneSubcomps(e.prev);
       tagUpdateSubcompDisplay();
+    });
+    core.registerUndoHandler('tag-bbox-change', function(e, pushInverse) {
+      pushInverse({ type: 'tag-bbox-change', prev: e.next, next: e.prev });
+      state.tagPendingBbox = Object.assign({}, e.prev);
+      updateVeils(); core.renderOverlays();
     });
     core.registerUndoHandler('tag-update', function(e, pushInverse) {
       if (!e.prev) return;

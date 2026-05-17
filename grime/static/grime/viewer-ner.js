@@ -111,7 +111,7 @@ export function createNerModule(core) {
         .then(function(data) {
           if (data && data.ok) {
             var w = core.wordById[c.wordId];            
-            if (w) w.corrected_label = (label === 'NONE') ? '' : label;
+            if (w) w.corrected_label = c.next;
           }
         });
     });
