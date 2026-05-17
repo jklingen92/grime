@@ -228,7 +228,7 @@ def run_page(
         status=OCRPass.STATUS_COMPLETE,
     )
     Word.objects.bulk_create(
-        [Word(page=page, ocr_pass=ocr_pass, **w) for w in words],
+        [Word(page=page, ocr_pass=ocr_pass, ocr_text=w["text"], **{k: v for k, v in w.items() if k != "text"}) for w in words],
         ignore_conflicts=True,
     )
     post_ocr(page)
