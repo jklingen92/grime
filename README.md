@@ -4,19 +4,46 @@ Grime is an archival document management platform — a reusable Django app
 for ingesting scanned documents, running OCR / NER pipelines, and annotating
 pages with tagged regions.
 
-## Quick start
+## Setup
+
+### Prerequisites
+
+1. **Python 3.11+**
+2. **uv** — Install from https://docs.astral.sh/uv/getting-started/installation/
+
+### Installation
 
 ```bash
-pip install -e ".[dev]"
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py ingest MY_DOCUMENT.pdf
-# Should return an endpoint like '/documents/1'
+# Clone the repository
+git clone https://github.com/jklingen92/grime.git
+cd grime
 
+# Install dependencies (creates .venv)
+uv sync --extra dev
+
+# Activate the virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Run database migrations
+python manage.py migrate
+
+# Create a superuser for the admin panel
+python manage.py createsuperuser
+
+# Start the development server
 python manage.py runserver
-# then visit http://127.0.0.1:8000/documents/1
-# or visit http://127.0.0.1:8000/admin, login, and 
-# navigate to you document
+```
+
+Visit http://127.0.0.1:8000/admin and log in with your superuser credentials.
+
+### Ingesting documents
+
+```bash
+python manage.py ingest MY_DOCUMENT.pdf
+# Returns an endpoint like /documents/1
+
+# View the document
+# http://127.0.0.1:8000/documents/1
 ```
 
 ## Management commands
