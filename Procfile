@@ -1,2 +1,2 @@
 web:    python manage.py runserver
-worker: celery -A demo worker -l info
+worker: celery -A demo.celery worker -l info
