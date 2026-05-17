@@ -12,15 +12,6 @@ from __future__ import annotations
 
 import io
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.colors as mcolors
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image
-
 _SLOT_COLORS = {
     "structural": "#4a9eda",
     "content": "#5cb85c",
@@ -64,6 +55,14 @@ def render_frame(
     page_img: PIL Image of the page at Word coordinate scale, or None to
               fall back to a word-map drawn from page_words.
     """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.colors as mcolors
+    import matplotlib.patches as patches
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from PIL import Image
+
     fig_w_px, fig_h_px = frame_size
     dpi = 100
     fig = plt.figure(
@@ -375,6 +374,7 @@ def render_frame(
 def _word_map(page_words: list[dict]) -> np.ndarray:
     """Draw Word bboxes on a white canvas when no page image is available."""
     import cv2
+    import numpy as np
 
     if not page_words:
         return np.full((1000, 800, 3), 245, dtype=np.uint8)

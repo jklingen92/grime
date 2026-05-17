@@ -11,7 +11,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.files.base import ContentFile
-from pdf2image import convert_from_path
 
 from grime.models import Document, DocumentPage, OCRPass, Word
 
@@ -189,6 +188,8 @@ def _ingest_embedded_page(doc, page_path, i, title, rel_str, stem, log=None):
         file=rel_str,
         text_source="embedded",
     )
+    from pdf2image import convert_from_path
+
     dp.extract_embedded_text()
     log(f"  p.{i:04d} → embedded text")
     pil_pages = convert_from_path(str(page_path), dpi=150, first_page=1, last_page=1)
@@ -200,6 +201,8 @@ def _ingest_embedded_page(doc, page_path, i, title, rel_str, stem, log=None):
 def _ingest_image_only_page(doc, page_path, i, title, rel_str, stem, log=None):
     if log is None:
         log = lambda msg: None
+    from pdf2image import convert_from_path
+
     pil_pages = convert_from_path(str(page_path), dpi=300, first_page=1, last_page=1)
     buf = io.BytesIO()
     pil_pages[0].save(buf, format="PNG")
@@ -232,6 +235,7 @@ def _ingest_structured_page(
     import cv2
     import numpy as np
     import pdfplumber
+    from pdf2image import convert_from_path
     from PIL import Image as PILImage
 
     with pdfplumber.open(page_path) as plumb_page:
@@ -303,6 +307,8 @@ def _title(stem: str) -> str:
 
 
 def _render_pdf_image(dp: DocumentPage, pdf_path: Path) -> None:
+    from pdf2image import convert_from_path
+
     pil_pages = convert_from_path(str(pdf_path), dpi=300, first_page=1, last_page=1)
     buf = io.BytesIO()
     pil_pages[0].save(buf, format="PNG")

@@ -551,6 +551,11 @@ viz = [
     { name = "imageio", extra = ["ffmpeg"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "django-extensions" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
@@ -576,6 +581,9 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'hf'" },
 ]
 provides-extras = ["ocr", "textract", "hf", "viz", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "django-extensions", specifier = ">=4.1" }]
 
 [[package]]
 name = "h11"
