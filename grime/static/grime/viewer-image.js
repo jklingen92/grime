@@ -27,6 +27,9 @@ export function createImageModule(core) {
   state.imageAdjustments      = Object.assign({}, state.imageSavedAdjustments);
   state.imageHasCorrected     = !!C.imageHasCorrected;
 
+  // Tracks the adjustment state at the last recorded undo boundary.
+  var _prevAdjustments = null;
+
   // Preload the original so the first swap from corrected → original is instant.
   if (C.originalImageUrl && C.originalImageUrl !== C.imageUrl) {
     var pre = new Image(); pre.src = C.originalImageUrl;
@@ -134,7 +137,11 @@ export function createImageModule(core) {
   }
 
   function resetLocal() {
+    var prev = Object.assign({}, state.imageAdjustments);
     state.imageAdjustments = Object.assign({}, DEFAULTS);
+    var next = Object.assign({}, DEFAULTS);
+    core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+    _prevAdjustments = next;
     syncSliders();
     applyFilter();
   }
@@ -200,14 +207,33 @@ export function createImageModule(core) {
   }
 
   function setupUI() {
+    _prevAdjustments = Object.assign({}, state.imageAdjustments);
+
     ['brightness', 'contrast', 'gamma', 'black', 'white'].forEach(function(key) {
       var s = document.getElementById('dp-image-' + key);
-      if (s) s.addEventListener('input', function() { onSlide(key, s.value); });
+      if (!s) return;
+      s.addEventListener('input',  function() { onSlide(key, s.value); });
+      s.addEventListener('change', function() {
+        var next = Object.assign({}, state.imageAdjustments);
+        if (JSON.stringify(_prevAdjustments) !== JSON.stringify(next)) {
+          core.recordUndo({ type: 'image-adjust', prev: _prevAdjustments, next: next });
+          _prevAdjustments = next;
+        }
+      });
     });
+
     var resetBtn = document.getElementById('dp-image-reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function(e) { e.preventDefault(); resetLocal(); });
     var saveBtn = document.getElementById('dp-image-save-btn');
     if (saveBtn) saveBtn.addEventListener('click', function(e) { e.preventDefault(); save(); });
+
+    core.registerUndoHandler('image-adjust', function(e, pushInverse) {
+      pushInverse({ type: 'image-adjust', prev: e.next, next: e.prev });
+      state.imageAdjustments = Object.assign({}, e.prev);
+      _prevAdjustments = Object.assign({}, e.prev);
+      syncSliders(); applyFilter();
+    });
+
     core.imageEnsureSaved = imageEnsureSaved;
     syncSliders();
     applyFilter();

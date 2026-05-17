@@ -293,9 +293,20 @@ export function initCore(C) {
 
   /* ── keyboard ──────────────────────────────────────────────── */
   var _hooks = {};
+  var _undoHandlers = {};
+  function recordUndo(entry) { state.undoStack.push(entry); state.redoStack = []; }
+  function registerUndoHandler(type, fn) { _undoHandlers[type] = fn; }
+  function _applyHistory(from, to) {
+    if (!from.length) return;
+    var e = from.pop();
+    var handler = _undoHandlers[e.type];
+    if (handler) handler(e, function(inv) { to.push(inv); });
+  }
+  _hooks.undo = function() { _applyHistory(state.undoStack, state.redoStack); };
+  _hooks.redo = function() { _applyHistory(state.redoStack, state.undoStack); };
   document.addEventListener('keydown', function(e) {
     var tag = document.activeElement && document.activeElement.tagName;
-    var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
+    var inInput = (tag === 'INPUT' && document.activeElement.type !== 'range') || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
     if (e.key === 'ArrowLeft'  && !inInput && C.prevUrl) { navigate(C.prevUrl); return; }
     if (e.key === 'ArrowRight' && !inInput && C.nextUrl) { navigate(C.nextUrl); return; }
     if (C.hasRepair && (e.ctrlKey || e.metaKey) && !inInput) {
@@ -347,6 +358,7 @@ export function initCore(C) {
     registerModule,
     bindMouseHandlers,
     initPageSelect,
+    recordUndo, registerUndoHandler,
     setHook: function(name, fn) { _hooks[name] = fn; },
   };
 }
