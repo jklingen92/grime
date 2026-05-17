@@ -85,6 +85,10 @@ export function createTagModule(core) {
     state.tagPendingSubcomps = []; state.tagPendingBbox = null;
     state.tagSubSelectedIds.clear(); state.tagSubDrawStart = null;
     state.isDragging = false; state.tagResizing = null;
+    // Discard any in-session subcomp undo entries — they belong to this pending tag only.
+    var isSubcomp = function(e) { return e.type === 'tag-subcomp-change'; };
+    state.undoStack = state.undoStack.filter(function(e) { return !isSubcomp(e); });
+    state.redoStack = state.redoStack.filter(function(e) { return !isSubcomp(e); });
     document.getElementById('dp-tag-label-view').style.display = 'none';
     document.getElementById('dp-tag-list-view').style.display = '';
     document.getElementById('dp-tag-sub-input-row').style.display = 'none';
@@ -94,6 +98,16 @@ export function createTagModule(core) {
       document.getElementById(id).style.display = 'none';
     });
     buildList(); core.renderOverlays(); core.updateBadge();
+  }
+
+  // Deep-copy subcomps array (each element is a plain object with scalar fields).
+  function _cloneSubcomps(arr) { return arr.map(function(s) { return Object.assign({}, s); }); }
+
+  // Snapshot current subcomps, mutate via fn(), then record an undo entry for the change.
+  function _withSubcompUndo(fn) {
+    var prev = _cloneSubcomps(state.tagPendingSubcomps);
+    fn();
+    core.recordUndo({ type: 'tag-subcomp-change', prev: prev, next: _cloneSubcomps(state.tagPendingSubcomps) });
   }
 
   /* ── veils ─────────────────────────────────────────────────── */
@@ -135,8 +149,10 @@ export function createTagModule(core) {
       var rm  = document.createElement('span'); rm.className  = 'dp-subcomp-rm';    rm.textContent  = '×'; rm.title = 'Remove from pattern';
       (function(idx) { rm.addEventListener('click', function(e) {
         e.stopPropagation();
-        state.tagSubSelectedIds.delete(state.tagPendingSubcomps[idx].word_id);
-        state.tagPendingSubcomps.splice(idx, 1);
+        _withSubcompUndo(function() {
+          state.tagSubSelectedIds.delete(state.tagPendingSubcomps[idx].word_id);
+          state.tagPendingSubcomps.splice(idx, 1);
+        });
         tagMaybeShowSubInput(); tagUpdateSubcompDisplay(); core.renderOverlays();
       }); })(i);
       (function(wid) { row.addEventListener('click', function(e) {
@@ -175,15 +191,17 @@ export function createTagModule(core) {
   function tagConfirmSubLabel(label) {
     label = label.trim();
     if (!label || !state.tagSubSelectedIds.size) return;
-    state.tagSubSelectedIds.forEach(function(wid) {
-      var w = core.wordById[wid]; if (!w) return;
-      var existing = state.tagPendingSubcomps.find(function(s) { return s.word_id === wid; });
-      if (existing) { existing.label = label; }
-      else {
-        var text = w.text || '';
-        if (isDitto(text) && state.tagPendingBbox) { var resolved = resolveDitto(label, state.tagPendingBbox.top); if (resolved) text = resolved; }
-        state.tagPendingSubcomps.push({ word_id: wid, label: label, text: text });
-      }
+    _withSubcompUndo(function() {
+      state.tagSubSelectedIds.forEach(function(wid) {
+        var w = core.wordById[wid]; if (!w) return;
+        var existing = state.tagPendingSubcomps.find(function(s) { return s.word_id === wid; });
+        if (existing) { existing.label = label; }
+        else {
+          var text = w.text || '';
+          if (isDitto(text) && state.tagPendingBbox) { var resolved = resolveDitto(label, state.tagPendingBbox.top); if (resolved) text = resolved; }
+          state.tagPendingSubcomps.push({ word_id: wid, label: label, text: text });
+        }
+      });
     });
     state.tagSubSelectedIds.clear();
     document.getElementById('dp-tag-sub-input').value = '';
@@ -505,9 +523,11 @@ export function createTagModule(core) {
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !subActive && document.activeElement !== labelInput && state.tagSubSelectedIds.size > 0) {
       e.preventDefault();
-      state.tagSubSelectedIds.forEach(function(wid) {
-        var idx = state.tagPendingSubcomps.findIndex(function(s) { return s.word_id === wid; });
-        if (idx >= 0) state.tagPendingSubcomps.splice(idx, 1);
+      _withSubcompUndo(function() {
+        state.tagSubSelectedIds.forEach(function(wid) {
+          var idx = state.tagPendingSubcomps.findIndex(function(s) { return s.word_id === wid; });
+          if (idx >= 0) state.tagPendingSubcomps.splice(idx, 1);
+        });
       });
       state.tagSubSelectedIds.clear();
       document.getElementById('dp-tag-sub-input-row').style.display = 'none';
@@ -528,9 +548,11 @@ export function createTagModule(core) {
     document.getElementById('dp-tag-delete-btn').addEventListener('click', function(e) { e.preventDefault(); tagDelete(); });
     document.getElementById('dp-tag-sub-clear-btn').addEventListener('click', function(e) {
       e.preventDefault();
-      state.tagSubSelectedIds.forEach(function(wid) {
-        var idx = state.tagPendingSubcomps.findIndex(function(s) { return s.word_id === wid; });
-        if (idx >= 0) state.tagPendingSubcomps.splice(idx, 1);
+      _withSubcompUndo(function() {
+        state.tagSubSelectedIds.forEach(function(wid) {
+          var idx = state.tagPendingSubcomps.findIndex(function(s) { return s.word_id === wid; });
+          if (idx >= 0) state.tagPendingSubcomps.splice(idx, 1);
+        });
       });
       state.tagSubSelectedIds.clear();
       document.getElementById('dp-tag-sub-input').value = '';
@@ -550,7 +572,13 @@ export function createTagModule(core) {
       var snap = core.TAGS.find(function(t) { return t.id === e.tagId; });
       if (!snap) return;
       pushInverse({ type: 'tag-delete', tagData: Object.assign({}, snap, { subcomponents: (snap.subcomponents || []).slice() }) });
+      if (state.tagPhase === 'labeling') tagExitLabelingMode();
       _deleteTagById(e.tagId);
+    });
+    core.registerUndoHandler('tag-subcomp-change', function(e, pushInverse) {
+      pushInverse({ type: 'tag-subcomp-change', prev: e.next, next: e.prev });
+      state.tagPendingSubcomps = _cloneSubcomps(e.prev);
+      tagUpdateSubcompDisplay();
     });
     core.registerUndoHandler('tag-update', function(e, pushInverse) {
       if (!e.prev) return;
