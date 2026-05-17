@@ -338,6 +338,7 @@ class AsyncJob(models.Model):
     pages_done = models.PositiveIntegerField(default=0)
     error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

@@ -19,6 +19,8 @@ def run_ocr_job(self, job_pk: int) -> None:
     from grime.pipeline.ocr import run_page
 
     job = AsyncJob.objects.get(pk=job_pk)
+    if job.status == AsyncJob.STATUS_COMPLETE:
+        return  # Celery re-queued after a broker blip — work already done
     job.status = AsyncJob.STATUS_RUNNING
     job.task_id = self.request.id
     job.save(update_fields=["status", "task_id"])
@@ -62,12 +64,14 @@ def run_ner_job(self, job_pk: int) -> None:
 
     SCHEMA_NAME = "hf-historical-ner"
     job = AsyncJob.objects.get(pk=job_pk)
+    if job.status == AsyncJob.STATUS_COMPLETE:
+        return  # Celery re-queued after a broker blip — work already done
     job.status = AsyncJob.STATUS_RUNNING
     job.task_id = self.request.id
     job.save(update_fields=["status", "task_id"])
 
     try:
-        pages = [p for p in job.document.pages.order_by("page_number") if p.text]
+        pages = list(job.document.pages.order_by("page_number"))
         if job.new_only:
             nerd_ids = set(
                 NERPass.objects.filter(page__in=pages, schema_name=SCHEMA_NAME).values_list(

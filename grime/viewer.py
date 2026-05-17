@@ -28,6 +28,7 @@ Word ops are scoped to the page in the URL — the view rejects requests
 that try to touch a Word belonging to a different page.
 """
 
+import datetime
 import io
 import json
 import os
@@ -36,7 +37,7 @@ from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -1048,6 +1049,21 @@ def document_list_view(request):
 # ---------------------------------------------------------------------------
 
 
+def _dispatch_job(task_fn, job):
+    """Dispatch a Celery task, marking the job failed if the broker is unreachable."""
+    try:
+        result = task_fn.delay(job.pk)
+    except Exception as exc:
+        job.status = AsyncJob.STATUS_FAILED
+        job.error = f"Broker unavailable: {exc}"
+        job.completed_at = timezone.now()
+        job.save(update_fields=["status", "error", "completed_at"])
+        return None, str(exc)
+    job.task_id = result.id
+    job.save(update_fields=["task_id"])
+    return result, None
+
+
 @staff_member_required
 @require_POST
 def trigger_ocr_job(request, doc_pk):
@@ -1055,17 +1071,12 @@ def trigger_ocr_job(request, doc_pk):
 
     doc = get_object_or_404(Document, pk=doc_pk)
     new_only = request.POST.get("new_only") == "1"
-
     job = AsyncJob.objects.create(
-        document=doc,
-        job_type=AsyncJob.JOB_OCR,
-        status=AsyncJob.STATUS_PENDING,
-        new_only=new_only,
+        document=doc, job_type=AsyncJob.JOB_OCR, status=AsyncJob.STATUS_PENDING, new_only=new_only,
     )
-    result = run_ocr_job.delay(job.pk)
-    job.task_id = result.id
-    job.save(update_fields=["task_id"])
-
+    _, err = _dispatch_job(run_ocr_job, job)
+    if err:
+        return JsonResponse({"error": err}, status=503)
     return JsonResponse({"job_id": job.pk, "status": job.status})
 
 
@@ -1076,23 +1087,35 @@ def trigger_ner_job(request, doc_pk):
 
     doc = get_object_or_404(Document, pk=doc_pk)
     new_only = request.POST.get("new_only") == "1"
-
     job = AsyncJob.objects.create(
-        document=doc,
-        job_type=AsyncJob.JOB_NER,
-        status=AsyncJob.STATUS_PENDING,
-        new_only=new_only,
+        document=doc, job_type=AsyncJob.JOB_NER, status=AsyncJob.STATUS_PENDING, new_only=new_only,
     )
-    result = run_ner_job.delay(job.pk)
-    job.task_id = result.id
-    job.save(update_fields=["task_id"])
+    _, err = _dispatch_job(run_ner_job, job)
+    if err:
+        return JsonResponse({"error": err}, status=503)
+    return JsonResponse({"job_id": job.pk, "status": job.status})
 
+
+@staff_member_required
+@require_POST
+def cancel_job(request, job_pk):
+    job = get_object_or_404(AsyncJob, pk=job_pk)
+    if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
+        job.status = AsyncJob.STATUS_FAILED
+        job.error = "Cancelled by user"
+        job.completed_at = timezone.now()
+        job.save(update_fields=["status", "error", "completed_at"])
     return JsonResponse({"job_id": job.pk, "status": job.status})
 
 
 @staff_member_required
 def jobs_status(request):
-    """Return active + recent job data for a list of document IDs."""
+    """Return active + recent job data for a list of document IDs.
+
+    Auto-expires stale jobs before returning:
+      - PENDING > 2 min  → broker likely unreachable, task never started
+      - RUNNING, no DB update for > 15 min → worker likely died
+    """
     raw = request.GET.get("doc_ids", "")
     try:
         doc_ids = [int(x) for x in raw.split(",") if x.strip().isdigit()]
@@ -1102,10 +1125,27 @@ def jobs_status(request):
     if not doc_ids:
         return JsonResponse({"jobs": {}})
 
+    now = timezone.now()
+    pending_cutoff = now - datetime.timedelta(minutes=2)
+    running_cutoff = now - datetime.timedelta(minutes=15)
+
+    stale = AsyncJob.objects.filter(
+        document_id__in=doc_ids,
+        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
+    ).filter(
+        Q(status=AsyncJob.STATUS_PENDING, created_at__lt=pending_cutoff)
+        | Q(status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff)
+    )
+    stale.update(
+        status=AsyncJob.STATUS_FAILED,
+        error="Job timed out (worker or broker unavailable)",
+        completed_at=now,
+    )
+
     active = AsyncJob.objects.filter(
         document_id__in=doc_ids,
         status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-    ).values("pk", "document_id", "job_type", "status", "pages_total", "pages_done", "new_only")
+    ).values("pk", "document_id", "job_type", "status", "pages_total", "pages_done")
 
     recent = AsyncJob.objects.filter(
         document_id__in=doc_ids,
@@ -1117,7 +1157,7 @@ def jobs_status(request):
     by_doc: dict = {doc_id: {"active": [], "recent": []} for doc_id in doc_ids}
     for job in active:
         by_doc[job["document_id"]]["active"].append(dict(job))
-    seen = {}
+    seen: dict = {}
     for job in recent:
         did = job["document_id"]
         if seen.get(did, 0) < 2:
