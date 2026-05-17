@@ -306,7 +306,7 @@ export function initCore(C) {
   _hooks.redo = function() { _applyHistory(state.redoStack, state.undoStack); };
   document.addEventListener('keydown', function(e) {
     var tag = document.activeElement && document.activeElement.tagName;
-    var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
+    var inInput = (tag === 'INPUT' && document.activeElement.type !== 'range') || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
     if (e.key === 'ArrowLeft'  && !inInput && C.prevUrl) { navigate(C.prevUrl); return; }
     if (e.key === 'ArrowRight' && !inInput && C.nextUrl) { navigate(C.nextUrl); return; }
     if (C.hasRepair && (e.ctrlKey || e.metaKey) && !inInput) {
