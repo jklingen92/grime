@@ -240,8 +240,8 @@ export function createOcrModule(core) {
                '&corrected_text=' + encodeURIComponent(w.corrected_text || '');
     core.postJson(C.addWordUrl, body).then(function(data) {
       if (!data.ok) return;
-      console.log('[undo-delete] snapshot conf:', w.conf, '(type:', typeof w.conf, '), server conf:', data.word.conf, ', corrected_text:', data.word.corrected_text);
       if (w.conf != null) data.word.conf = w.conf;
+      if (w.is_ditto) data.word.is_ditto = true;
       core.OCR_WORDS.push(data.word); core.wordById[data.word.id] = data.word;
       core.renderOverlays(); updateTextPanels();
       if (cb) cb(data.word);
