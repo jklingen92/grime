@@ -86,7 +86,9 @@ AWS_DEFAULT_REGION = env("AWS_DEFAULT_REGION", default="us-east-1")
 
 # Celery
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
+# We track job state in AsyncJob, so Celery's result backend is unused.
+# Disabling it prevents connection errors when Redis is only used as a broker.
+CELERY_TASK_IGNORE_RESULT = True
