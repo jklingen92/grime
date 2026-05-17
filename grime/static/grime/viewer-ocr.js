@@ -231,7 +231,7 @@ export function createOcrModule(core) {
   // POST a new word region and add it to OCR_WORDS/wordById, calling cb with the new word.
   function _addWordFromData(w, cb) {
     var body = 'left=' + w.left + '&top=' + w.top + '&width=' + w.width + '&height=' + w.height +
-               '&corrected_text=' + encodeURIComponent(w.corrected_text || w.text || '');
+               '&corrected_text=' + encodeURIComponent(w.corrected_text || '');
     core.postJson(C.addWordUrl, body).then(function(data) {
       if (!data.ok) return;
       core.OCR_WORDS.push(data.word); core.wordById[data.word.id] = data.word;
@@ -270,7 +270,7 @@ export function createOcrModule(core) {
     if (!HAS_REPAIR) return;
     var prev = word.corrected_text;
     if (!skipUndo) core.recordUndo({ type: 'ocr-correct', wordId: word.id, prev: prev, next: text });
-    core.postJson(C.correctUrl, 'word_pk=' + encodeURIComponent(word.id) + '&corrected_text=' + encodeURIComponent(text))
+    core.postJson(C.correctUrl, 'word_pk=' + encodeURIComponent(word.id) + '&corrected_text=' + encodeURIComponent(text != null ? text : ''))
       .then(function(data) {
         if (!data.ok) return;
         word.corrected_text = data.corrected_text || null;
@@ -354,9 +354,11 @@ export function createOcrModule(core) {
     }
     if (!state.currentWord) return;
     var word = state.currentWord, el = state.currentEl;
+    var prevText = word.corrected_text || word.text;
     closeEditPopup();
     core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(word.id)).then(function(data) {
       if (!data.ok) return;
+      core.recordUndo({ type: 'ocr-ditto', wordId: word.id, prevText: prevText });
       _applyDittoResult(word, el, data);
     });
   }
@@ -379,8 +381,13 @@ export function createOcrModule(core) {
   // Mark all selected words as ditto marks in one request.
   function bulkDitto() {
     if (!state.ocrSelectedIds.size || !C.bulkDittoUrl) return;
+    var changes = Array.from(state.ocrSelectedIds).map(function(id) {
+      var w = core.wordById[id];
+      return { wordId: id, prevText: w ? (w.corrected_text || w.text || '') : '' };
+    });
     core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(Array.from(state.ocrSelectedIds).join(','))).then(function(data) {
       if (!data.ok) return;
+      core.recordUndo({ type: 'ocr-bulk-ditto', changes: changes });
       data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.text = '"'; w.corrected_text = null; w.is_ditto = false; } });
       data.updated.forEach(function(u) { var w = core.wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = true; } });
       state.ocrSelectedIds.clear();
@@ -699,6 +706,19 @@ export function createOcrModule(core) {
     });
     core.registerUndoHandler('ocr-delete', function(e, pushInverse) {
       _addWordFromData(e.wordData, function(nw) { pushInverse({ type: 'ocr-add', wordId: nw.id }); });
+    });
+    core.registerUndoHandler('ocr-ditto', function(e, pushInverse) {
+      var w = core.wordById[e.wordId]; if (!w) return;
+      var el = document.querySelector("[data-word-id='" + e.wordId + "']");
+      pushInverse({ type: 'ocr-correct', wordId: e.wordId, prev: e.prevText, next: null });
+      postCorrection(w, el, e.prevText, true);
+    });
+    core.registerUndoHandler('ocr-bulk-ditto', function(e, pushInverse) {
+      e.changes.forEach(function(c) {
+        var w = core.wordById[c.wordId]; if (!w) return;
+        var el = document.querySelector("[data-word-id='" + c.wordId + "']");
+        postCorrection(w, el, c.prevText, true);
+      });
     });
   }
 
