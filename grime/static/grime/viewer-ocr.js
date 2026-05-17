@@ -240,6 +240,7 @@ export function createOcrModule(core) {
                '&corrected_text=' + encodeURIComponent(w.corrected_text || '');
     core.postJson(C.addWordUrl, body).then(function(data) {
       if (!data.ok) return;
+      console.log('[undo-delete] snapshot conf:', w.conf, '(type:', typeof w.conf, '), server conf:', data.word.conf, ', corrected_text:', data.word.corrected_text);
       if (w.conf != null) data.word.conf = w.conf;
       core.OCR_WORDS.push(data.word); core.wordById[data.word.id] = data.word;
       core.renderOverlays(); updateTextPanels();
@@ -365,7 +366,11 @@ export function createOcrModule(core) {
     closeEditPopup();
     core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(word.id)).then(function(data) {
       if (!data.ok) return;
-      core.recordUndo({ type: 'ocr-ditto', wordId: word.id, prevText: prevText });
+      var siblingSnaps = data.updated.map(function(u) {
+        var sw = core.wordById[u.id];
+        return { id: u.id, corrected_text: sw ? sw.corrected_text : null, is_ditto: sw ? sw.is_ditto : false };
+      });
+      core.recordUndo({ type: 'ocr-ditto', wordId: word.id, prevText: prevText, siblings: siblingSnaps });
       _applyDittoResult(word, el, data);
     });
   }
@@ -718,7 +723,13 @@ export function createOcrModule(core) {
       var w = core.wordById[e.wordId]; if (!w) return;
       var el = document.querySelector("[data-word-id='" + e.wordId + "']");
       pushInverse({ type: 'ocr-correct', wordId: e.wordId, prev: e.prevText, next: null });
-      w.is_ditto = false;
+      if (e.siblings) {
+        e.siblings.forEach(function(s) {
+          var sw = core.wordById[s.id];
+          if (sw) { sw.is_ditto = s.is_ditto; sw.corrected_text = s.corrected_text; }
+        });
+        core.renderOverlays(); updateTextPanels();
+      }
       postCorrection(w, el, e.prevText, true);
     });
     core.registerUndoHandler('ocr-bulk-ditto', function(e, pushInverse) {
