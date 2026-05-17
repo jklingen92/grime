@@ -8,7 +8,7 @@
 2. **TestPyPI Account** (optional but recommended): https://test.pypi.org/
 3. **Install build tools**:
    ```bash
-   pip install build twine
+   uv tool install build twine
    ```
 4. **Configure authentication**: Create a PyPI API token and store it in `~/.pypirc`:
    ```ini
@@ -42,7 +42,7 @@
 
 3. **Test locally**:
    ```bash
-   pip install -e ".[dev]"
+   uv sync --extra dev
    # Run any test suites
    ```
 
@@ -55,23 +55,23 @@
 
 5. **Build distributions**:
    ```bash
-   python -m build
+   uvx --from build pyproject-build
    # This creates dist/grime-X.Y.Z-py3-none-any.whl and dist/grime-X.Y.Z.tar.gz
    ```
 
 6. **Test on TestPyPI** (recommended for first releases):
    ```bash
-   python -m twine upload --repository testpypi dist/*
+   uvx twine upload --repository testpypi dist/*
    ```
 
 7. **Install from TestPyPI to verify**:
    ```bash
-   pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ grime==X.Y.Z
+   uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ grime==X.Y.Z
    ```
 
 8. **Upload to PyPI**:
    ```bash
-   python -m twine upload dist/*
+   uvx twine upload dist/*
    ```
 
 9. **Push to GitHub**:

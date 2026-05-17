@@ -7,7 +7,7 @@ pages with tagged regions.
 ## Quick start
 
 ```bash
-pip install -e ".[dev]"
+uv sync --extra dev
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py ingest MY_DOCUMENT.pdf
