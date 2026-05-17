@@ -1,4 +1,5 @@
 {% load static %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
 <link rel="stylesheet" href="{% static 'grime/viewer.css' %}">
 
 {% if image_url %}
@@ -6,49 +7,49 @@
 <div style="margin-bottom:1.5em">
 
   <!-- tabs -->
-  <div id="dp-tabs">
-    <button class="dp-tab active" id="tab-ocr" onclick="dpShowTab('ocr')">OCR</button>
-    <button class="dp-tab" id="tab-ner" onclick="dpShowTab('ner')">NER</button>
-    <button class="dp-tab" id="tab-label" onclick="dpShowTab('label')">Label</button>
-    <button class="dp-tab" id="tab-image" onclick="dpShowTab('image')">Image</button>
+  <div id="dp-tabs" class="nav nav-tabs">
+    <button class="dp-tab nav-link active" id="tab-ocr" onclick="dpShowTab('ocr')">OCR</button>
+    <button class="dp-tab nav-link" id="tab-ner" onclick="dpShowTab('ner')">NER</button>
+    <button class="dp-tab nav-link" id="tab-label" onclick="dpShowTab('label')">Label</button>
+    <button class="dp-tab nav-link" id="tab-image" onclick="dpShowTab('image')">Image</button>
   </div>
 
 
   <!-- toolbar -->
   <div id="dp-toolbar" style="margin-top:6px">
-    <button type="button" onclick="dpZoomOut()">−</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomOut()">−</button>
     <span id="dp-zoom-label">100%</span>
-    <button type="button" onclick="dpZoomIn()">+</button>
-    <button type="button" onclick="dpZoomReset()">Fit</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomIn()">+</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomReset()">Fit</button>
 
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
-      <span class="dp-split-btn">
-        <button id="dp-rerun-ocr" type="button">Run OCR</button><button id="dp-rerun-ocr-caret" type="button" aria-label="Choose OCR engine">&#9662;</button>
-        <div id="dp-rerun-ocr-menu" class="dp-menu">
-          <a href="#" data-engine="textract" class="active">Textract</a>
-          <a href="#" data-engine="tesseract">Tesseract</a>
+      <div class="dp-split-btn btn-group btn-group-sm" role="group">
+        <button id="dp-rerun-ocr" type="button" class="btn btn-outline-secondary">Run OCR</button><button id="dp-rerun-ocr-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose OCR engine">&#9662;</button>
+        <div id="dp-rerun-ocr-menu" class="dp-menu dropdown-menu">
+          <a href="#" data-engine="textract" class="dropdown-item active">Textract</a>
+          <a href="#" data-engine="tesseract" class="dropdown-item">Tesseract</a>
         </div>
-      </span>
-      <button id="dp-boxes-toggle" type="button">Hide boxes</button>
-      <button id="dp-draw-toggle" type="button">Add region (a)</button>
+      </div>
+      <button id="dp-boxes-toggle" type="button" class="btn btn-sm btn-outline-secondary">Hide boxes</button>
+      <button id="dp-draw-toggle" type="button" class="btn btn-sm btn-outline-secondary">Add region (a)</button>
     </div>
 
     <div class="dp-toolbar-sep" id="dp-sep-ner"></div>
-    <button id="dp-rerun-ner" type="button">Run NER</button>
+    <button id="dp-rerun-ner" type="button" class="btn btn-sm btn-outline-secondary">Run NER</button>
     {% endif %}
 
     <div class="dp-toolbar-sep"></div>
-    {% if prev_url %}<a class="dp-nav-btn" href="{{ prev_url }}" title="{{ nav_prev_label }}">&#8592;</a>
-    {% else %}<a class="dp-nav-btn disabled" aria-disabled="true">&#8592;</a>{% endif %}
+    {% if prev_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ prev_url }}" title="{{ nav_prev_label }}">&#8592;</a>
+    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true">&#8592;</a>{% endif %}
     {% if page_list_json %}
-    <select id="dp-page-select" style="font-size:0.85em;padding:2px 4px;border-radius:3px;border:1px solid #ccc;cursor:pointer"></select>
+    <select id="dp-page-select" class="form-select form-select-sm dp-page-select"></select>
     {% elif page_position and total_count %}
     <span id="dp-page-indicator">{{ nav_prefix }}{{ page_position }} / {{ total_count }}</span>
     {% endif %}
-    {% if next_url %}<a class="dp-nav-btn" href="{{ next_url }}" title="{{ nav_next_label }}">&#8594;</a>
-    {% else %}<a class="dp-nav-btn disabled" aria-disabled="true">&#8594;</a>{% endif %}
+    {% if next_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ next_url }}" title="{{ nav_next_label }}">&#8594;</a>
+    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true">&#8594;</a>{% endif %}
 
     {% if doc_tag_count is not None %}
     <div class="dp-toolbar-sep"></div>
@@ -56,13 +57,13 @@
     {% endif %}
     {% if autogen_unreviewed_count %}
     <div class="dp-toolbar-sep"></div>
-    <a class="dp-nav-btn" href="{{ review_tags_url }}" title="Review autogenerated tags" style="font-size:0.82em;background:#fff3cd;border:1px solid #ffc107;border-radius:3px;padding:2px 8px;color:#856404;text-decoration:none">Review {{ autogen_unreviewed_count }} tag{{ autogen_unreviewed_count|pluralize }}</a>
+    <a class="dp-nav-btn btn btn-sm btn-warning" href="{{ review_tags_url }}" title="Review autogenerated tags">Review {{ autogen_unreviewed_count }} tag{{ autogen_unreviewed_count|pluralize }}</a>
     {% endif %}
 
     <div class="dp-toolbar-sep"></div>
     <span id="dp-tab-badge" style="font-size:0.82em;color:#666"></span>
 
-    <button id="dp-image-save-btn" type="button" style="display:none;margin-left:auto;background:#fff3cd;border-color:#ffc107;color:#856404">Save adjusted image</button>
+    <button id="dp-image-save-btn" type="button" class="btn btn-sm btn-warning" style="display:none;margin-left:auto">Save adjusted image</button>
   </div>
 
   <!-- viewer + panels -->
@@ -131,20 +132,20 @@
       <!-- labeling: label + subcomponents + actions -->
       <div id="dp-tag-label-view" style="display:none">
         <h3 id="dp-tag-label-heading">New label</h3>
-        <input id="dp-tag-label-input" type="text" placeholder="Label…" autocomplete="off">
+        <input id="dp-tag-label-input" type="text" class="form-control form-control-sm" placeholder="Label…" autocomplete="off">
         <div id="dp-tag-sub-input-row" style="display:none">
           <div style="display:flex;gap:4px;align-items:center">
-            <input id="dp-tag-sub-input" type="text" list="dp-sub-label-list" placeholder="Label for selection…" autocomplete="off" style="flex:1;min-width:0">
-            <button id="dp-tag-sub-clear-btn" type="button" title="Remove selected from pattern" style="padding:2px 7px;font-size:0.88em;cursor:pointer;border:1px solid #c00;border-radius:3px;background:#fff;color:#c00;flex-shrink:0">×</button>
+            <input id="dp-tag-sub-input" type="text" list="dp-sub-label-list" class="form-control form-control-sm" placeholder="Label for selection…" autocomplete="off" style="flex:1;min-width:0">
+            <button id="dp-tag-sub-clear-btn" type="button" class="btn btn-sm btn-outline-danger" title="Remove selected from pattern" style="flex-shrink:0">×</button>
           </div>
           <datalist id="dp-sub-label-list"></datalist>
           <div id="dp-tag-sub-hint">Enter to label · × to remove · Esc to deselect</div>
         </div>
         <div id="dp-tag-subcomp-list"></div>
         <div id="dp-tag-actions">
-          <button id="dp-tag-save-btn" type="button">Save ↵</button>
-          <button id="dp-tag-cancel-btn" type="button">Cancel ⎋</button>
-          <button id="dp-tag-delete-btn" type="button" style="display:none">Delete</button>
+          <button id="dp-tag-save-btn" type="button" class="btn btn-sm btn-primary">Save ↵</button>
+          <button id="dp-tag-cancel-btn" type="button" class="btn btn-sm btn-outline-secondary">Cancel ⎋</button>
+          <button id="dp-tag-delete-btn" type="button" class="btn btn-sm btn-outline-danger" style="display:none">Delete</button>
         </div>
       </div>
     </div>
@@ -157,60 +158,60 @@
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-brightness">Brightness</label>
-        <input id="dp-image-brightness" type="range" min="-100" max="100" step="1" value="0">
+        <input id="dp-image-brightness" type="range" class="form-range" min="-100" max="100" step="1" value="0">
         <span id="dp-image-brightness-val" class="dp-image-val">0</span>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-contrast">Contrast</label>
-        <input id="dp-image-contrast" type="range" min="0" max="200" step="1" value="100">
+        <input id="dp-image-contrast" type="range" class="form-range" min="0" max="200" step="1" value="100">
         <span id="dp-image-contrast-val" class="dp-image-val">1.00</span>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-gamma">Gamma</label>
-        <input id="dp-image-gamma" type="range" min="10" max="300" step="1" value="100">
+        <input id="dp-image-gamma" type="range" class="form-range" min="10" max="300" step="1" value="100">
         <span id="dp-image-gamma-val" class="dp-image-val">1.00</span>
       </div>
       <div class="dp-image-section-title">Levels</div>
       <div class="dp-image-slider-row">
         <label for="dp-image-black">Black</label>
-        <input id="dp-image-black" type="range" min="0" max="254" step="1" value="0">
+        <input id="dp-image-black" type="range" class="form-range" min="0" max="254" step="1" value="0">
         <span id="dp-image-black-val" class="dp-image-val">0</span>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-white">White</label>
-        <input id="dp-image-white" type="range" min="1" max="255" step="1" value="255">
+        <input id="dp-image-white" type="range" class="form-range" min="1" max="255" step="1" value="255">
         <span id="dp-image-white-val" class="dp-image-val">255</span>
       </div>
       <div class="dp-image-section-title">Tools</div>
       <div class="dp-image-btn-group">
-        <button id="dp-image-autocontrast-btn" type="button" title="Set black/white levels to 1% histogram cutoffs">Auto contrast</button>
-        <button id="dp-image-grayscale-btn"    type="button" title="Desaturate to greyscale">Grayscale</button>
-        <button id="dp-image-invert-btn"       type="button" title="Invert colours (negative)">Invert</button>
-        <button id="dp-image-sharpen-btn"      type="button" title="Unsharp mask — applied on save, no live preview">Sharpen</button>
+        <button id="dp-image-autocontrast-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Set black/white levels to 1% histogram cutoffs">Auto contrast</button>
+        <button id="dp-image-grayscale-btn"    type="button" class="btn btn-sm btn-outline-secondary" title="Desaturate to greyscale">Grayscale</button>
+        <button id="dp-image-invert-btn"       type="button" class="btn btn-sm btn-outline-secondary" title="Invert colours (negative)">Invert</button>
+        <button id="dp-image-sharpen-btn"      type="button" class="btn btn-sm btn-outline-secondary" title="Unsharp mask — applied on save, no live preview">Sharpen</button>
       </div>
       <small id="dp-image-sharpen-note" class="dp-image-sharpen-note" style="display:none">Sharpening is applied on save (no live preview)</small>
       <div class="dp-image-section-title">Threshold / Binarize</div>
       <div style="display:flex;align-items:center;gap:6px;font-size:0.82em">
-        <input id="dp-image-threshold-enable" type="checkbox">
+        <input id="dp-image-threshold-enable" type="checkbox" class="form-check-input">
         <label for="dp-image-threshold-enable" style="color:#444;cursor:pointer">Enable</label>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-threshold">Level</label>
-        <input id="dp-image-threshold" type="range" min="0" max="255" step="1" value="128" disabled>
+        <input id="dp-image-threshold" type="range" class="form-range" min="0" max="255" step="1" value="128" disabled>
         <span id="dp-image-threshold-val" class="dp-image-val">—</span>
       </div>
       <div class="dp-image-section-title">Rotate / Deskew</div>
       <div class="dp-image-btn-group">
-        <button id="dp-image-rotate-ccw-btn" type="button" title="Rotate 90° counter-clockwise">↺ 90°</button>
-        <button id="dp-image-rotate-cw-btn"  type="button" title="Rotate 90° clockwise">↻ 90°</button>
+        <button id="dp-image-rotate-ccw-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° counter-clockwise">↺ 90°</button>
+        <button id="dp-image-rotate-cw-btn"  type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° clockwise">↻ 90°</button>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-rotate-fine">Fine</label>
-        <input id="dp-image-rotate-fine" type="range" min="-5" max="5" step="0.1" value="0">
+        <input id="dp-image-rotate-fine" type="range" class="form-range" min="-5" max="5" step="0.1" value="0">
         <span id="dp-image-rotate-fine-val" class="dp-image-val">0.0°</span>
       </div>
       <div id="dp-image-actions">
-        <button id="dp-image-reset-btn" type="button">Reset</button>
+        <button id="dp-image-reset-btn" type="button" class="btn btn-sm btn-outline-secondary">Reset</button>
       </div>
     </div>
 
@@ -232,8 +233,8 @@
         </div>
       </div>
       <div id="dp-text-search-row">
-        <input id="dp-text-search" type="search" placeholder="Search text…" autocomplete="off">
-        <button id="dp-text-search-clear" type="button" title="Clear search" style="display:none">×</button>
+        <input id="dp-text-search" type="search" class="form-control form-control-sm" placeholder="Search text…" autocomplete="off">
+        <button id="dp-text-search-clear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear search" style="display:none">×</button>
         <span id="dp-text-search-count"></span>
       </div>
       <div id="dp-corrected-text"></div>
@@ -249,10 +250,10 @@
   <div class="ocr-popup-original" id="ocr-popup-original"></div>
   <input type="text" id="ocr-popup-input" placeholder="Corrected text… (Enter to save)">
   <div class="ocr-popup-actions">
-    <button id="ocr-popup-confirm" class="button default">Confirm</button>
-    <button id="ocr-popup-ditto"   class="button">Ditto</button>
-    <button id="ocr-popup-delete"  class="button" style="color:#a00">Delete</button>
-    <button id="ocr-popup-cancel"  class="button">Cancel</button>
+    <button id="ocr-popup-confirm" class="btn btn-sm btn-primary">Confirm</button>
+    <button id="ocr-popup-ditto"   class="btn btn-sm btn-outline-secondary">Ditto</button>
+    <button id="ocr-popup-delete"  class="btn btn-sm btn-outline-danger">Delete</button>
+    <button id="ocr-popup-cancel"  class="btn btn-sm btn-outline-secondary">Cancel</button>
     <span class="ocr-popup-hint">Enter · Esc</span>
   </div>
 </div>
@@ -260,33 +261,33 @@
 <!-- Unsaved image-adjustments confirmation bar -->
 <div id="dp-image-unsaved-bar">
   <label id="dp-image-unsaved-label">You have unsaved image adjustments.</label>
-  <button id="dp-image-unsaved-save"   class="button default">Save &amp; continue</button>
-  <button id="dp-image-unsaved-skip"   class="button">Use last-saved image</button>
-  <button id="dp-image-unsaved-cancel" class="button">Cancel</button>
+  <button id="dp-image-unsaved-save"   class="btn btn-sm btn-primary">Save &amp; continue</button>
+  <button id="dp-image-unsaved-skip"   class="btn btn-sm btn-outline-secondary">Use last-saved image</button>
+  <button id="dp-image-unsaved-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
 </div>
 
 <!-- OCR selection bar (multi-select actions) -->
 <div id="ocr-merge-bar">
   <label id="ocr-merge-label">2 words selected</label>
-  <button id="ocr-rerun-ocr"   class="button">Rerun OCR</button>
-  <button id="ocr-bulk-ditto"  class="button">Ditto</button>
-  <button id="ocr-bulk-delete" class="button" style="color:#a00">Delete</button>
-  <button id="ocr-merge-cancel" class="button">Cancel</button>
+  <button id="ocr-rerun-ocr"   class="btn btn-sm btn-outline-secondary">Rerun OCR</button>
+  <button id="ocr-bulk-ditto"  class="btn btn-sm btn-outline-secondary">Ditto</button>
+  <button id="ocr-bulk-delete" class="btn btn-sm btn-outline-danger">Delete</button>
+  <button id="ocr-merge-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
   <span class="merge-bar-hint">Esc · ⌫</span>
 </div>
 
 <!-- NER selection bar -->
 <div id="ner-select-bar">
   <label id="ner-select-label"></label>
-  <select id="ner-select-type">
+  <select id="ner-select-type" class="form-select form-select-sm">
     <option value="">— label —</option>
     <option value="PER">Person</option>
     <option value="LOC">Location</option>
     <option value="ORG">Organization</option>
   </select>
-  <button id="ner-select-apply" class="button">Apply</button>
-  <button id="ner-select-delete" class="button" style="color:#a00">Delete</button>
-  <button id="ner-select-cancel" class="button">Cancel</button>
+  <button id="ner-select-apply" class="btn btn-sm btn-primary">Apply</button>
+  <button id="ner-select-delete" class="btn btn-sm btn-outline-danger">Delete</button>
+  <button id="ner-select-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
 </div>
 
 {% if image_url %}
@@ -346,5 +347,6 @@ window.VIEWER_CONFIG = {
 {% endif %}
 };
 </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 <script type="module" src="{% static 'grime/viewer.js' %}"></script>
 {% endif %}

@@ -1,3 +1,18 @@
+  /* ── color palette ────────────────────────────────────────── */
+  :root {
+    --grime-primary:       #417690;
+    --grime-primary-dark:  #205067;
+    --grime-accent:        #7842dc;
+    --grime-accent-light:  rgba(120, 66, 220, 0.15);
+    --grime-ocr-highlight: #e67e00;
+    --grime-ner-per:       rgba(0, 100, 220, 0.2);
+    --grime-ner-loc:       rgba(30, 160, 60, 0.2);
+    --grime-ner-org:       rgba(200, 100, 0, 0.2);
+
+    /* Bootstrap range-thumb colour override */
+    --bs-primary-rgb: 65, 118, 144;
+  }
+
   /* ── outer layout ─────────────────────────────────────────── */
   #dp-outer { display: flex; align-items: flex-start; margin-bottom: 1.5em; }
   #dp-viewer-wrap {
@@ -37,12 +52,10 @@
   .dp-image-slider-row input[type="range"] { width: 100%; }
   .dp-image-val { font: 11px/1 monospace; color: #555; text-align: right; }
   #dp-image-actions { margin-top: 10px; display: flex; gap: 6px; }
-  #dp-image-actions button { padding: 4px 10px; font-size: 0.85em; cursor: pointer; border: 1px solid #bbb; border-radius: 3px; background: #fff; }
-  #dp-image-actions button:hover { background: #f0f0f0; }
   .dp-image-btn-group { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
-  .dp-image-btn-group button { padding: 3px 9px; font-size: 0.82em; cursor: pointer; border: 1px solid #bbb; border-radius: 3px; background: #fff; white-space: nowrap; }
-  .dp-image-btn-group button:hover { background: #f0f0f0; }
-  .dp-image-btn-group button.active { background: #d4edff; border-color: #4a9fd4; color: #1a5f8a; }
+  .dp-image-btn-group .btn { font-size: 0.82em; white-space: nowrap; }
+  /* Bootstrap btn-outline-secondary.active already handles the active state */
+  .dp-image-btn-group .btn.active { background: var(--grime-primary); border-color: var(--grime-primary); color: #fff; }
   .dp-image-sharpen-note { font-size: 0.75em; color: #888; font-style: italic; }
 
   /* tag list view */
@@ -62,10 +75,7 @@
   /* tag label view */
   #dp-tag-label-view { flex: 1; display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
   #dp-tag-label-view h3 { margin-bottom: 8px; }
-  #dp-tag-label-input {
-    width: 100%; box-sizing: border-box; margin-bottom: 8px;
-    padding: 5px 7px; font-size: 0.92em; border: 1px solid #bbb; border-radius: 3px;
-  }
+  #dp-tag-label-input { margin-bottom: 8px; }
   #dp-tag-subcomp-list { flex: 1; overflow-y: auto; margin-bottom: 6px; font-size: 0.82em; }
   .dp-subcomp-row {
     display: flex; align-items: baseline; gap: 4px; padding: 3px 0;
@@ -80,15 +90,13 @@
   .dp-subcomp-rm    { cursor: pointer; color: #a00; margin-left: auto; padding: 0 2px; flex-shrink: 0; }
   #dp-tag-sub-input-row { margin-bottom: 8px; }
   #dp-tag-sub-input {
-    width: 100%; box-sizing: border-box; padding: 4px 7px; font-size: 0.88em;
-    border: 1px solid #7842dc; border-radius: 3px;
+    border-color: var(--grime-accent);
   }
+  #dp-tag-sub-input:focus { border-color: var(--grime-accent); box-shadow: 0 0 0 0.25rem rgba(120, 66, 220, 0.25); }
   #dp-tag-sub-hint { font-size: 0.75em; color: #888; margin-top: 2px; }
   #dp-tag-actions { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
-  #dp-tag-actions button { padding: 3px 10px; font-size: 0.82em; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; background: #fff; }
-  #dp-tag-actions button:hover { background: #f0f0f0; }
-  #dp-tag-save-btn   { border-color: #7842dc; color: #7842dc; }
-  #dp-tag-delete-btn { color: #c00; margin-left: auto; }
+  #dp-tag-actions .btn { font-size: 0.82em; }
+  #dp-tag-delete-btn { margin-left: auto; }
 
   /* label panel instructions */
   #dp-tag-instructions {
@@ -126,42 +134,34 @@
   #dp-text-search-row {
     display: flex; align-items: center; gap: 4px;
   }
-  #dp-text-search {
-    flex: 1; padding: 3px 6px; font-size: 0.8em; border: 1px solid #ccc;
-    border-radius: 3px; background: #fff; outline: none;
-  }
-  #dp-text-search:focus { border-color: #888; }
-  #dp-text-search-clear {
-    padding: 0 5px; font-size: 0.9em; line-height: 1; cursor: pointer;
-    border: 1px solid #ccc; border-radius: 3px; background: #fff; color: #666;
-    flex-shrink: 0;
-  }
-  #dp-text-search-clear:hover { background: #f0f0f0; color: #333; }
+  #dp-text-search { flex: 1; font-size: 0.8em; }
+  #dp-text-search-clear { flex-shrink: 0; font-size: 0.9em; }
   #dp-text-search-count { font-size: 0.75em; color: #666; white-space: nowrap; min-width: 3em; text-align: right; }
 
   /* ── toolbar ──────────────────────────────────────────────── */
   #dp-toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
-  #dp-toolbar button, #dp-toolbar a.dp-nav-btn {
-    padding: 3px 10px; font-size: 0.82em; cursor: pointer; text-decoration: none;
-    color: #333; background: #fff; border: 1px solid #ccc; border-radius: 3px;
-    display: inline-flex; align-items: center;
+  /* Bootstrap .btn handles button appearance; keep only structural overrides */
+  #dp-toolbar .btn, #dp-toolbar a.dp-nav-btn {
+    font-size: 0.82em; text-decoration: none; display: inline-flex; align-items: center;
   }
-  #dp-toolbar button:hover, #dp-toolbar a.dp-nav-btn:hover { background: #f0f0f0; }
-  #dp-toolbar a.dp-nav-btn.disabled { opacity: 0.35; pointer-events: none; color: #333; }
+  #dp-toolbar a.dp-nav-btn.disabled { opacity: 0.35; pointer-events: none; }
   #dp-ocr-actions { display: none; gap: 6px; align-items: center; }
   #dp-ocr-actions.visible { display: flex; }
   #dp-zoom-label { font-size: 0.82em; color: #555; min-width: 3em; text-align: center; }
   #dp-page-indicator { font-size: 0.82em; color: #444; font-weight: bold; padding: 0 4px; }
   .dp-toolbar-sep { width: 1px; background: #ddd; align-self: stretch; margin: 0 2px; }
+  .dp-page-select { font-size: 0.82em; width: auto; padding-top: 2px; padding-bottom: 2px; cursor: pointer; }
 
   /* ── tabs ─────────────────────────────────────────────────── */
+  /* Use #dp-tabs prefix for specificity over Bootstrap's .nav-tabs .nav-link */
   #dp-tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 0; }
-  .dp-tab {
+  #dp-tabs .dp-tab {
     padding: 5px 16px; font-size: 0.85em; font-weight: 600; cursor: pointer;
     border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0;
     background: none; color: #555; margin-bottom: -2px;
   }
-  .dp-tab.active { background: #fff; border-color: #ddd; color: #000; border-bottom-color: #fff; }
+  #dp-tabs .dp-tab.active { background: #fff; border-color: #ddd; color: #000; border-bottom-color: #fff; }
+  #dp-tabs .dp-tab:hover:not(.active) { background: #f8f8f8; border-color: #eee; color: #333; }
 
   /* ── citation overlays (OCR tab only now) ─────────────────── */
   .dp-citation {
@@ -365,14 +365,8 @@
   #dp-person-msg { font-size: 0.85em; margin-top: 8px; display: none; }
 
   /* ── OCR split-button (engine picker) ─────────────────────── */
-  .dp-split-btn { position: relative; display: inline-block; }
-  .dp-split-btn > button + button { margin-left: -1px; padding: 0 6px; }
-  .dp-menu {
-    display: none; position: absolute; top: 100%; left: 0; z-index: 1000;
-    background: #fff; border: 1px solid #ccc; border-radius: 3px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15); min-width: 120px; margin-top: 2px;
-  }
+  /* .btn-group from Bootstrap handles the joined-button layout */
+  .dp-split-btn { position: relative; }
+  /* Custom JS toggles .open; Bootstrap dropdown-menu needs .show — use .open here */
+  .dp-menu { display: none; min-width: 120px; margin-top: 2px; }
   .dp-menu.open { display: block; }
-  .dp-menu a { display: block; padding: 6px 12px; text-decoration: none; color: #000; font-size: 0.9em; }
-  .dp-menu a:hover { background: #f0f0f0; }
-  .dp-menu a.active { background: #e6f0ff; font-weight: bold; }
