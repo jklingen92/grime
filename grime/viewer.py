@@ -43,7 +43,7 @@ from django.views.decorators.http import require_POST
 from grime.forms import DocumentUploadForm
 from grime.models import Document, DocumentPage, Tag, Word
 
-_VALID_NER_LABELS = {None, "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
+_VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
 
 # ---------------------------------------------------------------------------
@@ -360,18 +360,17 @@ def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
 
 @require_POST
 def word_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Set Word.corrected_label.  Empty string or 'NONE' clears the label."""
+    """Set Word.corrected_label.  'NONE' stores '' (explicitly cleared, overrides ner_label)."""
     word = _get_word_on_page(page_pk, request.POST.get("word_id"))
     if word is None:
         return JsonResponse({"error": "Word not found on this page"}, status=404)
-    label = (request.POST.get("label") or "").strip()
-    if label in ("", "NONE"):
-        label = None
+    raw = (request.POST.get("label") or "").strip()
+    label = "" if raw == "NONE" else raw or None
     if label not in _VALID_NER_LABELS:
         return JsonResponse({"error": f"Invalid label {label!r}"}, status=400)
     word.corrected_label = label
-    word.corrected_ner_by = request.user if label else None
-    word.corrected_ner_at = timezone.now() if label else None
+    word.corrected_ner_by = request.user if label is not None else None
+    word.corrected_ner_at = timezone.now() if label is not None else None
     word.save(update_fields=["corrected_label", "corrected_ner_by", "corrected_ner_at"])
     return JsonResponse({"ok": True, "word_id": word.pk, "label": label})
 

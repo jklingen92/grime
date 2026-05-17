@@ -277,7 +277,10 @@ class Word(models.Model):
 
     @property
     def label(self) -> str | None:
-        return self.corrected_label or self.ner_label
+        if self.corrected_label is not None:
+            # "" means explicitly cleared by a user (overrides ner_label)
+            return self.corrected_label or None
+        return self.ner_label
 
 
 class Tag(models.Model):

@@ -4,9 +4,15 @@ export function createNerModule(core) {
   var NER_ENTITY_LABEL = { PER: 'name', LOC: 'address', ORG: 'organization' };
 
   /* ── helpers ───────────────────────────────────────────────── */
-  // Return the active NER label for a word: corrected_label if set, else ner_label (mirrors Word.label).
+  // Return the active NER label for a word.
+  // corrected_label=null → no correction yet, fall back to ner_label.
+  // corrected_label=""   → explicitly cleared by user, treat as no label.
+  // corrected_label="B-PER" etc → use that.
   function wordLabel(w) {
-    return w.corrected_label || w.ner_label || null;
+    if (w.corrected_label !== null && w.corrected_label !== undefined) {
+      return w.corrected_label || null;
+    }
+    return w.ner_label || null;
   }
 
   // Return the BIO-stripped entity type (PER/LOC/ORG) or null if the word has no label.
@@ -93,7 +99,7 @@ export function createNerModule(core) {
         .then(function(data) {
           if (data && data.ok) {
             var w = core.wordById[id];
-            if (w) w.corrected_label = (label === 'NONE') ? null : label;
+            if (w) w.corrected_label = (label === 'NONE') ? '' : label;
           }
         });
     });
