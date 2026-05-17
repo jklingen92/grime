@@ -525,10 +525,16 @@ def _build_image_lut(params: dict) -> list[int]:
 
 
 def _apply_image_adjustments(im, params: dict):
-    lut = _build_image_lut(params)
     if im.mode not in ("L", "RGB", "RGBA"):
         im = im.convert("RGB")
-    return im.point(lut)
+    lut = _build_image_lut(params)
+    bands = im.getbands()
+    # Apply the adjustment LUT to colour channels only; leave alpha unchanged.
+    identity = list(range(256))
+    full = []
+    for b in bands:
+        full.extend(identity if b == "A" else lut)
+    return im.point(full)
 
 
 @require_POST
