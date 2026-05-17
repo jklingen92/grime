@@ -42,7 +42,7 @@ ocr = ["pytesseract", "opencv-python", "numpy"]
 textract = ["boto3"]
 hf = ["transformers", "torch"]
 viz = ["imageio[ffmpeg]"]
-async = ["celery[redis]"]
+async = ["celery[sqlalchemy]"]
 dev = [
     "pytesseract",
     "opencv-python",
@@ -53,7 +53,7 @@ dev = [
     "pre-commit",
     "django-extensions",
     "honcho",
-    "celery[redis]",
+    "celery[sqlalchemy]",
 ]
 
 [build-system]
