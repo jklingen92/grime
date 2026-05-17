@@ -179,16 +179,14 @@
 <div id="dp-ner-popup">
   <div class="dp-ner-word" id="dp-ner-word-text"></div>
   <select id="dp-ner-label-select">
-    <option value="">— none —</option>
-    <option value="B-PER">B-PER (person start)</option>
-    <option value="I-PER">I-PER (person cont.)</option>
-    <option value="B-LOC">B-LOC (location start)</option>
-    <option value="I-LOC">I-LOC (location cont.)</option>
-    <option value="B-ORG">B-ORG (org start)</option>
-    <option value="I-ORG">I-ORG (org cont.)</option>
+    <option value="">— select type —</option>
+    <option value="PER">Person</option>
+    <option value="LOC">Location</option>
+    <option value="ORG">Organization</option>
   </select>
   <div class="dp-ner-actions">
     <button id="dp-ner-save-btn">Save</button>
+    <button id="dp-ner-delete-btn" style="color:#a00">Delete</button>
     <button id="dp-ner-cancel-btn">Cancel</button>
   </div>
 </div>

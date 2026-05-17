@@ -20,7 +20,7 @@ export function initCore(C) {
     tagSubSelectedIds:  new Set(),
     tagSubDrawStart:    null,
     tagResizing:        null,
-    nerPopupWordId:     null,
+    nerPopupWordIds:    [],
     nerSelectedIds:     new Set(),
     nerHighlightKey:    null,
     personGroupsLoaded: false,
