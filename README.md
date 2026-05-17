@@ -21,14 +21,17 @@ cd grime
 # Install dependencies (creates .venv)
 uv sync --extra dev
 
+# Activate the virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
 # Run database migrations
-uv run python manage.py migrate
+python manage.py migrate
 
 # Create a superuser for the admin panel
-uv run python manage.py createsuperuser
+python manage.py createsuperuser
 
 # Start the development server
-uv run python manage.py runserver
+python manage.py runserver
 ```
 
 Visit http://127.0.0.1:8000/admin and log in with your superuser credentials.
@@ -36,7 +39,7 @@ Visit http://127.0.0.1:8000/admin and log in with your superuser credentials.
 ### Ingesting documents
 
 ```bash
-uv run python manage.py ingest MY_DOCUMENT.pdf
+python manage.py ingest MY_DOCUMENT.pdf
 # Returns an endpoint like /documents/1
 
 # View the document
