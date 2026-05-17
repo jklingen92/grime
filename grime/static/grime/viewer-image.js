@@ -143,40 +143,37 @@ export function createImageModule(core) {
   function save() {
     var btn = document.getElementById('dp-image-save-btn');
     var p = slidersToParams(state.imageAdjustments);
-
-    // Identity == clearing corrected_image on the server.
-    if (isIdentity(p)) {
-      return core.withBtn(btn, 'Saving…', function() {
-        return fetch(C.imageResetUrl, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': C.csrfToken },
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          if (!data.ok) { alert(data.error || 'Reset failed.'); return false; }
-          state.imageSavedAdjustments = Object.assign({}, DEFAULTS);
-          state.imageHasCorrected = false;
-          applyFilter();
-          return true;
-        });
-      });
-    }
+    var url = isIdentity(p) ? C.imageResetUrl : C.imageSaveUrl;
+    var init = isIdentity(p)
+      ? { method: 'POST', headers: { 'X-CSRFToken': C.csrfToken } }
+      : { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': C.csrfToken },
+          body: JSON.stringify(p) };
 
     return core.withBtn(btn, 'Saving…', function() {
-      return fetch(C.imageSaveUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': C.csrfToken },
-        body: JSON.stringify(p),
-      }).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data.ok) { alert(data.error || 'Save failed.'); return false; }
-        state.imageSavedAdjustments = Object.assign({}, state.imageAdjustments);
-        state.imageHasCorrected = true;
-        var bust = data.image_url + (data.image_url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-        C.imageUrl = bust;
-        var img = document.getElementById('dp-img');
-        if (img) { img.setAttribute('src', bust); img.style.filter = ''; }
-        var sb = document.getElementById('dp-image-save-btn');
-        if (sb) sb.style.display = 'none';
-        return true;
-      });
+      return fetch(url, init)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(data) {
+          if (!data.ok) { alert(data.error || 'Save failed.'); return false; }
+          // Mark current params as the saved baseline BEFORE touching the DOM,
+          // so applyFilter() sees a clean state and hides the save button.
+          state.imageSavedAdjustments = Object.assign({}, state.imageAdjustments);
+          state.imageHasCorrected = !isIdentity(p);
+          if (data.image_url) {
+            var sep = data.image_url.indexOf('?') >= 0 ? '&' : '?';
+            C.imageUrl = data.image_url + sep + 't=' + Date.now();
+          }
+          applyFilter();
+          return true;
+        })
+        .catch(function(err) {
+          console.error('Image save failed:', err);
+          alert('Save failed: ' + (err && err.message ? err.message : err));
+          return false;
+        });
     });
   }
 
