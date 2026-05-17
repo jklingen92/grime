@@ -36,15 +36,6 @@ python manage.py runserver
 
 Visit http://127.0.0.1:8000/admin and log in with your superuser credentials.
 
-### Ingesting documents
-
-```bash
-python manage.py ingest MY_DOCUMENT.pdf
-# Returns an endpoint like /documents/1
-
-# View the document
-# http://127.0.0.1:8000/documents/1
-```
 
 ## Management commands
 
@@ -57,12 +48,3 @@ python manage.py ner        --document 42 [--page N] [--threshold 0.85] [--force
 python manage.py match_tags --label "member entry" [--source-document 3] [--target-document 5] \
                             [--create-tags] [--force] [--min-score 0.5] [--tolerance 0.08]
 ```
-
-
-## Status
-
-This is an initial scaffold. The admin loads and the management commands
-run end-to-end, but the embedded document viewer (`templates/admin/grime/_document_viewer.html`)
-is read-only: bboxes and tags render on the page image, but interactive
-editing (OCR correction, tag CRUD, NER label correction) needs AJAX
-endpoints that have not been implemented yet.
