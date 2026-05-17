@@ -1,27 +1,23 @@
-// Image processing tab — brightness / contrast / levels with live preview.
+// Image processing tab — brightness / contrast / levels / grayscale / invert /
+// threshold / sharpen / rotate with live preview.
 //
 // The preview is an SVG <feComponentTransfer> filter applied to #dp-img, so
 // adjustments are visible from every tab without re-fetching pixels. Clicking
 // "Save adjusted image" in the toolbar POSTs the current params to the
 // backend, which bakes them into `corrected_image` using the same LUT formula
 // (see _build_image_lut in viewer.py — keep the two in sync).
-//
-// Future adds (standard for document repair, deferred):
-//   - Auto levels        — one-click ImageOps.autocontrast equivalent
-//   - Grayscale toggle   — desaturate scans
-//   - Invert             — negative for white-on-black originals
-//   - Threshold/binarize — clean B/W for downstream OCR
-//   - Sharpen            — Pillow UnsharpMask
-//   - Rotate / deskew    — 90° buttons + fine-angle slider with white fill
-//   - "Re-run OCR on corrected image" prompt after a save
 
 export function createImageModule(core) {
   var state = core.state;
   var C     = core.C;
 
   // Slider-space defaults. brightness ÷100 → -1..1, contrast ÷100 → 0..2,
-  // gamma ÷100 → 0.1..3.0. black/white are passed through as 0..255.
-  var DEFAULTS = { brightness: 0, contrast: 100, gamma: 100, black: 0, white: 255 };
+  // gamma ÷100 → 0.1..3.0. black/white are 0..255. rotateFine is ±5 degrees.
+  var DEFAULTS = {
+    brightness: 0, contrast: 100, gamma: 100, black: 0, white: 255,
+    grayscale: false, invert: false, threshold: null, sharpen: false,
+    rotate90: 0, rotateFine: 0,
+  };
 
   state.imageSavedAdjustments = paramsToSliders(C.imageAdjustments) || Object.assign({}, DEFAULTS);
   state.imageAdjustments      = Object.assign({}, state.imageSavedAdjustments);
@@ -35,7 +31,7 @@ export function createImageModule(core) {
     var pre = new Image(); pre.src = C.originalImageUrl;
   }
 
-  // Convert backend params (floats / 0-255) to slider-space integers.
+  // Convert backend params (floats / 0-255) to slider-space.
   function paramsToSliders(saved) {
     if (!saved) return null;
     return {
@@ -44,17 +40,29 @@ export function createImageModule(core) {
       gamma:      Math.round((saved.gamma != null ? saved.gamma : 1) * 100),
       black:      saved.black || 0,
       white:      saved.white != null ? saved.white : 255,
+      grayscale:  !!saved.grayscale,
+      invert:     !!saved.invert,
+      threshold:  saved.threshold != null ? parseInt(saved.threshold, 10) : null,
+      sharpen:    !!saved.sharpen,
+      rotate90:   saved.rotate90 != null ? ((parseInt(saved.rotate90, 10) % 4 + 4) % 4) : 0,
+      rotateFine: saved.rotate_fine != null ? parseFloat(saved.rotate_fine) : 0,
     };
   }
 
   // Convert slider-space to canonical params posted to the backend.
   function slidersToParams(a) {
     return {
-      brightness: a.brightness / 100,
-      contrast:   a.contrast / 100,
-      gamma:      a.gamma / 100,
-      black:      a.black,
-      white:      Math.max(a.black + 1, a.white),
+      brightness:  a.brightness / 100,
+      contrast:    a.contrast / 100,
+      gamma:       a.gamma / 100,
+      black:       a.black,
+      white:       Math.max(a.black + 1, a.white),
+      grayscale:   !!a.grayscale,
+      invert:      !!a.invert,
+      threshold:   a.threshold != null ? parseInt(a.threshold, 10) : null,
+      sharpen:     !!a.sharpen,
+      rotate90:    a.rotate90 || 0,
+      rotate_fine: a.rotateFine || 0,
     };
   }
 
@@ -74,44 +82,90 @@ export function createImageModule(core) {
     return lut.join(' ');
   }
 
-  function isIdentity(p) {
+  function isIdentityLut(p) {
     return p.brightness === 0 && p.contrast === 1 && p.gamma === 1 &&
            p.black === 0 && p.white === 255;
+  }
+
+  function isIdentity(p) {
+    return isIdentityLut(p) &&
+           !p.grayscale && !p.invert && p.threshold == null && !p.sharpen &&
+           !p.rotate90 && !p.rotate_fine;
   }
 
   function isDirty() {
     var a = state.imageAdjustments, s = state.imageSavedAdjustments;
     return a.brightness !== s.brightness || a.contrast !== s.contrast ||
-           a.gamma !== s.gamma || a.black !== s.black || a.white !== s.white;
+           a.gamma !== s.gamma || a.black !== s.black || a.white !== s.white ||
+           !!a.grayscale !== !!s.grayscale || !!a.invert !== !!s.invert ||
+           a.threshold !== s.threshold || !!a.sharpen !== !!s.sharpen ||
+           a.rotate90 !== s.rotate90 || a.rotateFine !== s.rotateFine;
   }
 
-  // Drive #dp-img to the right (src, filter) pair for the current state.
+  // Drive #dp-img to the right (src, filter, transform) for the current state.
   function applyFilter() {
     var img = document.getElementById('dp-img');
     if (!img) return;
-    var p = slidersToParams(state.imageAdjustments);
+    var sliders = state.imageAdjustments;
+    var p = slidersToParams(sliders);
     var dirty = isDirty();
 
     var saveBtn = document.getElementById('dp-image-save-btn');
     if (saveBtn) saveBtn.style.display = dirty ? '' : 'none';
 
+    // Clean state with a saved corrected image — show it unmodified.
     if (!dirty && state.imageHasCorrected) {
       if (img.getAttribute('src') !== C.imageUrl) img.setAttribute('src', C.imageUrl);
-      img.style.filter = '';
+      img.style.filter    = '';
+      img.style.transform = '';
       return;
     }
-    if (isIdentity(p)) {
-      if (img.getAttribute('src') !== C.originalImageUrl) img.setAttribute('src', C.originalImageUrl);
-      img.style.filter = '';
-      return;
-    }
+
+    // Always preview against the original (adjustments are not yet baked).
     if (img.getAttribute('src') !== C.originalImageUrl) img.setAttribute('src', C.originalImageUrl);
-    var table = buildLut(p);
-    ['r', 'g', 'b'].forEach(function(ch) {
-      var el = document.getElementById('dp-image-filter-' + ch);
-      if (el) el.setAttribute('tableValues', table);
-    });
-    img.style.filter = 'url(#dp-image-filter)';
+
+    if (isIdentity(p)) {
+      img.style.filter    = '';
+      img.style.transform = '';
+      return;
+    }
+
+    // Build CSS filter chain --------------------------------------------------
+    var filters = [];
+
+    // LUT (brightness / contrast / gamma / levels)
+    if (!isIdentityLut(p)) {
+      var table = buildLut(p);
+      ['r', 'g', 'b'].forEach(function(ch) {
+        var el = document.getElementById('dp-image-filter-' + ch);
+        if (el) el.setAttribute('tableValues', table);
+      });
+      filters.push('url(#dp-image-filter)');
+    }
+
+    if (sliders.grayscale) filters.push('grayscale(1)');
+    if (sliders.invert)    filters.push('invert(1)');
+
+    // Threshold: steep linear slope creates a sharp step at t/255.
+    if (sliders.threshold !== null) {
+      var t = sliders.threshold / 255;
+      var slope = 1000;
+      var intercept = -(t * slope);
+      ['r', 'g', 'b'].forEach(function(ch) {
+        var el = document.getElementById('dp-threshold-filter-' + ch);
+        if (el) {
+          el.setAttribute('slope', String(slope));
+          el.setAttribute('intercept', intercept.toFixed(1));
+        }
+      });
+      filters.push('url(#dp-threshold-filter)');
+    }
+
+    img.style.filter = filters.join(' ');
+
+    // Rotation via CSS transform (positive = clockwise, matching Pillow convention).
+    var totalDeg = sliders.rotate90 * 90 + sliders.rotateFine;
+    img.style.transform = totalDeg ? 'rotate(' + totalDeg + 'deg)' : '';
   }
 
   function formatVal(key, v) {
@@ -121,12 +175,44 @@ export function createImageModule(core) {
   }
 
   function syncSliders() {
+    // Numeric sliders
     ['brightness', 'contrast', 'gamma', 'black', 'white'].forEach(function(key) {
       var s = document.getElementById('dp-image-' + key);
       var l = document.getElementById('dp-image-' + key + '-val');
       if (s) s.value = state.imageAdjustments[key];
       if (l) l.textContent = formatVal(key, state.imageAdjustments[key]);
     });
+
+    // Toggle buttons
+    ['grayscale', 'invert', 'sharpen'].forEach(function(key) {
+      var btn = document.getElementById('dp-image-' + key + '-btn');
+      if (btn) btn.classList.toggle('active', !!state.imageAdjustments[key]);
+    });
+
+    // Sharpen note
+    var sharpenNote = document.getElementById('dp-image-sharpen-note');
+    if (sharpenNote) sharpenNote.style.display = state.imageAdjustments.sharpen ? '' : 'none';
+
+    // Threshold
+    var threshEnable = document.getElementById('dp-image-threshold-enable');
+    var threshSlider = document.getElementById('dp-image-threshold');
+    var threshVal    = document.getElementById('dp-image-threshold-val');
+    var threshActive = state.imageAdjustments.threshold !== null;
+    if (threshEnable) threshEnable.checked = threshActive;
+    if (threshSlider) {
+      threshSlider.disabled = !threshActive;
+      if (threshActive) threshSlider.value = state.imageAdjustments.threshold;
+    }
+    if (threshVal) threshVal.textContent = threshActive ? String(state.imageAdjustments.threshold) : '—';
+
+    // Fine rotate
+    var rotFine    = document.getElementById('dp-image-rotate-fine');
+    var rotFineVal = document.getElementById('dp-image-rotate-fine-val');
+    if (rotFine) rotFine.value = state.imageAdjustments.rotateFine;
+    if (rotFineVal) {
+      var f = state.imageAdjustments.rotateFine;
+      rotFineVal.textContent = (f > 0 ? '+' : '') + f.toFixed(1) + '°';
+    }
   }
 
   function onSlide(key, value) {
@@ -134,6 +220,14 @@ export function createImageModule(core) {
     var l = document.getElementById('dp-image-' + key + '-val');
     if (l) l.textContent = formatVal(key, state.imageAdjustments[key]);
     applyFilter();
+  }
+
+  function recordAdjustUndo() {
+    var next = Object.assign({}, state.imageAdjustments);
+    if (JSON.stringify(_prevAdjustments) !== JSON.stringify(next)) {
+      core.recordUndo({ type: 'image-adjust', prev: _prevAdjustments, next: next });
+      _prevAdjustments = next;
+    }
   }
 
   function resetLocal() {
@@ -209,18 +303,126 @@ export function createImageModule(core) {
   function setupUI() {
     _prevAdjustments = Object.assign({}, state.imageAdjustments);
 
+    // Numeric sliders (existing five keys)
     ['brightness', 'contrast', 'gamma', 'black', 'white'].forEach(function(key) {
       var s = document.getElementById('dp-image-' + key);
       if (!s) return;
       s.addEventListener('input',  function() { onSlide(key, s.value); });
-      s.addEventListener('change', function() {
+      s.addEventListener('change', function() { recordAdjustUndo(); });
+    });
+
+    // Fine-rotate slider (float values, step=0.1)
+    var rotFine = document.getElementById('dp-image-rotate-fine');
+    if (rotFine) {
+      rotFine.addEventListener('input', function() {
+        state.imageAdjustments.rotateFine = parseFloat(rotFine.value);
+        var l = document.getElementById('dp-image-rotate-fine-val');
+        if (l) {
+          var f = state.imageAdjustments.rotateFine;
+          l.textContent = (f > 0 ? '+' : '') + f.toFixed(1) + '°';
+        }
+        applyFilter();
+      });
+      rotFine.addEventListener('change', function() { recordAdjustUndo(); });
+    }
+
+    // Toggle buttons (grayscale / invert / sharpen)
+    function wireToggle(key) {
+      var btn = document.getElementById('dp-image-' + key + '-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        var prev = Object.assign({}, state.imageAdjustments);
+        state.imageAdjustments[key] = !state.imageAdjustments[key];
         var next = Object.assign({}, state.imageAdjustments);
-        if (JSON.stringify(_prevAdjustments) !== JSON.stringify(next)) {
-          core.recordUndo({ type: 'image-adjust', prev: _prevAdjustments, next: next });
-          _prevAdjustments = next;
+        core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+        _prevAdjustments = next;
+        syncSliders();
+        applyFilter();
+      });
+    }
+    wireToggle('grayscale');
+    wireToggle('invert');
+    wireToggle('sharpen');
+
+    // Threshold enable checkbox + slider
+    var threshEnable = document.getElementById('dp-image-threshold-enable');
+    var threshSlider = document.getElementById('dp-image-threshold');
+    if (threshEnable && threshSlider) {
+      threshEnable.addEventListener('change', function() {
+        var prev = Object.assign({}, state.imageAdjustments);
+        if (threshEnable.checked) {
+          state.imageAdjustments.threshold = parseInt(threshSlider.value, 10);
+          threshSlider.disabled = false;
+        } else {
+          state.imageAdjustments.threshold = null;
+          threshSlider.disabled = true;
+        }
+        var next = Object.assign({}, state.imageAdjustments);
+        core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+        _prevAdjustments = next;
+        syncSliders();
+        applyFilter();
+      });
+      threshSlider.addEventListener('input', function() {
+        if (state.imageAdjustments.threshold !== null) {
+          state.imageAdjustments.threshold = parseInt(threshSlider.value, 10);
+          var l = document.getElementById('dp-image-threshold-val');
+          if (l) l.textContent = String(state.imageAdjustments.threshold);
+          applyFilter();
         }
       });
-    });
+      threshSlider.addEventListener('change', function() { recordAdjustUndo(); });
+    }
+
+    // 90° rotate buttons
+    var rotateCcwBtn = document.getElementById('dp-image-rotate-ccw-btn');
+    var rotateCwBtn  = document.getElementById('dp-image-rotate-cw-btn');
+    if (rotateCcwBtn) {
+      rotateCcwBtn.addEventListener('click', function() {
+        var prev = Object.assign({}, state.imageAdjustments);
+        state.imageAdjustments.rotate90 = (state.imageAdjustments.rotate90 + 3) % 4;
+        var next = Object.assign({}, state.imageAdjustments);
+        core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+        _prevAdjustments = next;
+        applyFilter();
+      });
+    }
+    if (rotateCwBtn) {
+      rotateCwBtn.addEventListener('click', function() {
+        var prev = Object.assign({}, state.imageAdjustments);
+        state.imageAdjustments.rotate90 = (state.imageAdjustments.rotate90 + 1) % 4;
+        var next = Object.assign({}, state.imageAdjustments);
+        core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+        _prevAdjustments = next;
+        applyFilter();
+      });
+    }
+
+    // Auto-contrast: fetch suggested black/white levels from the histogram
+    var autoContrastBtn = document.getElementById('dp-image-autocontrast-btn');
+    if (autoContrastBtn && C.imageAutocontrastUrl) {
+      autoContrastBtn.addEventListener('click', function() {
+        core.withBtn(autoContrastBtn, 'Analysing…', function() {
+          return fetch(C.imageAutocontrastUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': C.csrfToken },
+          })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (!data.ok) { alert(data.error || 'Auto contrast failed.'); return; }
+              var prev = Object.assign({}, state.imageAdjustments);
+              state.imageAdjustments.black = data.black;
+              state.imageAdjustments.white = data.white;
+              var next = Object.assign({}, state.imageAdjustments);
+              core.recordUndo({ type: 'image-adjust', prev: prev, next: next });
+              _prevAdjustments = next;
+              syncSliders();
+              applyFilter();
+            })
+            .catch(function(err) { alert('Auto contrast failed: ' + (err && err.message ? err.message : err)); });
+        });
+      });
+    }
 
     var resetBtn = document.getElementById('dp-image-reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function(e) { e.preventDefault(); resetLocal(); });

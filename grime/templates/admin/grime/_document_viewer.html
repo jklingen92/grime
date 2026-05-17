@@ -181,6 +181,34 @@
         <input id="dp-image-white" type="range" min="1" max="255" step="1" value="255">
         <span id="dp-image-white-val" class="dp-image-val">255</span>
       </div>
+      <div class="dp-image-section-title">Tools</div>
+      <div class="dp-image-btn-group">
+        <button id="dp-image-autocontrast-btn" type="button" title="Set black/white levels to 1% histogram cutoffs">Auto contrast</button>
+        <button id="dp-image-grayscale-btn"    type="button" title="Desaturate to greyscale">Grayscale</button>
+        <button id="dp-image-invert-btn"       type="button" title="Invert colours (negative)">Invert</button>
+        <button id="dp-image-sharpen-btn"      type="button" title="Unsharp mask — applied on save, no live preview">Sharpen</button>
+      </div>
+      <small id="dp-image-sharpen-note" class="dp-image-sharpen-note" style="display:none">Sharpening is applied on save (no live preview)</small>
+      <div class="dp-image-section-title">Threshold / Binarize</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.82em">
+        <input id="dp-image-threshold-enable" type="checkbox">
+        <label for="dp-image-threshold-enable" style="color:#444;cursor:pointer">Enable</label>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-threshold">Level</label>
+        <input id="dp-image-threshold" type="range" min="0" max="255" step="1" value="128" disabled>
+        <span id="dp-image-threshold-val" class="dp-image-val">—</span>
+      </div>
+      <div class="dp-image-section-title">Rotate / Deskew</div>
+      <div class="dp-image-btn-group">
+        <button id="dp-image-rotate-ccw-btn" type="button" title="Rotate 90° counter-clockwise">↺ 90°</button>
+        <button id="dp-image-rotate-cw-btn"  type="button" title="Rotate 90° clockwise">↻ 90°</button>
+      </div>
+      <div class="dp-image-slider-row">
+        <label for="dp-image-rotate-fine">Fine</label>
+        <input id="dp-image-rotate-fine" type="range" min="-5" max="5" step="0.1" value="0">
+        <span id="dp-image-rotate-fine-val" class="dp-image-val">0.0°</span>
+      </div>
       <div id="dp-image-actions">
         <button id="dp-image-reset-btn" type="button">Reset</button>
       </div>
@@ -270,6 +298,16 @@
       <feFuncB id="dp-image-filter-b" type="table" tableValues="0 1"/>
     </feComponentTransfer>
   </filter>
+  <!-- Threshold filter: feColorMatrix desaturates first, then a very steep linear
+       slope acts as a configurable step function.  slope/intercept updated by JS. -->
+  <filter id="dp-threshold-filter" color-interpolation-filters="sRGB">
+    <feColorMatrix type="saturate" values="0"/>
+    <feComponentTransfer>
+      <feFuncR id="dp-threshold-filter-r" type="linear" slope="1000" intercept="-502"/>
+      <feFuncG id="dp-threshold-filter-g" type="linear" slope="1000" intercept="-502"/>
+      <feFuncB id="dp-threshold-filter-b" type="linear" slope="1000" intercept="-502"/>
+    </feComponentTransfer>
+  </filter>
 </svg>
 <script>
 window.VIEWER_CONFIG = {
@@ -293,8 +331,9 @@ window.VIEWER_CONFIG = {
   originalImageUrl:   "{{ original_image_url }}",
   imageHasCorrected:  {% if image_has_corrected %}true{% else %}false{% endif %},
   imageAdjustments:   {{ image_adjustments_json }},
-  imageSaveUrl:       "{{ image_save_url }}",
-  imageResetUrl:      "{{ image_reset_url }}",
+  imageSaveUrl:           "{{ image_save_url }}",
+  imageResetUrl:          "{{ image_reset_url }}",
+  imageAutocontrastUrl:   "{{ image_autocontrast_url }}",
 {% if ocr_record_pk %}
   correctUrl:        "{{ ocr_correct_url }}",
   deleteUrl:         "{{ ocr_delete_url }}",

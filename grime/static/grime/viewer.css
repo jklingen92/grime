@@ -39,6 +39,11 @@
   #dp-image-actions { margin-top: 10px; display: flex; gap: 6px; }
   #dp-image-actions button { padding: 4px 10px; font-size: 0.85em; cursor: pointer; border: 1px solid #bbb; border-radius: 3px; background: #fff; }
   #dp-image-actions button:hover { background: #f0f0f0; }
+  .dp-image-btn-group { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+  .dp-image-btn-group button { padding: 3px 9px; font-size: 0.82em; cursor: pointer; border: 1px solid #bbb; border-radius: 3px; background: #fff; white-space: nowrap; }
+  .dp-image-btn-group button:hover { background: #f0f0f0; }
+  .dp-image-btn-group button.active { background: #d4edff; border-color: #4a9fd4; color: #1a5f8a; }
+  .dp-image-sharpen-note { font-size: 0.75em; color: #888; font-style: italic; }
 
   /* tag list view */
   #dp-tag-list {
