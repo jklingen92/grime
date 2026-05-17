@@ -42,6 +42,7 @@ ocr = ["pytesseract", "opencv-python", "numpy"]
 textract = ["boto3"]
 hf = ["transformers", "torch"]
 viz = ["imageio[ffmpeg]"]
+async = ["celery[redis]"]
 dev = [
     "pytesseract",
     "opencv-python",

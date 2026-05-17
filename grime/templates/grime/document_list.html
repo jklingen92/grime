@@ -13,10 +13,15 @@
     body { background: #f8f8f8; font-size: 13px; }
     #gl-header { background: var(--grime-primary); }
     .btn-grime { background: var(--grime-primary); border-color: var(--grime-primary); color: #fff; }
-    .btn-grime:hover { background: var(--grime-primary-dark); border-color: var(--grime-primary-dark); color: #fff; }
+    .btn-grime:hover,
+    .btn-grime:focus { background: var(--grime-primary-dark); border-color: var(--grime-primary-dark); color: #fff; }
+    .btn-grime:disabled { background: var(--grime-primary); border-color: var(--grime-primary); opacity: .5; }
     .table thead th { background: var(--grime-primary); color: #fff; }
     a { color: var(--grime-primary-dark); }
     a:hover { color: var(--grime-primary); }
+    /* job status cell */
+    .job-cell { min-width: 200px; }
+    .job-error { font-size: 11px; }
   </style>
 </head>
 <body>
@@ -25,7 +30,7 @@
   <h1 class="h6 mb-0 text-white fw-semibold">Documents</h1>
 </header>
 
-<main class="container-lg" style="max-width:900px">
+<main class="container-lg" style="max-width:1100px">
 
   <!-- Upload card -->
   <div class="card mb-4">
@@ -67,29 +72,114 @@
 
   <!-- Document list -->
   <div id="gl-docs">
-    <h2 class="h6 fw-semibold mb-3" style="color:var(--grime-primary)">All documents ({{ documents|length }})</h2>
-    {% if documents %}
+    <h2 class="h6 fw-semibold mb-3" style="color:var(--grime-primary)">All documents ({{ doc_list|length }})</h2>
+    {% if doc_list %}
     <div class="card">
       <div class="table-responsive">
-        <table class="table table-hover table-sm mb-0">
+        <table class="table table-hover table-sm align-middle mb-0">
           <thead>
             <tr>
               <th>Title</th>
               <th>Pages</th>
+              <th>OCR</th>
+              <th>NER</th>
+              <th class="job-cell">Status</th>
             </tr>
           </thead>
           <tbody>
-            {% for doc in documents %}
-            <tr>
+            {% for entry in doc_list %}
+            {% with doc=entry.doc %}
+            <tr data-doc-id="{{ doc.pk }}">
               <td><a href="{% url 'grime:document' doc_pk=doc.pk %}">{{ doc.title }}</a></td>
               <td>
-                {% if doc.page_count %}
-                  {{ doc.page_count }}
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
+                {% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+
+              <!-- OCR split-button -->
+              <td>
+                <div class="btn-group btn-group-sm" data-doc="{{ doc.pk }}" data-job="ocr">
+                  <button type="button" class="btn btn-grime btn-main"
+                          data-new-only="0"
+                          data-url="{% url 'grime:document_jobs_ocr' doc_pk=doc.pk %}">
+                    OCR all
+                  </button>
+                  <button type="button" class="btn btn-grime dropdown-toggle dropdown-toggle-split btn-caret"
+                          data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="visually-hidden">Options</span>
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <button class="dropdown-item"
+                              data-new-only="1"
+                              data-url="{% url 'grime:document_jobs_ocr' doc_pk=doc.pk %}">
+                        New pages only ({{ entry.new_ocr_count }})
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </td>
+
+              <!-- NER split-button: main locked until all pages OCR'd; new-only always available -->
+              <td>
+                <div class="btn-group btn-group-sm" data-doc="{{ doc.pk }}" data-job="ner"
+                     {% if not entry.all_ocr_done %}data-ner-locked="1"{% endif %}>
+                  <button type="button" class="btn btn-grime btn-main"
+                          data-new-only="0"
+                          data-url="{% url 'grime:document_jobs_ner' doc_pk=doc.pk %}"
+                          {% if not entry.all_ocr_done %}disabled title="All pages must be OCR'd first"{% endif %}>
+                    NER all
+                  </button>
+                  <button type="button" class="btn btn-grime dropdown-toggle dropdown-toggle-split btn-caret"
+                          data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="visually-hidden">Options</span>
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <button class="dropdown-item"
+                              data-new-only="1"
+                              data-url="{% url 'grime:document_jobs_ner' doc_pk=doc.pk %}">
+                        New pages only ({{ entry.new_ner_count }})
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </td>
+
+              <!-- Job status cell -->
+              <td class="job-cell job-status-cell" data-doc="{{ doc.pk }}">
+                {% for job in entry.active_jobs %}
+                <div class="mb-1" data-job-id="{{ job.pk }}">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status" style="width:.75rem;height:.75rem;border-width:2px">
+                      <span class="visually-hidden">Running</span>
+                    </div>
+                    <span class="badge {% if job.status == 'running' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                      {{ job.get_job_type_display }} {{ job.status }}
+                    </span>
+                    <button class="btn-close btn-close-sm ms-auto" style="font-size:.6rem" data-cancel="{{ job.pk }}" aria-label="Cancel"></button>
+                  </div>
+                  {% if job.pages_total %}
+                  <div class="progress mt-1" style="height:4px">
+                    <div class="progress-bar bg-primary" role="progressbar"
+                         style="width:{% widthratio job.pages_done job.pages_total 100 %}%"
+                         aria-valuenow="{{ job.pages_done }}" aria-valuemin="0" aria-valuemax="{{ job.pages_total }}">
+                    </div>
+                  </div>
+                  <div class="text-muted" style="font-size:10px">{{ job.pages_done }}/{{ job.pages_total }} pages</div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+                {% for job in entry.recent_jobs %}
+                <div class="d-flex align-items-center gap-1 mb-1" data-job-id="{{ job.pk }}">
+                  <span class="badge {% if job.status == 'complete' %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ job.get_job_type_display }} {{ job.status }}
+                  </span>
+                  <button class="btn-close ms-auto" style="font-size:.6rem" data-dismiss="{{ job.pk }}" aria-label="Dismiss"></button>
+                </div>
+                {% endfor %}
               </td>
             </tr>
+            {% endwith %}
             {% endfor %}
           </tbody>
         </table>
@@ -103,5 +193,175 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
+const STATUS_URL = "{% url 'grime:jobs_status' %}";
+const CANCEL_URL_TPL = "{% url 'grime:job_cancel' job_pk=0 %}".replace("/0/", "/{pk}/");
+const dismissedJobIds = new Set();
+
+const docIds = [...document.querySelectorAll("tr[data-doc-id]")].map(r => r.dataset.docId);
+
+// Main button click → trigger job
+document.addEventListener("click", async e => {
+  const btn = e.target.closest(".btn-main[data-url], .dropdown-item[data-url]");
+  if (!btn || btn.disabled) return;
+
+  const group = btn.closest("[data-doc]");
+  const docId = group.dataset.doc;
+  const jobType = group.dataset.job;
+  const url = btn.dataset.url;
+  const newOnly = btn.dataset.newOnly;
+
+  // Close Bootstrap dropdown if open
+  const toggle = group.querySelector(".dropdown-toggle");
+  if (toggle) bootstrap.Dropdown.getInstance(toggle)?.hide();
+
+  setRowBusy(docId, jobType, true);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
+      body: `new_only=${newOnly}`,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setRowBusy(docId, jobType, false);
+      showRowError(docId, data.error || "Failed to start job");
+    }
+  } catch {
+    setRowBusy(docId, jobType, false);
+    showRowError(docId, "Could not reach server");
+  }
+});
+
+function setRowBusy(docId, jobType, busy) {
+  const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
+  if (!row) return;
+  row.querySelectorAll("[data-job] .btn-main, [data-job] .btn-caret, [data-job] .dropdown-item").forEach(b => b.disabled = busy);
+  if (busy) {
+    const cell = row.querySelector(".job-status-cell");
+    const el = document.createElement("div");
+    el.className = "d-flex align-items-center gap-2 mb-1";
+    el.dataset.pending = "1";
+    el.innerHTML = `
+      <div class="spinner-border spinner-border-sm text-warning" role="status" style="width:.75rem;height:.75rem;border-width:2px"></div>
+      <span class="badge bg-warning text-dark">${jobType.toUpperCase()} pending</span>`;
+    cell.prepend(el);
+  }
+}
+
+function showRowError(docId, msg) {
+  const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
+  if (!row) return;
+  const cell = row.querySelector(".job-status-cell");
+  const el = document.createElement("div");
+  el.className = "text-danger job-error small mb-1";
+  el.textContent = msg;
+  cell.prepend(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+// × dismiss / cancel
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-cancel], [data-dismiss]");
+  if (!btn) return;
+  const jobId = btn.dataset.cancel || btn.dataset.dismiss;
+  dismissedJobIds.add(String(jobId));
+  btn.closest("[data-job-id]")?.remove();
+  if (btn.dataset.cancel) {
+    fetch(CANCEL_URL_TPL.replace("{pk}", jobId), { method: "POST", headers: { "X-CSRFToken": CSRF } });
+  }
+});
+
+// Poll every 3 s
+async function pollJobs() {
+  if (!docIds.length) return;
+  try {
+    const res = await fetch(`${STATUS_URL}?doc_ids=${docIds.join(",")}`);
+    if (!res.ok) return;
+    updateJobDisplay((await res.json()).jobs);
+  } catch {}
+}
+
+function updateJobDisplay(byDoc) {
+  for (const [docId, {active, recent}] of Object.entries(byDoc)) {
+    const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
+    if (!row) continue;
+    const cell = row.querySelector(".job-status-cell");
+
+    cell.querySelectorAll("[data-pending]").forEach(el => el.remove());
+
+    const rendered = new Set([...cell.querySelectorAll("[data-job-id]")].map(el => el.dataset.jobId));
+    const serverActive = new Set(active.map(j => String(j.pk)));
+    const serverRecent = new Set(recent.map(j => String(j.pk)));
+
+    // Update or add active job cards
+    for (const job of active) {
+      const id = String(job.pk);
+      if (dismissedJobIds.has(id)) continue;
+      let card = cell.querySelector(`[data-job-id="${id}"]`);
+      if (!card) {
+        card = document.createElement("div");
+        card.className = "mb-1";
+        card.dataset.jobId = id;
+        cell.prepend(card);
+      }
+      const pct = job.pages_total ? Math.round(job.pages_done / job.pages_total * 100) : 0;
+      const badgeCls = job.status === "running" ? "bg-primary" : "bg-warning text-dark";
+      const progressHtml = job.pages_total ? `
+        <div class="progress mt-1" style="height:4px">
+          <div class="progress-bar bg-primary" role="progressbar" style="width:${pct}%"
+               aria-valuenow="${job.pages_done}" aria-valuemin="0" aria-valuemax="${job.pages_total}"></div>
+        </div>
+        <div class="text-muted" style="font-size:10px">${job.pages_done}/${job.pages_total} pages</div>` : "";
+      card.innerHTML = `
+        <div class="d-flex align-items-center gap-2">
+          <div class="spinner-border spinner-border-sm text-primary" role="status" style="width:.75rem;height:.75rem;border-width:2px">
+            <span class="visually-hidden">Running</span>
+          </div>
+          <span class="badge ${badgeCls}">${job.job_type.toUpperCase()} ${job.status}</span>
+          <button class="btn-close ms-auto" style="font-size:.6rem" data-cancel="${id}" aria-label="Cancel"></button>
+        </div>${progressHtml}`;
+    }
+
+    // Add recent (completed/failed) badges
+    for (const job of recent) {
+      const id = String(job.pk);
+      if (dismissedJobIds.has(id) || cell.querySelector(`[data-job-id="${id}"]`)) continue;
+      const badgeCls = job.status === "complete" ? "bg-success" : "bg-danger";
+      const el = document.createElement("div");
+      el.className = "d-flex align-items-center gap-1 mb-1";
+      el.dataset.jobId = id;
+      el.innerHTML = `<span class="badge ${badgeCls}">${job.job_type.toUpperCase()} ${job.status}</span>
+        <button class="btn-close ms-auto" style="font-size:.6rem" data-dismiss="${id}" aria-label="Dismiss"></button>`;
+      cell.appendChild(el);
+    }
+
+    // Remove pills for jobs no longer tracked
+    for (const id of rendered) {
+      if (!serverActive.has(id) && !serverRecent.has(id) && !dismissedJobIds.has(id)) {
+        cell.querySelector(`[data-job-id="${id}"]`)?.remove();
+      }
+    }
+
+    // Re-enable buttons (respecting NER lock on main button only)
+    const hasActive = active.length > 0;
+    row.querySelectorAll("[data-job]").forEach(group => {
+      const nerLocked = group.dataset.nerLocked === "1";
+      group.querySelectorAll(".btn-main").forEach(b => b.disabled = hasActive || (nerLocked));
+      group.querySelectorAll(".btn-caret, .dropdown-item").forEach(b => b.disabled = hasActive);
+    });
+
+    // Reload after OCR completes to re-evaluate NER lock
+    if (!hasActive) {
+      const ocrDone = recent.some(j => j.job_type === "ocr" && j.status === "complete");
+      if (ocrDone && row.querySelector("[data-ner-locked]")) location.reload();
+    }
+  }
+}
+
+setInterval(pollJobs, 3000);
+pollJobs();
+</script>
 </body>
 </html>

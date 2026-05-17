@@ -45,7 +45,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
 from grime.forms import DocumentUploadForm
-from grime.models import Document, DocumentPage, Tag, Word
+from grime.models import AsyncJob, Document, DocumentPage, Tag, Word
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -997,11 +997,133 @@ def document_list_view(request):
             if doc is not None:
                 return redirect("grime:document", doc_pk=doc.pk)
 
-    documents = (
-        Document.objects.annotate(page_count=Count("pages")).order_by("title")
-    )
+    from grime.models import OCRPass
+
+    documents = Document.objects.annotate(page_count=Count("pages")).order_by("title")
+
+    # For each document, determine if all pages have a completed OCRPass
+    # (used to enable/disable the NER button)
+    doc_list = []
+    for doc in documents:
+        page_ids = list(doc.pages.values_list("pk", flat=True))
+        total_pages = len(page_ids)
+        ocr_done_count = (
+            DocumentPage.objects.filter(
+                document=doc,
+                ocr_passes__status=OCRPass.STATUS_COMPLETE,
+            )
+            .distinct()
+            .count()
+        )
+        all_ocr_done = total_pages > 0 and ocr_done_count >= total_pages
+
+        active_jobs = list(
+            AsyncJob.objects.filter(
+                document=doc,
+                status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
+            ).order_by("created_at")
+        )
+        recent_jobs = list(
+            AsyncJob.objects.filter(
+                document=doc,
+                status__in=[AsyncJob.STATUS_COMPLETE, AsyncJob.STATUS_FAILED],
+            ).order_by("-completed_at")[:2]
+        )
+        doc_list.append({
+            "doc": doc,
+            "all_ocr_done": all_ocr_done,
+            "active_jobs": active_jobs,
+            "recent_jobs": recent_jobs,
+        })
+
     return render(
         request,
         "grime/document_list.html",
-        {"documents": documents, "form": form, "upload_error": upload_error},
+        {"doc_list": doc_list, "form": form, "upload_error": upload_error},
     )
+
+
+# ---------------------------------------------------------------------------
+# Async job endpoints
+# ---------------------------------------------------------------------------
+
+
+@staff_member_required
+@require_POST
+def trigger_ocr_job(request, doc_pk):
+    from grime.tasks import run_ocr_job
+
+    doc = get_object_or_404(Document, pk=doc_pk)
+    new_only = request.POST.get("new_only") == "1"
+
+    job = AsyncJob.objects.create(
+        document=doc,
+        job_type=AsyncJob.JOB_OCR,
+        status=AsyncJob.STATUS_PENDING,
+        new_only=new_only,
+    )
+    result = run_ocr_job.delay(job.pk)
+    job.task_id = result.id
+    job.save(update_fields=["task_id"])
+
+    return JsonResponse({"job_id": job.pk, "status": job.status})
+
+
+@staff_member_required
+@require_POST
+def trigger_ner_job(request, doc_pk):
+    from grime.tasks import run_ner_job
+
+    doc = get_object_or_404(Document, pk=doc_pk)
+    new_only = request.POST.get("new_only") == "1"
+
+    job = AsyncJob.objects.create(
+        document=doc,
+        job_type=AsyncJob.JOB_NER,
+        status=AsyncJob.STATUS_PENDING,
+        new_only=new_only,
+    )
+    result = run_ner_job.delay(job.pk)
+    job.task_id = result.id
+    job.save(update_fields=["task_id"])
+
+    return JsonResponse({"job_id": job.pk, "status": job.status})
+
+
+@staff_member_required
+def jobs_status(request):
+    """Return active + recent job data for a list of document IDs."""
+    raw = request.GET.get("doc_ids", "")
+    try:
+        doc_ids = [int(x) for x in raw.split(",") if x.strip().isdigit()]
+    except ValueError:
+        return JsonResponse({"error": "invalid doc_ids"}, status=400)
+
+    if not doc_ids:
+        return JsonResponse({"jobs": {}})
+
+    active = AsyncJob.objects.filter(
+        document_id__in=doc_ids,
+        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
+    ).values("pk", "document_id", "job_type", "status", "pages_total", "pages_done", "new_only")
+
+    recent = AsyncJob.objects.filter(
+        document_id__in=doc_ids,
+        status__in=[AsyncJob.STATUS_COMPLETE, AsyncJob.STATUS_FAILED],
+    ).order_by("-completed_at").values(
+        "pk", "document_id", "job_type", "status", "pages_total", "pages_done", "error", "completed_at"
+    )[:len(doc_ids) * 4]
+
+    by_doc: dict = {doc_id: {"active": [], "recent": []} for doc_id in doc_ids}
+    for job in active:
+        by_doc[job["document_id"]]["active"].append(dict(job))
+    seen = {}
+    for job in recent:
+        did = job["document_id"]
+        if seen.get(did, 0) < 2:
+            j = dict(job)
+            j["completed_at"] = j["completed_at"].isoformat() if j["completed_at"] else None
+            by_doc[did]["recent"].append(j)
+            seen[did] = seen.get(did, 0) + 1
+
+    return JsonResponse({"jobs": by_doc})

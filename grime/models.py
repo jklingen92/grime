@@ -301,6 +301,58 @@ class Word(models.Model):
         return self.ner_label
 
 
+class AsyncJob(models.Model):
+    """
+    Tracks a background Celery job (OCR or NER) running against a whole Document.
+
+    ``task_id``    — Celery task UUID, set immediately after dispatch
+    ``new_only``   — True = skip pages that already have a pass; False = force all pages
+    ``pages_total`` / ``pages_done`` — populated by the task for progress display
+    """
+
+    JOB_OCR = "ocr"
+    JOB_NER = "ner"
+    JOB_TYPE_CHOICES = [(JOB_OCR, "OCR"), (JOB_NER, "NER")]
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETE = "complete"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETE, "Complete"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    document = models.ForeignKey(
+        Document, on_delete=models.CASCADE, related_name="async_jobs"
+    )
+    job_type = models.CharField(max_length=10, choices=JOB_TYPE_CHOICES)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    task_id = models.CharField(max_length=255, blank=True)
+    new_only = models.BooleanField(default=False)
+    pages_total = models.PositiveIntegerField(default=0)
+    pages_done = models.PositiveIntegerField(default=0)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_job_type_display()} job #{self.pk} ({self.status})"
+
+    @property
+    def progress_label(self) -> str:
+        if self.status == self.STATUS_RUNNING and self.pages_total:
+            return f"{self.pages_done}/{self.pages_total}"
+        return ""
+
+
 class Tag(models.Model):
     """
     A manually drawn rectangle on a Document or DocumentPage image, with a label.

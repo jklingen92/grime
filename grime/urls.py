@@ -14,4 +14,7 @@ urlpatterns = [
         name="document_page",
     ),
     path("pages/", include(viewer.get_viewer_urls())),
+    path("documents/<int:doc_pk>/jobs/ocr/", viewer.trigger_ocr_job, name="document_jobs_ocr"),
+    path("documents/<int:doc_pk>/jobs/ner/", viewer.trigger_ner_job, name="document_jobs_ner"),
+    path("jobs/status/", viewer.jobs_status, name="jobs_status"),
 ]
