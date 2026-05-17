@@ -194,6 +194,14 @@ def _tag_to_dict(tag: Tag) -> dict:
     }
 
 
+_NER_MODEL_LABELS: dict[str, str] = {
+    "general": "General",
+    "historical": "Historical newspapers",
+    "large": "Large (slower, higher accuracy)",
+    "fast": "Fast",
+}
+
+
 def build_viewer_context(page: DocumentPage) -> dict:
     """Build the template context the viewer needs to render and call its endpoints."""
     image_url = page.display_image.url if page.display_image else None
@@ -234,6 +242,13 @@ def build_viewer_context(page: DocumentPage) -> dict:
         )
     )
 
+    from grime.pipeline.ner import DEFAULT_MODEL, MODEL_REGISTRY
+
+    ner_models = [
+        {"key": k, "label": _NER_MODEL_LABELS.get(k, k.capitalize()), "default": k == DEFAULT_MODEL}
+        for k in MODEL_REGISTRY
+    ]
+
     def _url(name: str) -> str:
         return reverse(f"grime:{name}", args=[page.pk])
 
@@ -243,6 +258,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "image_has_corrected": bool(page.corrected_image),
         "image_adjustments_json": _safe_json(page.image_adjustments),
         "image_alt": str(page),
+        "ner_models_json": _safe_json(ner_models),
         "ocr_words_json": _safe_json([_word_to_dict(w) for w in words]),
         "tags_json": _safe_json(tags),
         "citations_json": _safe_json([]),

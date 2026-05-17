@@ -222,20 +222,29 @@ export function createNerModule(core) {
     return core.OCR_WORDS.some(function(w) { return w.ner_label || w.corrected_label; }) ? 'Rerun NER' : 'Run NER';
   }
 
-  // POST a NER rerun request and update word labels in place.
+  function _nerSetRunning(running) {
+    var btn      = document.getElementById('dp-rerun-ner');
+    var caret    = document.getElementById('dp-rerun-ner-caret');
+    var progress = document.getElementById('dp-ner-progress-wrap');
+    if (btn)      { btn.disabled = running; if (!running) btn.textContent = nerBtnLabel(); }
+    if (caret)    { caret.disabled = running; }
+    if (progress) { progress.classList.toggle('visible', running); }
+  }
+
+  // POST a NER rerun request using the currently selected model and update word labels in place.
   function runNer() {
     if (!C.nerRerunUrl) return;
-    var btn = document.getElementById('dp-rerun-ner');
-    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
-    core.postJson(C.nerRerunUrl, '').then(function(data) {
-      if (!data.ok) { if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); } alert(data.error || 'NER failed.'); return; }
+    _nerSetRunning(true);
+    var body = state.nerModel ? 'model=' + encodeURIComponent(state.nerModel) : '';
+    core.postJson(C.nerRerunUrl, body).then(function(data) {
+      _nerSetRunning(false);
+      if (!data.ok) { alert(data.error || 'NER failed.'); return; }
       data.words.forEach(function(w) {
         var word = core.wordById[w.id];
         if (word) { word.ner_label = w.ner_label; word.corrected_label = w.corrected_label; }
       });
       nerBuildEntityList(); core.renderOverlays(); core.updateBadge();
-      if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); }
-    }).catch(function() { if (btn) { btn.disabled = false; btn.textContent = nerBtnLabel(); } });
+    }).catch(function() { _nerSetRunning(false); });
   }
 
   /* ── render ────────────────────────────────────────────────── */
@@ -371,10 +380,52 @@ export function createNerModule(core) {
       h.addEventListener('click', function() { h.parentElement.classList.toggle('collapsed'); });
     });
 
-    var rerunNerBtn = document.getElementById('dp-rerun-ner');
+    // Initialise selected model from config.
+    var defaultModel = C.nerModels && C.nerModels.find(function(m) { return m.default; });
+    state.nerModel = defaultModel ? defaultModel.key : 'general';
+
+    var rerunNerBtn   = document.getElementById('dp-rerun-ner');
+    var rerunNerCaret = document.getElementById('dp-rerun-ner-caret');
+    var rerunNerMenu  = document.getElementById('dp-rerun-ner-menu');
+
     if (rerunNerBtn) {
       rerunNerBtn.textContent = nerBtnLabel();
       rerunNerBtn.addEventListener('click', function(e) { e.preventDefault(); runNer(); });
+    }
+
+    // Populate model menu from VIEWER_CONFIG and wire up the caret.
+    if (rerunNerCaret && rerunNerMenu && C.nerModels && C.nerModels.length) {
+      C.nerModels.forEach(function(m) {
+        var a = document.createElement('a');
+        a.href = '#';
+        a.className = 'dropdown-item' + (m.default ? ' active' : '');
+        a.dataset.nerModel = m.key;
+        a.textContent = m.label;
+        rerunNerMenu.appendChild(a);
+      });
+
+      rerunNerCaret.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopPropagation();
+        rerunNerMenu.classList.toggle('open');
+      });
+
+      rerunNerMenu.addEventListener('click', function(e) {
+        var item = e.target.closest('[data-ner-model]');
+        if (!item) return;
+        e.preventDefault();
+        state.nerModel = item.dataset.nerModel;
+        rerunNerMenu.querySelectorAll('[data-ner-model]').forEach(function(i) {
+          i.classList.toggle('active', i === item);
+          i.setAttribute('aria-current', i === item ? 'true' : 'false');
+        });
+        rerunNerMenu.classList.remove('open');
+        runNer();
+      });
+
+      // Close menu when clicking outside.
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('#dp-ner-split')) rerunNerMenu.classList.remove('open');
+      });
     }
 
     core.registerUndoHandler('ner-correct', function(e, pushInverse) {
