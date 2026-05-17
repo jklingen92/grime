@@ -284,7 +284,7 @@ async function pollJobs() {
 }
 
 function updateJobDisplay(byDoc) {
-  for (const [docId, {active, recent}] of Object.entries(byDoc)) {
+  for (const [docId, {active, recent, all_ocr_done}] of Object.entries(byDoc)) {
     const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
     if (!row) continue;
     const cell = row.querySelector(".job-status-cell");
@@ -344,19 +344,20 @@ function updateJobDisplay(byDoc) {
       }
     }
 
+    // Unlock NER button once all pages are OCR'd (no page reload needed)
+    if (all_ocr_done) {
+      row.querySelectorAll("[data-job='ner'][data-ner-locked]").forEach(g => {
+        delete g.dataset.nerLocked;
+      });
+    }
+
     // Re-enable buttons (respecting NER lock on main button only)
     const hasActive = active.length > 0;
     row.querySelectorAll("[data-job]").forEach(group => {
       const nerLocked = group.dataset.nerLocked === "1";
-      group.querySelectorAll(".btn-main").forEach(b => b.disabled = hasActive || (nerLocked));
+      group.querySelectorAll(".btn-main").forEach(b => b.disabled = hasActive || nerLocked);
       group.querySelectorAll(".btn-caret, .dropdown-item").forEach(b => b.disabled = hasActive);
     });
-
-    // Reload after OCR completes to re-evaluate NER lock
-    if (!hasActive) {
-      const ocrDone = recent.some(j => j.job_type === "ocr" && j.status === "complete");
-      if (ocrDone && row.querySelector("[data-ner-locked]")) location.reload();
-    }
   }
 }
 

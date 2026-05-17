@@ -46,7 +46,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
 from grime.forms import DocumentUploadForm
-from grime.models import AsyncJob, Document, DocumentPage, Tag, Word
+from grime.models import AsyncJob, Document, DocumentPage, OCRPass, Tag, Word
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -998,25 +998,32 @@ def document_list_view(request):
             if doc is not None:
                 return redirect("grime:document", doc_pk=doc.pk)
 
-    from grime.models import OCRPass
-
     documents = Document.objects.annotate(page_count=Count("pages")).order_by("title")
 
     # For each document, determine if all pages have a completed OCRPass
     # (used to enable/disable the NER button)
+    from grime.models import NERPass
+
+    SCHEMA_NAME = "hf-historical-ner"
     doc_list = []
     for doc in documents:
-        page_ids = list(doc.pages.values_list("pk", flat=True))
-        total_pages = len(page_ids)
-        ocr_done_count = (
-            DocumentPage.objects.filter(
-                document=doc,
-                ocr_passes__status=OCRPass.STATUS_COMPLETE,
-            )
+        eligible_pages = doc.pages.exclude(text_source__in=["embedded", "manual"])
+        total_eligible = eligible_pages.count()
+        ocr_done_ids = set(
+            eligible_pages.filter(ocr_passes__status=OCRPass.STATUS_COMPLETE)
             .distinct()
-            .count()
+            .values_list("pk", flat=True)
         )
-        all_ocr_done = total_pages > 0 and ocr_done_count >= total_pages
+        ocr_done_count = len(ocr_done_ids)
+        all_ocr_done = total_eligible == 0 or ocr_done_count >= total_eligible
+        new_ocr_count = total_eligible - ocr_done_count
+
+        all_page_ids = set(doc.pages.values_list("pk", flat=True))
+        nerd_ids = set(
+            NERPass.objects.filter(page__in=all_page_ids, schema_name=SCHEMA_NAME)
+            .values_list("page_id", flat=True)
+        )
+        new_ner_count = len(all_page_ids) - len(nerd_ids)
 
         active_jobs = list(
             AsyncJob.objects.filter(
@@ -1033,6 +1040,8 @@ def document_list_view(request):
         doc_list.append({
             "doc": doc,
             "all_ocr_done": all_ocr_done,
+            "new_ocr_count": max(new_ocr_count, 0),
+            "new_ner_count": max(new_ner_count, 0),
             "active_jobs": active_jobs,
             "recent_jobs": recent_jobs,
         })
@@ -1154,7 +1163,7 @@ def jobs_status(request):
         "pk", "document_id", "job_type", "status", "pages_total", "pages_done", "error", "completed_at"
     )[:len(doc_ids) * 4]
 
-    by_doc: dict = {doc_id: {"active": [], "recent": []} for doc_id in doc_ids}
+    by_doc: dict = {doc_id: {"active": [], "recent": [], "all_ocr_done": False} for doc_id in doc_ids}
     for job in active:
         by_doc[job["document_id"]]["active"].append(dict(job))
     seen: dict = {}
@@ -1165,5 +1174,30 @@ def jobs_status(request):
             j["completed_at"] = j["completed_at"].isoformat() if j["completed_at"] else None
             by_doc[did]["recent"].append(j)
             seen[did] = seen.get(did, 0) + 1
+
+    # Compute all_ocr_done per doc (only OCR-eligible pages count).
+    # Pages with embedded/manual text are skipped by run_page() and never get an OCRPass.
+    eligible_pages = (
+        DocumentPage.objects.filter(document_id__in=doc_ids)
+        .exclude(text_source__in=["embedded", "manual"])
+        .values("document_id")
+        .annotate(total=Count("pk"))
+    )
+    ocr_done_pages = (
+        DocumentPage.objects.filter(
+            document_id__in=doc_ids,
+            ocr_passes__status=OCRPass.STATUS_COMPLETE,
+        )
+        .exclude(text_source__in=["embedded", "manual"])
+        .distinct()
+        .values("document_id")
+        .annotate(done=Count("pk"))
+    )
+    eligible_map = {row["document_id"]: row["total"] for row in eligible_pages}
+    done_map = {row["document_id"]: row["done"] for row in ocr_done_pages}
+    for doc_id in doc_ids:
+        total = eligible_map.get(doc_id, 0)
+        done = done_map.get(doc_id, 0)
+        by_doc[doc_id]["all_ocr_done"] = total == 0 or done >= total
 
     return JsonResponse({"jobs": by_doc})
