@@ -240,6 +240,7 @@ export function createOcrModule(core) {
                '&corrected_text=' + encodeURIComponent(w.corrected_text || '');
     core.postJson(C.addWordUrl, body).then(function(data) {
       if (!data.ok) return;
+      if (w.conf != null) data.word.conf = w.conf;
       core.OCR_WORDS.push(data.word); core.wordById[data.word.id] = data.word;
       core.renderOverlays(); updateTextPanels();
       if (cb) cb(data.word);
@@ -717,6 +718,7 @@ export function createOcrModule(core) {
       var w = core.wordById[e.wordId]; if (!w) return;
       var el = document.querySelector("[data-word-id='" + e.wordId + "']");
       pushInverse({ type: 'ocr-correct', wordId: e.wordId, prev: e.prevText, next: null });
+      w.is_ditto = false;
       postCorrection(w, el, e.prevText, true);
     });
     core.registerUndoHandler('ocr-bulk-ditto', function(e, pushInverse) {
