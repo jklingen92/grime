@@ -64,6 +64,11 @@ exclude = ["demo*"]
 [tool.black]
 target-version = ["py311"]
 
+[dependency-groups]
+dev = [
+    "django-extensions>=4.1",
+]
+
 [tool.setuptools.package-data]
 grime = [
     "templates/**/*.html",
