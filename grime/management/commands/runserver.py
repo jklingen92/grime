@@ -9,7 +9,7 @@ Django already short-circuits getfqdn() for incoming requests
 
 import socketserver
 
-from django.core.management.commands.runserver import Command as BaseCommand
+from django.contrib.staticfiles.management.commands.runserver import Command as BaseCommand
 from django.core.servers.basehttp import WSGIServer
 
 

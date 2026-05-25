@@ -26,9 +26,9 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "grime",
     "django.contrib.staticfiles",
     "django_extensions",
-    "grime",
 ]
 
 MIDDLEWARE = [
