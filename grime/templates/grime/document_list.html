@@ -20,8 +20,6 @@
     .table thead th { background: var(--grime-primary); color: #fff; }
     a { color: var(--grime-primary-dark); }
     a:hover { color: var(--grime-primary); }
-    .slot-name-display { cursor: pointer; border-bottom: 1px dashed #aaa; }
-    .slot-name-input { display: none; }
     .worker-card { min-height: 90px; }
   </style>
 </head>
@@ -49,10 +47,7 @@
         <div class="card worker-card" data-slot="{{ slot.slot_number }}">
           <div class="card-body py-2 px-3">
             <div class="d-flex align-items-center gap-1 mb-2">
-              <small class="text-muted fw-semibold text-uppercase" style="font-size:10px">Worker {{ slot.slot_number }}</small>
-              <span class="slot-name-display ms-1 small" data-slot="{{ slot.slot_number }}">{{ slot.name }}</span>
-              <input class="slot-name-input form-control form-control-sm ms-1" style="max-width:120px;display:none"
-                     data-slot="{{ slot.slot_number }}" value="{{ slot.name }}">
+              <small class="text-muted fw-semibold text-uppercase" style="font-size:10px">{{ slot.name }}</small>
             </div>
             <div class="slot-content text-muted small" data-slot="{{ slot.slot_number }}">Idle</div>
           </div>
@@ -179,51 +174,7 @@ const STATUS_URL = "{% url 'grime:jobs_status' %}";
 const CREATE_URL = "{% url 'grime:job_create' %}";
 const FORM_FIELDS_URL = "{% url 'grime:job_form_fields' %}";
 const CANCEL_URL_TPL = "{% url 'grime:job_cancel' job_pk=0 %}".replace("/0/", "/{pk}/");
-const RENAME_URL_TPL = "{% url 'grime:worker_slot_rename' slot_number=0 %}".replace("/0/", "/{n}/");
 
-// ---------------------------------------------------------------------------
-// Worker slot inline rename
-// ---------------------------------------------------------------------------
-async function saveSlotName(input) {
-  const slot = input.dataset.slot;
-  const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
-  const name = input.value.trim() || display.textContent;
-  input.style.display = "none";
-  display.style.display = "";
-  display.textContent = name;
-  await fetch(RENAME_URL_TPL.replace("{n}", slot), {
-    method: "POST",
-    headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
-    body: `name=${encodeURIComponent(name)}`,
-  });
-}
-
-document.querySelectorAll(".slot-name-display").forEach(el => {
-  // Use mousedown + preventDefault so the input doesn't immediately blur
-  // when the browser processes the click cycle.
-  el.addEventListener("mousedown", e => {
-    e.preventDefault();
-    const slot = el.dataset.slot;
-    const input = document.querySelector(`.slot-name-input[data-slot="${slot}"]`);
-    el.style.display = "none";
-    input.style.display = "";
-    input.focus();
-    input.select();
-  });
-});
-
-document.querySelectorAll(".slot-name-input").forEach(input => {
-  input.addEventListener("blur", () => saveSlotName(input));
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter") input.blur();
-    if (e.key === "Escape") {
-      const slot = input.dataset.slot;
-      const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
-      input.value = display.textContent;
-      input.blur();
-    }
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Add Job modal — dynamic params fragment
