@@ -26,7 +26,7 @@ uv sync --extra dev
 cp .env.example .env  # edit SECRET_KEY and any AWS/broker settings
 
 # Run database migrations
-python manage.py migrate
+python manage.py migrate   # also seeds WorkerSlot rows via post_migrate signal
 
 # Create a superuser for the admin panel
 python manage.py createsuperuser

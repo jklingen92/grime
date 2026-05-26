@@ -98,5 +98,6 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_IGNORE_RESULT = True
 
 # Number of named worker slots. Each slot gets its own Celery queue and process.
-# Update Procfile to match when changing this value, then run seed_worker_slots.
+# WorkerSlot rows are created automatically on migrate via the post_migrate signal.
+# Update Procfile to match when changing this value.
 GRIME_WORKER_SLOTS = env.int("GRIME_WORKER_SLOTS", default=3)
