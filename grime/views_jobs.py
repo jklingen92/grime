@@ -10,7 +10,8 @@ import logging
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Q
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -179,7 +180,7 @@ def rerun_job(request, job_pk):
         job.rerun()
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    return JsonResponse({"job_id": job.pk, "status": job.status})
+    return redirect(request.META.get("HTTP_REFERER") or reverse("grime:jobs_list"))
 
 
 @staff_member_required

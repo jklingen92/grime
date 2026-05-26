@@ -74,8 +74,10 @@ class OCRJobType(JobType):
 
         words_created = 0
         for page in pages:
-            if job.force:
-                Word.objects.filter(page=page).delete()
+            # Always clean up before running — bulk_create uses ignore_conflicts=True
+            # which silently drops words that conflict on (page, line_num, word_num).
+            OCRPass.objects.filter(page=page).delete()
+            Word.objects.filter(page=page).delete()
             run_page(page, engine=engine, force=job.force)
             words_created += Word.objects.filter(page=page).count()
             job.pages_done += 1

@@ -98,11 +98,7 @@ def get_viewer_urls() -> list:
             words_bulk_ditto,
             name="grime_documentpage_viewer_words_bulk_ditto",
         ),
-        path(
-            "<int:page_pk>/viewer/words/rerun-ocr/",
-            words_rerun_ocr,
-            name="grime_documentpage_viewer_words_rerun_ocr",
-        ),
+
         path(
             "<int:page_pk>/viewer/words/rerun-ner/",
             words_rerun_ner,
@@ -277,7 +273,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
-        "ocr_rerun_selection_url": _url("grime_documentpage_viewer_words_rerun_ocr"),
+        "ocr_rerun_selection_url": "",
         "ner_rerun_url": _url("grime_documentpage_viewer_words_rerun_ner"),
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
@@ -810,52 +806,6 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
 
-
-@require_POST
-def words_rerun_ocr(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Re-OCR a Word selection (or the whole page) and return the diff.
-
-    POST params:
-      ``word_pks``  comma-separated Word IDs (empty → re-OCR full page)
-      ``engine``    ``textract`` | ``tesseract`` | omitted (default: Textract
-                    with Tesseract fallback)
-
-    All persistence and engine dispatch happens in
-    :func:`grime.pipeline.run_ocr.rerun_selection`; this endpoint only parses
-    inputs and shapes the JSON response.
-    """
-    try:
-        pks = _parse_word_pks(request.POST.get("word_pks"))
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-
-    engine = (request.POST.get("engine") or "").lower() or None
-    if engine not in (None, "textract", "tesseract"):
-        return JsonResponse({"error": f"Unknown engine: {engine}"}, status=400)
-
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    if not page.image:
-        return JsonResponse({"error": "Page has no image to re-OCR"}, status=400)
-
-    from grime.pipeline.ocr import rerun_selection
-
-    try:
-        result = rerun_selection(page, pks, engine=engine)
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    except Exception as exc:
-        return JsonResponse({"error": f"OCR failed: {exc}"}, status=500)
-
-    return JsonResponse(
-        {
-            "ok": True,
-            "deleted_ids": result["deleted_ids"],
-            "new_words": [_word_to_dict(w) for w in result["new_words"]],
-            "updated": result["updated"],
-        }
-    )
 
 
 @require_POST

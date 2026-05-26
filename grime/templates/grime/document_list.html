@@ -184,8 +184,25 @@ const RENAME_URL_TPL = "{% url 'grime:worker_slot_rename' slot_number=0 %}".repl
 // ---------------------------------------------------------------------------
 // Worker slot inline rename
 // ---------------------------------------------------------------------------
+async function saveSlotName(input) {
+  const slot = input.dataset.slot;
+  const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
+  const name = input.value.trim() || display.textContent;
+  input.style.display = "none";
+  display.style.display = "";
+  display.textContent = name;
+  await fetch(RENAME_URL_TPL.replace("{n}", slot), {
+    method: "POST",
+    headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
+    body: `name=${encodeURIComponent(name)}`,
+  });
+}
+
 document.querySelectorAll(".slot-name-display").forEach(el => {
-  el.addEventListener("click", () => {
+  // Use mousedown + preventDefault so the input doesn't immediately blur
+  // when the browser processes the click cycle.
+  el.addEventListener("mousedown", e => {
+    e.preventDefault();
     const slot = el.dataset.slot;
     const input = document.querySelector(`.slot-name-input[data-slot="${slot}"]`);
     el.style.display = "none";
@@ -196,21 +213,16 @@ document.querySelectorAll(".slot-name-display").forEach(el => {
 });
 
 document.querySelectorAll(".slot-name-input").forEach(input => {
-  const finish = async () => {
-    const slot = input.dataset.slot;
-    const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
-    const name = input.value.trim() || display.textContent;
-    input.style.display = "none";
-    display.style.display = "";
-    display.textContent = name;
-    await fetch(RENAME_URL_TPL.replace("{n}", slot), {
-      method: "POST",
-      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
-      body: `name=${encodeURIComponent(name)}`,
-    });
-  };
-  input.addEventListener("blur", finish);
-  input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+  input.addEventListener("blur", () => saveSlotName(input));
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") input.blur();
+    if (e.key === "Escape") {
+      const slot = input.dataset.slot;
+      const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
+      input.value = display.textContent;
+      input.blur();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
