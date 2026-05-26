@@ -9,6 +9,7 @@
     :root {
       --grime-primary:      #417690;
       --grime-primary-dark: #205067;
+      --bs-primary-rgb: 65, 118, 144;
     }
     body { background: #f8f8f8; font-size: 13px; }
     #gl-header { background: var(--grime-primary); }
@@ -19,9 +20,9 @@
     .table thead th { background: var(--grime-primary); color: #fff; }
     a { color: var(--grime-primary-dark); }
     a:hover { color: var(--grime-primary); }
-    /* job status cell */
-    .job-cell { min-width: 200px; }
-    .job-error { font-size: 11px; }
+    .slot-name-display { cursor: pointer; border-bottom: 1px dashed #aaa; }
+    .slot-name-input { display: none; }
+    .worker-card { min-height: 90px; }
   </style>
 </head>
 <body>
@@ -31,6 +32,37 @@
 </header>
 
 <main class="container-lg" style="max-width:1100px">
+
+  <!-- Workers panel -->
+  <div class="mb-4">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="fw-semibold" style="color:var(--grime-primary)">Workers</span>
+      <span class="badge bg-secondary" id="pending-count-badge">0 pending</span>
+      <a href="{% url 'grime:jobs_list' %}" class="btn btn-sm btn-outline-secondary ms-1">All jobs</a>
+      <button class="btn btn-sm btn-grime ms-auto" data-bs-toggle="modal" data-bs-target="#addJobModal">
+        + Add Job
+      </button>
+    </div>
+    <div class="row g-3" id="workers-panel">
+      {% for slot in worker_slots %}
+      <div class="col-md-4">
+        <div class="card worker-card" data-slot="{{ slot.slot_number }}">
+          <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center gap-1 mb-2">
+              <small class="text-muted fw-semibold text-uppercase" style="font-size:10px">Worker {{ slot.slot_number }}</small>
+              <span class="slot-name-display ms-1 small" data-slot="{{ slot.slot_number }}">{{ slot.name }}</span>
+              <input class="slot-name-input form-control form-control-sm ms-1" style="max-width:120px;display:none"
+                     data-slot="{{ slot.slot_number }}" value="{{ slot.name }}">
+            </div>
+            <div class="slot-content text-muted small" data-slot="{{ slot.slot_number }}">Idle</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="col-12"><p class="text-muted small">No worker slots configured. Set <code>GRIME_WORKER_SLOTS</code> and run <code>seed_worker_slots</code>.</p></div>
+      {% endfor %}
+    </div>
+  </div>
 
   <!-- Upload card -->
   <div class="card mb-4">
@@ -47,9 +79,7 @@
           <label for="{{ form.pdf_file.id_for_label }}" class="form-label fw-semibold">{{ form.pdf_file.label }}</label>
           {{ form.pdf_file }}
           {% if form.pdf_file.errors %}
-            {% for err in form.pdf_file.errors %}
-            <div class="text-danger small mt-1">{{ err }}</div>
-            {% endfor %}
+            {% for err in form.pdf_file.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
           {% else %}
             <div class="form-text">{{ form.pdf_file.help_text }}</div>
           {% endif %}
@@ -58,9 +88,7 @@
           <label for="{{ form.title.id_for_label }}" class="form-label fw-semibold">{{ form.title.label }}</label>
           {{ form.title }}
           {% if form.title.errors %}
-            {% for err in form.title.errors %}
-            <div class="text-danger small mt-1">{{ err }}</div>
-            {% endfor %}
+            {% for err in form.title.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
           {% else %}
             <div class="form-text">{{ form.title.help_text }}</div>
           {% endif %}
@@ -81,103 +109,14 @@
             <tr>
               <th>Title</th>
               <th>Pages</th>
-              <th>OCR</th>
-              <th>NER</th>
-              <th class="job-cell">Status</th>
             </tr>
           </thead>
           <tbody>
             {% for entry in doc_list %}
             {% with doc=entry.doc %}
-            <tr data-doc-id="{{ doc.pk }}">
+            <tr>
               <td><a href="{% url 'grime:document' doc_pk=doc.pk %}">{{ doc.title }}</a></td>
-              <td>
-                {% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}
-              </td>
-
-              <!-- OCR split-button -->
-              <td>
-                <div class="btn-group btn-group-sm" data-doc="{{ doc.pk }}" data-job="ocr">
-                  <button type="button" class="btn btn-grime btn-main"
-                          data-new-only="0"
-                          data-url="{% url 'grime:document_jobs_ocr' doc_pk=doc.pk %}">
-                    OCR all
-                  </button>
-                  <button type="button" class="btn btn-grime dropdown-toggle dropdown-toggle-split btn-caret"
-                          data-bs-toggle="dropdown" aria-expanded="false">
-                    <span class="visually-hidden">Options</span>
-                  </button>
-                  <ul class="dropdown-menu">
-                    <li>
-                      <button class="dropdown-item"
-                              data-new-only="1"
-                              data-url="{% url 'grime:document_jobs_ocr' doc_pk=doc.pk %}">
-                        New pages only ({{ entry.new_ocr_count }})
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              </td>
-
-              <!-- NER split-button: main locked until all pages OCR'd; new-only always available -->
-              <td>
-                <div class="btn-group btn-group-sm" data-doc="{{ doc.pk }}" data-job="ner"
-                     {% if not entry.all_ocr_done %}data-ner-locked="1"{% endif %}>
-                  <button type="button" class="btn btn-grime btn-main"
-                          data-new-only="0"
-                          data-url="{% url 'grime:document_jobs_ner' doc_pk=doc.pk %}"
-                          {% if not entry.all_ocr_done %}disabled title="All pages must be OCR'd first"{% endif %}>
-                    NER all
-                  </button>
-                  <button type="button" class="btn btn-grime dropdown-toggle dropdown-toggle-split btn-caret"
-                          data-bs-toggle="dropdown" aria-expanded="false">
-                    <span class="visually-hidden">Options</span>
-                  </button>
-                  <ul class="dropdown-menu">
-                    <li>
-                      <button class="dropdown-item"
-                              data-new-only="1"
-                              data-url="{% url 'grime:document_jobs_ner' doc_pk=doc.pk %}">
-                        New pages only ({{ entry.new_ner_count }})
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              </td>
-
-              <!-- Job status cell -->
-              <td class="job-cell job-status-cell" data-doc="{{ doc.pk }}">
-                {% for job in entry.active_jobs %}
-                <div class="mb-1" data-job-id="{{ job.pk }}">
-                  <div class="d-flex align-items-center gap-2">
-                    <div class="spinner-border spinner-border-sm text-primary" role="status" style="width:.75rem;height:.75rem;border-width:2px">
-                      <span class="visually-hidden">Running</span>
-                    </div>
-                    <span class="badge {% if job.status == 'running' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-                      {{ job.get_job_type_display }} {{ job.status }}
-                    </span>
-                    <button class="btn-close btn-close-sm ms-auto" style="font-size:.6rem" data-cancel="{{ job.pk }}" aria-label="Cancel"></button>
-                  </div>
-                  {% if job.pages_total %}
-                  <div class="progress mt-1" style="height:4px">
-                    <div class="progress-bar bg-primary" role="progressbar"
-                         style="width:{% widthratio job.pages_done job.pages_total 100 %}%"
-                         aria-valuenow="{{ job.pages_done }}" aria-valuemin="0" aria-valuemax="{{ job.pages_total }}">
-                    </div>
-                  </div>
-                  <div class="text-muted" style="font-size:10px">{{ job.pages_done }}/{{ job.pages_total }} pages</div>
-                  {% endif %}
-                </div>
-                {% endfor %}
-                {% for job in entry.recent_jobs %}
-                <div class="d-flex align-items-center gap-1 mb-1" data-job-id="{{ job.pk }}">
-                  <span class="badge {% if job.status == 'complete' %}bg-success{% else %}bg-danger{% endif %}">
-                    {{ job.get_job_type_display }} {{ job.status }}
-                  </span>
-                  <button class="btn-close ms-auto" style="font-size:.6rem" data-dismiss="{{ job.pk }}" aria-label="Dismiss"></button>
-                </div>
-                {% endfor %}
-              </td>
+              <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             {% endwith %}
             {% endfor %}
@@ -192,172 +131,192 @@
 
 </main>
 
+<!-- Add Job modal -->
+<div class="modal fade" id="addJobModal" tabindex="-1" aria-labelledby="addJobModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title h6" id="addJobModalLabel">Add Job</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="job-create-error" class="alert alert-danger py-2 d-none"></div>
+        <form id="add-job-form">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Job type</label>
+            {{ job_form.job_type }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Document</label>
+            {{ job_form.document }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Worker</label>
+            {{ job_form.worker_slot }}
+          </div>
+          <div class="mb-3 form-check">
+            {{ job_form.force }}
+            <label class="form-check-label">{{ job_form.force.label }}</label>
+          </div>
+          <div id="job-form-fields">
+            <!-- Populated via AJAX on job type change -->
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-grime" id="submit-job-btn">Start job</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 <script>
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
 const STATUS_URL = "{% url 'grime:jobs_status' %}";
+const CREATE_URL = "{% url 'grime:job_create' %}";
+const FORM_FIELDS_URL = "{% url 'grime:job_form_fields' %}";
 const CANCEL_URL_TPL = "{% url 'grime:job_cancel' job_pk=0 %}".replace("/0/", "/{pk}/");
-const dismissedJobIds = new Set();
+const RENAME_URL_TPL = "{% url 'grime:worker_slot_rename' slot_number=0 %}".replace("/0/", "/{n}/");
 
-const docIds = [...document.querySelectorAll("tr[data-doc-id]")].map(r => r.dataset.docId);
+// ---------------------------------------------------------------------------
+// Worker slot inline rename
+// ---------------------------------------------------------------------------
+document.querySelectorAll(".slot-name-display").forEach(el => {
+  el.addEventListener("click", () => {
+    const slot = el.dataset.slot;
+    const input = document.querySelector(`.slot-name-input[data-slot="${slot}"]`);
+    el.style.display = "none";
+    input.style.display = "";
+    input.focus();
+    input.select();
+  });
+});
 
-// Main button click → trigger job
-document.addEventListener("click", async e => {
-  const btn = e.target.closest(".btn-main[data-url], .dropdown-item[data-url]");
-  if (!btn || btn.disabled) return;
-
-  const group = btn.closest("[data-doc]");
-  const docId = group.dataset.doc;
-  const jobType = group.dataset.job;
-  const url = btn.dataset.url;
-  const newOnly = btn.dataset.newOnly;
-
-  // Close Bootstrap dropdown if open
-  const toggle = group.querySelector(".dropdown-toggle");
-  if (toggle) bootstrap.Dropdown.getInstance(toggle)?.hide();
-
-  setRowBusy(docId, jobType, true);
-  try {
-    const res = await fetch(url, {
+document.querySelectorAll(".slot-name-input").forEach(input => {
+  const finish = async () => {
+    const slot = input.dataset.slot;
+    const display = document.querySelector(`.slot-name-display[data-slot="${slot}"]`);
+    const name = input.value.trim() || display.textContent;
+    input.style.display = "none";
+    display.style.display = "";
+    display.textContent = name;
+    await fetch(RENAME_URL_TPL.replace("{n}", slot), {
       method: "POST",
       headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
-      body: `new_only=${newOnly}`,
+      body: `name=${encodeURIComponent(name)}`,
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setRowBusy(docId, jobType, false);
-      showRowError(docId, data.error || "Failed to start job");
+  };
+  input.addEventListener("blur", finish);
+  input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+});
+
+// ---------------------------------------------------------------------------
+// Add Job modal — dynamic params fragment
+// ---------------------------------------------------------------------------
+async function loadJobFormFields(jobType) {
+  const container = document.getElementById("job-form-fields");
+  if (!jobType) { container.innerHTML = ""; return; }
+  try {
+    const res = await fetch(`${FORM_FIELDS_URL}?type=${encodeURIComponent(jobType)}`);
+    container.innerHTML = res.ok ? await res.text() : "";
+  } catch { container.innerHTML = ""; }
+}
+
+document.getElementById("id_job_type")?.addEventListener("change", e => {
+  loadJobFormFields(e.target.value);
+});
+
+// Load fields for the default selection on modal open
+document.getElementById("addJobModal").addEventListener("show.bs.modal", () => {
+  const sel = document.getElementById("id_job_type");
+  if (sel) loadJobFormFields(sel.value);
+});
+
+document.getElementById("submit-job-btn").addEventListener("click", async () => {
+  const errBox = document.getElementById("job-create-error");
+  errBox.classList.add("d-none");
+  const form = document.getElementById("add-job-form");
+  const data = new FormData(form);
+  try {
+    const res = await fetch(CREATE_URL, {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF },
+      body: new URLSearchParams(data),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      bootstrap.Modal.getInstance(document.getElementById("addJobModal")).hide();
+    } else {
+      errBox.textContent = json.error || "Failed to start job";
+      errBox.classList.remove("d-none");
     }
   } catch {
-    setRowBusy(docId, jobType, false);
-    showRowError(docId, "Could not reach server");
+    errBox.textContent = "Could not reach server";
+    errBox.classList.remove("d-none");
   }
 });
 
-function setRowBusy(docId, jobType, busy) {
-  const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
-  if (!row) return;
-  row.querySelectorAll("[data-job] .btn-main, [data-job] .btn-caret, [data-job] .dropdown-item").forEach(b => b.disabled = busy);
-  if (busy) {
-    const cell = row.querySelector(".job-status-cell");
-    const el = document.createElement("div");
-    el.className = "d-flex align-items-center gap-2 mb-1";
-    el.dataset.pending = "1";
-    el.innerHTML = `
-      <div class="spinner-border spinner-border-sm text-warning" role="status" style="width:.75rem;height:.75rem;border-width:2px"></div>
-      <span class="badge bg-warning text-dark">${jobType.toUpperCase()} pending</span>`;
-    cell.prepend(el);
-  }
-}
-
-function showRowError(docId, msg) {
-  const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
-  if (!row) return;
-  const cell = row.querySelector(".job-status-cell");
-  const el = document.createElement("div");
-  el.className = "text-danger job-error small mb-1";
-  el.textContent = msg;
-  cell.prepend(el);
-  setTimeout(() => el.remove(), 8000);
-}
-
-// × dismiss / cancel
+// ---------------------------------------------------------------------------
+// Cancel job
+// ---------------------------------------------------------------------------
 document.addEventListener("click", e => {
-  const btn = e.target.closest("[data-cancel], [data-dismiss]");
+  const btn = e.target.closest("[data-cancel-job]");
   if (!btn) return;
-  const jobId = btn.dataset.cancel || btn.dataset.dismiss;
-  dismissedJobIds.add(String(jobId));
-  btn.closest("[data-job-id]")?.remove();
-  if (btn.dataset.cancel) {
-    fetch(CANCEL_URL_TPL.replace("{pk}", jobId), { method: "POST", headers: { "X-CSRFToken": CSRF } });
-  }
+  fetch(CANCEL_URL_TPL.replace("{pk}", btn.dataset.cancelJob), {
+    method: "POST", headers: { "X-CSRFToken": CSRF },
+  });
+  btn.closest("[data-job-card]")?.remove();
 });
 
-// Poll every 3 s
+// ---------------------------------------------------------------------------
+// Poll jobs_status every 3 s
+// ---------------------------------------------------------------------------
 async function pollJobs() {
-  if (!docIds.length) return;
   try {
-    const res = await fetch(`${STATUS_URL}?doc_ids=${docIds.join(",")}`);
+    const res = await fetch(STATUS_URL);
     if (!res.ok) return;
-    updateJobDisplay((await res.json()).jobs);
+    const data = await res.json();
+    updateWorkersPanel(data.slots || []);
+    updatePendingBadge(data.pending_count || 0);
   } catch {}
 }
 
-function updateJobDisplay(byDoc) {
-  for (const [docId, {active, recent, all_ocr_done}] of Object.entries(byDoc)) {
-    const row = document.querySelector(`tr[data-doc-id="${docId}"]`);
-    if (!row) continue;
-    const cell = row.querySelector(".job-status-cell");
+function updatePendingBadge(count) {
+  const el = document.getElementById("pending-count-badge");
+  if (el) el.textContent = `${count} pending`;
+}
 
-    cell.querySelectorAll("[data-pending]").forEach(el => el.remove());
+function updateWorkersPanel(slots) {
+  for (const slot of slots) {
+    const content = document.querySelector(`.slot-content[data-slot="${slot.slot_number}"]`);
+    if (!content) continue;
 
-    const rendered = new Set([...cell.querySelectorAll("[data-job-id]")].map(el => el.dataset.jobId));
-    const serverActive = new Set(active.map(j => String(j.pk)));
-    const serverRecent = new Set(recent.map(j => String(j.pk)));
-
-    // Update or add active job cards
-    for (const job of active) {
-      const id = String(job.pk);
-      if (dismissedJobIds.has(id)) continue;
-      let card = cell.querySelector(`[data-job-id="${id}"]`);
-      if (!card) {
-        card = document.createElement("div");
-        card.className = "mb-1";
-        card.dataset.jobId = id;
-        cell.prepend(card);
-      }
-      const pct = job.pages_total ? Math.round(job.pages_done / job.pages_total * 100) : 0;
-      const badgeCls = job.status === "running" ? "bg-primary" : "bg-warning text-dark";
-      const progressHtml = job.pages_total ? `
-        <div class="progress mt-1" style="height:4px">
-          <div class="progress-bar bg-primary" role="progressbar" style="width:${pct}%"
-               aria-valuenow="${job.pages_done}" aria-valuemin="0" aria-valuemax="${job.pages_total}"></div>
+    if (!slot.job) {
+      content.innerHTML = `<span class="text-muted">Idle</span>`;
+      continue;
+    }
+    const j = slot.job;
+    const pct = j.pages_total ? Math.round(j.pages_done / j.pages_total * 100) : 0;
+    const badgeCls = j.status === "running" ? "bg-primary" : "bg-warning text-dark";
+    const progressHtml = j.pages_total ? `
+      <div class="progress mt-1" style="height:4px">
+        <div class="progress-bar" role="progressbar" style="width:${pct}%"
+             aria-valuenow="${j.pages_done}" aria-valuemin="0" aria-valuemax="${j.pages_total}"></div>
+      </div>
+      <div class="text-muted" style="font-size:10px">${j.pages_done}/${j.pages_total} pages</div>` : "";
+    content.innerHTML = `
+      <div class="d-flex align-items-center gap-2" data-job-card>
+        <div class="spinner-border spinner-border-sm text-primary" role="status" style="width:.7rem;height:.7rem;border-width:2px">
+          <span class="visually-hidden">Running</span>
         </div>
-        <div class="text-muted" style="font-size:10px">${job.pages_done}/${job.pages_total} pages</div>` : "";
-      card.innerHTML = `
-        <div class="d-flex align-items-center gap-2">
-          <div class="spinner-border spinner-border-sm text-primary" role="status" style="width:.75rem;height:.75rem;border-width:2px">
-            <span class="visually-hidden">Running</span>
-          </div>
-          <span class="badge ${badgeCls}">${job.job_type.toUpperCase()} ${job.status}</span>
-          <button class="btn-close ms-auto" style="font-size:.6rem" data-cancel="${id}" aria-label="Cancel"></button>
-        </div>${progressHtml}`;
-    }
-
-    // Add recent (completed/failed) badges
-    for (const job of recent) {
-      const id = String(job.pk);
-      if (dismissedJobIds.has(id) || cell.querySelector(`[data-job-id="${id}"]`)) continue;
-      const badgeCls = job.status === "complete" ? "bg-success" : "bg-danger";
-      const el = document.createElement("div");
-      el.className = "d-flex align-items-center gap-1 mb-1";
-      el.dataset.jobId = id;
-      el.innerHTML = `<span class="badge ${badgeCls}">${job.job_type.toUpperCase()} ${job.status}</span>
-        <button class="btn-close ms-auto" style="font-size:.6rem" data-dismiss="${id}" aria-label="Dismiss"></button>`;
-      cell.appendChild(el);
-    }
-
-    // Remove pills for jobs no longer tracked
-    for (const id of rendered) {
-      if (!serverActive.has(id) && !serverRecent.has(id) && !dismissedJobIds.has(id)) {
-        cell.querySelector(`[data-job-id="${id}"]`)?.remove();
-      }
-    }
-
-    // Unlock NER button once all pages are OCR'd (no page reload needed)
-    if (all_ocr_done) {
-      row.querySelectorAll("[data-job='ner'][data-ner-locked]").forEach(g => {
-        delete g.dataset.nerLocked;
-      });
-    }
-
-    // Re-enable buttons (respecting NER lock on main button only)
-    const hasActive = active.length > 0;
-    row.querySelectorAll("[data-job]").forEach(group => {
-      const nerLocked = group.dataset.nerLocked === "1";
-      group.querySelectorAll(".btn-main").forEach(b => b.disabled = hasActive || nerLocked);
-      group.querySelectorAll(".btn-caret, .dropdown-item").forEach(b => b.disabled = hasActive);
-    });
+        <span class="badge ${badgeCls}">${j.job_type_label} ${j.status}</span>
+        <span class="text-truncate small flex-grow-1" title="${j.document}">${j.document}</span>
+        <button class="btn-close ms-auto" style="font-size:.55rem"
+                data-cancel-job="${j.pk}" aria-label="Cancel"></button>
+      </div>${progressHtml}`;
   }
 }
 

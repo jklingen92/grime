@@ -1,4 +1,4 @@
-# Maintenance Guide
+# Developer Guide
 
 ## Releasing to PyPI
 
@@ -172,3 +172,76 @@ in sync:
 - [Python Packaging Guide](https://packaging.python.org/)
 - [Twine Documentation](https://twine.readthedocs.io/)
 - [PyPI Help](https://pypi.org/help/)
+
+---
+
+## Adding a job type
+
+All job types are defined in `grime/job_types.py`. Adding a new type requires only
+changes to that file (plus an optional template fragment for its params form).
+
+### 1. Subclass `JobType`
+
+```python
+class MyJobType(JobType):
+    key = "myjob"
+    label = "My Job"
+    params_form_class = MyJobParamsForm  # or None if no extra params
+
+    def run(self, job) -> None:
+        # Core processing logic.
+        # - Update job.pages_done after each page and call job.save() — updated_at
+        #   acts as a heartbeat so the stale-job detector knows the worker is alive.
+        # - Write output stats to job.result dict, e.g. job.result['items_created'] = n.
+        # - Read job.force (True = reprocess all pages, False = skip already-done pages).
+        # - Read type-specific params from job.params, e.g. job.params.get('threshold').
+        pass
+
+    def clean(self, job) -> None:
+        # Revert all DB changes this job type makes. Called before rerun().
+        # Example: delete related records for every page of job.document.
+        pass
+
+    def results_summary(self, job) -> str:
+        n = job.result.get('items_created', 0)
+        return f"Processed {job.pages_done} pages, {n} items created"
+```
+
+### 2. Register it
+
+Add the new class to `JOB_TYPES` at the bottom of `grime/job_types.py`:
+
+```python
+JOB_TYPES: dict[str, JobType] = {
+    t.key: t() for t in [OCRJobType, NERJobType, MyJobType]
+}
+```
+
+That's it — the job type now appears in the "Add Job" modal and the jobs list.
+
+### 3. Add a params form (optional)
+
+If your job needs user-configurable inputs, define a plain `forms.Form`:
+
+```python
+class MyJobParamsForm(forms.Form):
+    threshold = forms.FloatField(initial=0.8, min_value=0.0, max_value=1.0)
+```
+
+Set `params_form_class = MyJobParamsForm` on your subclass. The form is rendered in the
+"Add Job" modal when this job type is selected, and its validated data is stored in
+`job.params`. Access it in `run()` via `job.params['threshold']`.
+
+### 4. Add the params template fragment
+
+Create `grime/templates/grime/job_form_fields_myjob.html` (copy
+`job_form_fields_ocr.html` as a starting point). The fragment is fetched via AJAX when
+the user selects your job type in the modal.
+
+If `params_form_class = None`, no fragment is needed — the modal shows no extra fields.
+
+### No migrations needed
+
+`AsyncJob` stores type-specific inputs in `params` (JSONField) and outputs in `result`
+(JSONField). New job types don't require schema changes unless you need new indexed/
+queryable fields on the base model.

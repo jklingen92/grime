@@ -1,7 +1,7 @@
 """
 Grime data models.
 
-The schema is six concrete tables:
+The schema is eight concrete tables:
 
     Document        — a standalone document (PDF, scanned booklet, ledger, etc.)
     DocumentPage    — one page or chunk of a Document; the OCR unit
@@ -11,15 +11,20 @@ The schema is six concrete tables:
                       label and word-level subcomponents
     OCRPass         — audit record for one OCR run on a DocumentPage
     NERPass         — audit record for one NER run on a DocumentPage
+    WorkerSlot      — a named Celery worker slot with its own queue
+    AsyncJob        — a background job (OCR, NER, …) assigned to a WorkerSlot
 
 Words hang off DocumentPage directly. OCRPass and NERPass are lightweight audit
 logs of run parameters; they're not parents of Word.
 """
 
+from functools import cached_property
+
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.utils import timezone
 
 TEXT_SOURCE_CHOICES = [
     ("ocr", "OCR"),
@@ -301,18 +306,34 @@ class Word(models.Model):
         return self.ner_label
 
 
+class WorkerSlot(models.Model):
+    """A named Celery worker slot. Each slot has its own queue and process."""
+
+    slot_number = models.PositiveSmallIntegerField(unique=True)
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["slot_number"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def queue_name(self) -> str:
+        return f"slot_{self.slot_number}"
+
+
 class AsyncJob(models.Model):
     """
-    Tracks a background Celery job (OCR or NER) running against a whole Document.
+    A background job assigned to a WorkerSlot.
 
-    ``task_id``    — Celery task UUID, set immediately after dispatch
-    ``new_only``   — True = skip pages that already have a pass; False = force all pages
-    ``pages_total`` / ``pages_done`` — populated by the task for progress display
+    ``job_type``   — key into JOB_TYPES registry (grime/job_types.py)
+    ``force``      — True = reprocess all pages; False = skip already-done pages
+    ``params``     — type-specific input params (validated by handler's params_form_class)
+    ``result``     — type-specific output stats populated on completion
+    ``pages_total`` / ``pages_done`` — progress tracking; updated per page by the task
+    ``updated_at`` — auto-updated on every save; acts as a heartbeat for stale detection
     """
-
-    JOB_OCR = "ocr"
-    JOB_NER = "ner"
-    JOB_TYPE_CHOICES = [(JOB_OCR, "OCR"), (JOB_NER, "NER")]
 
     STATUS_PENDING = "pending"
     STATUS_RUNNING = "running"
@@ -328,30 +349,67 @@ class AsyncJob(models.Model):
     document = models.ForeignKey(
         Document, on_delete=models.CASCADE, related_name="async_jobs"
     )
-    job_type = models.CharField(max_length=10, choices=JOB_TYPE_CHOICES)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    worker_slot = models.ForeignKey(
+        WorkerSlot, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="jobs",
     )
+    job_type = models.CharField(max_length=20)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    force = models.BooleanField(default=False)
     task_id = models.CharField(max_length=255, blank=True)
-    new_only = models.BooleanField(default=False)
+    error = models.TextField(blank=True)
+    params = models.JSONField(default=dict)
+    result = models.JSONField(default=dict)
     pages_total = models.PositiveIntegerField(default=0)
     pages_done = models.PositiveIntegerField(default=0)
-    error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.get_job_type_display()} job #{self.pk} ({self.status})"
+        return f"{self.job_type.upper()} job #{self.pk} ({self.status})"
 
-    @property
-    def progress_label(self) -> str:
-        if self.status == self.STATUS_RUNNING and self.pages_total:
-            return f"{self.pages_done}/{self.pages_total}"
-        return ""
+    @cached_property
+    def handler(self):
+        from grime.job_types import JOB_TYPES
+        return JOB_TYPES[self.job_type]
+
+    def elapsed_time(self):
+        if not self.started_at:
+            return None
+        end = self.completed_at or timezone.now()
+        return end - self.started_at
+
+    def progress(self) -> dict:
+        return self.handler.progress(self)
+
+    def results_summary(self) -> str:
+        return self.handler.results_summary(self)
+
+    def clean_job(self) -> None:
+        self.handler.clean(self)
+
+    def rerun(self) -> None:
+        if self.status == self.STATUS_RUNNING:
+            raise ValueError("Cannot rerun a job that is currently running")
+        self.clean_job()
+        self.status = self.STATUS_PENDING
+        self.task_id = ""
+        self.error = ""
+        self.started_at = None
+        self.completed_at = None
+        self.pages_done = 0
+        self.pages_total = 0
+        self.result = {}
+        # clear cached handler so it isn't stale after field changes
+        self.__dict__.pop("handler", None)
+        self.save()
+        from grime.views_jobs import dispatch_job
+        dispatch_job(self)
 
 
 class Tag(models.Model):

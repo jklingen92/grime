@@ -28,7 +28,7 @@ Word ops are scoped to the page in the URL — the view rejects requests
 that try to touch a Word belonging to a different page.
 """
 
-import datetime
+
 import io
 import json
 import os
@@ -37,7 +37,7 @@ from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -46,7 +46,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
 from grime.forms import DocumentUploadForm
-from grime.models import AsyncJob, Document, DocumentPage, OCRPass, Tag, Word
+from grime.models import Document, DocumentPage, Tag, Word, WorkerSlot
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -998,206 +998,25 @@ def document_list_view(request):
             if doc is not None:
                 return redirect("grime:document", doc_pk=doc.pk)
 
-    documents = Document.objects.annotate(page_count=Count("pages")).order_by("title")
+    doc_list = [
+        {"doc": doc}
+        for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
+    ]
+    worker_slots = list(WorkerSlot.objects.all())
 
-    # For each document, determine if all pages have a completed OCRPass
-    # (used to enable/disable the NER button)
-    from grime.models import NERPass
-
-    SCHEMA_NAME = "hf-historical-ner"
-    doc_list = []
-    for doc in documents:
-        eligible_pages = doc.pages.exclude(text_source__in=["embedded", "manual"])
-        total_eligible = eligible_pages.count()
-        ocr_done_ids = set(
-            eligible_pages.filter(ocr_passes__status=OCRPass.STATUS_COMPLETE)
-            .distinct()
-            .values_list("pk", flat=True)
-        )
-        ocr_done_count = len(ocr_done_ids)
-        all_ocr_done = total_eligible == 0 or ocr_done_count >= total_eligible
-        new_ocr_count = total_eligible - ocr_done_count
-
-        all_page_ids = set(doc.pages.values_list("pk", flat=True))
-        nerd_ids = set(
-            NERPass.objects.filter(page__in=all_page_ids, schema_name=SCHEMA_NAME)
-            .values_list("page_id", flat=True)
-        )
-        new_ner_count = len(all_page_ids) - len(nerd_ids)
-
-        active_jobs = list(
-            AsyncJob.objects.filter(
-                document=doc,
-                status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-            ).order_by("created_at")
-        )
-        recent_jobs = list(
-            AsyncJob.objects.filter(
-                document=doc,
-                status__in=[AsyncJob.STATUS_COMPLETE, AsyncJob.STATUS_FAILED],
-            ).order_by("-completed_at")[:2]
-        )
-        doc_list.append({
-            "doc": doc,
-            "all_ocr_done": all_ocr_done,
-            "new_ocr_count": max(new_ocr_count, 0),
-            "new_ner_count": max(new_ner_count, 0),
-            "active_jobs": active_jobs,
-            "recent_jobs": recent_jobs,
-        })
+    from grime.forms import CreateJobForm
+    job_form = CreateJobForm()
 
     return render(
         request,
         "grime/document_list.html",
-        {"doc_list": doc_list, "form": form, "upload_error": upload_error},
+        {
+            "doc_list": doc_list,
+            "form": form,
+            "upload_error": upload_error,
+            "worker_slots": worker_slots,
+            "job_form": job_form,
+        },
     )
 
 
-# ---------------------------------------------------------------------------
-# Async job endpoints
-# ---------------------------------------------------------------------------
-
-
-def _dispatch_job(task_fn, job):
-    """Dispatch a Celery task, marking the job failed if the broker is unreachable."""
-    try:
-        result = task_fn.delay(job.pk)
-    except Exception as exc:
-        job.status = AsyncJob.STATUS_FAILED
-        job.error = f"Broker unavailable: {exc}"
-        job.completed_at = timezone.now()
-        job.save(update_fields=["status", "error", "completed_at"])
-        return None, str(exc)
-    job.task_id = result.id
-    job.save(update_fields=["task_id"])
-    return result, None
-
-
-@staff_member_required
-@require_POST
-def trigger_ocr_job(request, doc_pk):
-    from grime.tasks import run_ocr_job
-
-    doc = get_object_or_404(Document, pk=doc_pk)
-    new_only = request.POST.get("new_only") == "1"
-    job = AsyncJob.objects.create(
-        document=doc, job_type=AsyncJob.JOB_OCR, status=AsyncJob.STATUS_PENDING, new_only=new_only,
-    )
-    _, err = _dispatch_job(run_ocr_job, job)
-    if err:
-        return JsonResponse({"error": err}, status=503)
-    return JsonResponse({"job_id": job.pk, "status": job.status})
-
-
-@staff_member_required
-@require_POST
-def trigger_ner_job(request, doc_pk):
-    from grime.tasks import run_ner_job
-
-    doc = get_object_or_404(Document, pk=doc_pk)
-    new_only = request.POST.get("new_only") == "1"
-    job = AsyncJob.objects.create(
-        document=doc, job_type=AsyncJob.JOB_NER, status=AsyncJob.STATUS_PENDING, new_only=new_only,
-    )
-    _, err = _dispatch_job(run_ner_job, job)
-    if err:
-        return JsonResponse({"error": err}, status=503)
-    return JsonResponse({"job_id": job.pk, "status": job.status})
-
-
-@staff_member_required
-@require_POST
-def cancel_job(request, job_pk):
-    job = get_object_or_404(AsyncJob, pk=job_pk)
-    if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
-        job.status = AsyncJob.STATUS_FAILED
-        job.error = "Cancelled by user"
-        job.completed_at = timezone.now()
-        job.save(update_fields=["status", "error", "completed_at"])
-    return JsonResponse({"job_id": job.pk, "status": job.status})
-
-
-@staff_member_required
-def jobs_status(request):
-    """Return active + recent job data for a list of document IDs.
-
-    Auto-expires stale jobs before returning:
-      - PENDING > 2 min  → broker likely unreachable, task never started
-      - RUNNING, no DB update for > 15 min → worker likely died
-    """
-    raw = request.GET.get("doc_ids", "")
-    try:
-        doc_ids = [int(x) for x in raw.split(",") if x.strip().isdigit()]
-    except ValueError:
-        return JsonResponse({"error": "invalid doc_ids"}, status=400)
-
-    if not doc_ids:
-        return JsonResponse({"jobs": {}})
-
-    now = timezone.now()
-    pending_cutoff = now - datetime.timedelta(minutes=2)
-    running_cutoff = now - datetime.timedelta(minutes=15)
-
-    stale = AsyncJob.objects.filter(
-        document_id__in=doc_ids,
-        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-    ).filter(
-        Q(status=AsyncJob.STATUS_PENDING, created_at__lt=pending_cutoff)
-        | Q(status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff)
-    )
-    stale.update(
-        status=AsyncJob.STATUS_FAILED,
-        error="Job timed out (worker or broker unavailable)",
-        completed_at=now,
-    )
-
-    active = AsyncJob.objects.filter(
-        document_id__in=doc_ids,
-        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-    ).values("pk", "document_id", "job_type", "status", "pages_total", "pages_done")
-
-    recent = AsyncJob.objects.filter(
-        document_id__in=doc_ids,
-        status__in=[AsyncJob.STATUS_COMPLETE, AsyncJob.STATUS_FAILED],
-    ).order_by("-completed_at").values(
-        "pk", "document_id", "job_type", "status", "pages_total", "pages_done", "error", "completed_at"
-    )[:len(doc_ids) * 4]
-
-    by_doc: dict = {doc_id: {"active": [], "recent": [], "all_ocr_done": False} for doc_id in doc_ids}
-    for job in active:
-        by_doc[job["document_id"]]["active"].append(dict(job))
-    seen: dict = {}
-    for job in recent:
-        did = job["document_id"]
-        if seen.get(did, 0) < 2:
-            j = dict(job)
-            j["completed_at"] = j["completed_at"].isoformat() if j["completed_at"] else None
-            by_doc[did]["recent"].append(j)
-            seen[did] = seen.get(did, 0) + 1
-
-    # Compute all_ocr_done per doc (only OCR-eligible pages count).
-    # Pages with embedded/manual text are skipped by run_page() and never get an OCRPass.
-    eligible_pages = (
-        DocumentPage.objects.filter(document_id__in=doc_ids)
-        .exclude(text_source__in=["embedded", "manual"])
-        .values("document_id")
-        .annotate(total=Count("pk"))
-    )
-    ocr_done_pages = (
-        DocumentPage.objects.filter(
-            document_id__in=doc_ids,
-            ocr_passes__status=OCRPass.STATUS_COMPLETE,
-        )
-        .exclude(text_source__in=["embedded", "manual"])
-        .distinct()
-        .values("document_id")
-        .annotate(done=Count("pk"))
-    )
-    eligible_map = {row["document_id"]: row["total"] for row in eligible_pages}
-    done_map = {row["document_id"]: row["done"] for row in ocr_done_pages}
-    for doc_id in doc_ids:
-        total = eligible_map.get(doc_id, 0)
-        done = done_map.get(doc_id, 0)
-        by_doc[doc_id]["all_ocr_done"] = total == 0 or done >= total
-
-    return JsonResponse({"jobs": by_doc})

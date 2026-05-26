@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from grime import viewer
+from grime import viewer, views_jobs
 
 app_name = "grime"
 
@@ -14,8 +14,12 @@ urlpatterns = [
         name="document_page",
     ),
     path("pages/", include(viewer.get_viewer_urls())),
-    path("documents/<int:doc_pk>/jobs/ocr/", viewer.trigger_ocr_job, name="document_jobs_ocr"),
-    path("documents/<int:doc_pk>/jobs/ner/", viewer.trigger_ner_job, name="document_jobs_ner"),
-    path("jobs/status/", viewer.jobs_status, name="jobs_status"),
-    path("jobs/<int:job_pk>/cancel/", viewer.cancel_job, name="job_cancel"),
+    # Job management
+    path("jobs/", views_jobs.jobs_list_view, name="jobs_list"),
+    path("jobs/create/", views_jobs.create_job, name="job_create"),
+    path("jobs/form-fields/", views_jobs.job_form_fields, name="job_form_fields"),
+    path("jobs/status/", views_jobs.jobs_status, name="jobs_status"),
+    path("jobs/<int:job_pk>/cancel/", views_jobs.cancel_job, name="job_cancel"),
+    path("jobs/<int:job_pk>/rerun/", views_jobs.rerun_job, name="job_rerun"),
+    path("jobs/slots/<int:slot_number>/rename/", views_jobs.rename_worker_slot, name="worker_slot_rename"),
 ]

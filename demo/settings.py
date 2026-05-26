@@ -96,3 +96,7 @@ CELERY_TIMEZONE = TIME_ZONE
 # We track job state in AsyncJob, so Celery's result backend is unused.
 # Disabling it prevents connection errors when Redis is only used as a broker.
 CELERY_TASK_IGNORE_RESULT = True
+
+# Number of named worker slots. Each slot gets its own Celery queue and process.
+# Update Procfile to match when changing this value, then run seed_worker_slots.
+GRIME_WORKER_SLOTS = env.int("GRIME_WORKER_SLOTS", default=3)
