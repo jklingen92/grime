@@ -78,7 +78,7 @@ class OCRJobType(JobType):
             # which silently drops words that conflict on (page, line_num, word_num).
             OCRPass.objects.filter(page=page).delete()
             Word.objects.filter(page=page).delete()
-            run_page(page, engine=engine, force=job.force)
+            run_page(page, engine=engine, force=True)
             words_created += Word.objects.filter(page=page).count()
             job.pages_done += 1
             job.save()

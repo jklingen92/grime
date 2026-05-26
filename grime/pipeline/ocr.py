@@ -197,9 +197,12 @@ def run_page(
 ) -> "Optional[OCRPass]":
     """Run OCR on ``page.image`` and persist results.
 
-    Skip rules:
+    Skip rules (when force=False):
       - ``text_source`` ∈ {"embedded", "manual"} — those sources own their text.
       - No ``image`` on the page.
+
+    Pass ``force=True`` to run OCR even on embedded/manual pages (e.g. when the
+    user explicitly requests OCR via an async job).
 
     On success, writes ``page.text``, creates an
     ``OCRPass``, and bulk-creates ``Word`` rows.  Returns the new ``OCRPass``
@@ -209,7 +212,7 @@ def run_page(
 
     from grime.models import OCRPass, Word
 
-    if page.text_source in ("embedded", "manual"):
+    if not force and page.text_source in ("embedded", "manual"):
         return None
     img_field = page.display_image
     if not img_field:
