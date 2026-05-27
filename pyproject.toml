@@ -43,18 +43,6 @@ textract = ["boto3"]
 hf = ["transformers", "torch"]
 viz = ["imageio[ffmpeg]"]
 async = ["celery[sqlalchemy]"]
-dev = [
-    "pytesseract",
-    "opencv-python",
-    "numpy",
-    "boto3",
-    "imageio[ffmpeg]",
-    "black",
-    "pre-commit",
-    "django-extensions",
-    "honcho",
-    "celery[sqlalchemy]",
-]
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -69,7 +57,16 @@ target-version = ["py311"]
 
 [dependency-groups]
 dev = [
+    "pytesseract",
+    "opencv-python",
+    "numpy",
+    "boto3",
+    "imageio[ffmpeg]",
+    "celery[sqlalchemy]",
+    "black",
+    "pre-commit",
     "django-extensions>=4.1",
+    "honcho",
 ]
 
 [tool.setuptools.package-data]
