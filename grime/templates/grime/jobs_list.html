@@ -1,119 +1,108 @@
-{% load static %}<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Jobs</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
-  <style>
-    :root { --grime-primary: #417690; --grime-primary-dark: #205067; }
-    body { background: #f8f8f8; font-size: 13px; }
-    #gl-header { background: var(--grime-primary); }
-    .table thead th { background: var(--grime-primary); color: #fff; }
-    a { color: var(--grime-primary-dark); }
-    a:hover { color: var(--grime-primary); }
-    .btn-grime { background: var(--grime-primary); border-color: var(--grime-primary); color: #fff; }
-    .btn-grime:hover { background: var(--grime-primary-dark); border-color: var(--grime-primary-dark); color: #fff; }
-  </style>
-</head>
-<body>
+{% extends "grime/base.html" %}
+{% load static %}
 
+{% block title %}Jobs{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'grime/jobs-list.css' %}">
+{% endblock %}
+
+{% block main_attrs %}class="container-lg" style="max-width:1200px"{% endblock %}
+
+{% block header %}
 <header id="gl-header" class="py-2 px-3 mb-4">
   <h1 class="h6 mb-0 text-white fw-semibold">
     <a href="{% url 'grime:document_list' %}" class="text-white text-decoration-none">Documents</a>
     &rsaquo; Jobs
   </h1>
 </header>
+{% endblock %}
 
-<main class="container-lg" style="max-width:1200px">
-  {% if jobs %}
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-hover table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Type</th>
-            <th>Document</th>
-            <th>Worker</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>Duration</th>
-            <th>Summary</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for job in jobs %}
-          <tr>
-            <td class="text-muted">{{ job.pk }}</td>
-            <td><span class="badge bg-secondary">{{ job.job_type|upper }}</span></td>
-            <td>
-              <a href="{% url 'grime:document' doc_pk=job.document_id %}">{{ job.document }}</a>
-            </td>
-            <td>{{ job.worker_slot|default:"—" }}</td>
-            <td>
-              {% if job.status == "complete" %}
-                <span class="badge bg-success">complete</span>
-              {% elif job.status == "failed" %}
-                <span class="badge bg-danger" title="{{ job.error }}">failed</span>
-              {% elif job.status == "running" %}
-                <span class="badge bg-primary">running</span>
-              {% else %}
-                <span class="badge bg-warning text-dark">pending</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if job.pages_total %}
-              <div class="progress" style="width:80px;height:6px">
-                <div class="progress-bar" role="progressbar"
-                     style="width:{% widthratio job.pages_done job.pages_total 100 %}%"></div>
-              </div>
-              <small class="text-muted">{{ job.pages_done }}/{{ job.pages_total }}</small>
-              {% elif job.status == "complete" %}
-              <small class="text-muted">done</small>
-              {% else %}—{% endif %}
-            </td>
-            <td>
-              {% if job.started_at %}
-                {% with elapsed=job.elapsed_time %}
-                  {% if elapsed %}
-                    <small class="text-muted">{{ elapsed }}</small>
-                  {% endif %}
-                {% endwith %}
-              {% else %}—{% endif %}
-            </td>
-            <td>
-              {% if job.status == "complete" %}
-                <small>{{ job.results_summary }}</small>
-              {% elif job.status == "failed" %}
-                <small class="text-danger">{{ job.error|truncatechars:60 }}</small>
-              {% else %}—{% endif %}
-            </td>
-            <td>
-              {% if job.status == "running" or job.status == "pending" %}
-              <form method="post" action="{% url 'grime:job_cancel' job_pk=job.pk %}" class="d-inline">
-                {% csrf_token %}
-                <button class="btn btn-sm btn-outline-danger py-0">Cancel</button>
-              </form>
-              {% else %}
-              <form method="post" action="{% url 'grime:job_rerun' job_pk=job.pk %}" class="d-inline">
-                {% csrf_token %}
-                <button class="btn btn-sm btn-outline-secondary py-0">Rerun</button>
-              </form>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+{% block content %}
+{% if jobs %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>Document</th>
+          <th>Worker</th>
+          <th>Status</th>
+          <th>Progress</th>
+          <th>Duration</th>
+          <th>Summary</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td class="text-muted">{{ job.pk }}</td>
+          <td><span class="badge bg-secondary">{{ job.job_type|upper }}</span></td>
+          <td>
+            <a href="{% url 'grime:document' doc_pk=job.document_id %}">{{ job.document }}</a>
+          </td>
+          <td>{{ job.worker_slot|default:"—" }}</td>
+          <td>
+            {% if job.status == "complete" %}
+              <span class="badge bg-success">complete</span>
+            {% elif job.status == "failed" %}
+              <span class="badge bg-danger" title="{{ job.error }}">failed</span>
+            {% elif job.status == "running" %}
+              <span class="badge bg-primary">running</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if job.pages_total %}
+            <div class="progress" style="width:80px;height:6px">
+              <div class="progress-bar" role="progressbar"
+                   style="width:{% widthratio job.pages_done job.pages_total 100 %}%"></div>
+            </div>
+            <small class="text-muted">{{ job.pages_done }}/{{ job.pages_total }}</small>
+            {% elif job.status == "complete" %}
+            <small class="text-muted">done</small>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if job.started_at %}
+              {% with elapsed=job.elapsed_time %}
+                {% if elapsed %}
+                  <small class="text-muted">{{ elapsed }}</small>
+                {% endif %}
+              {% endwith %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if job.status == "complete" %}
+              <small>{{ job.results_summary }}</small>
+            {% elif job.status == "failed" %}
+              <small class="text-danger">{{ job.error|truncatechars:60 }}</small>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if job.status == "running" or job.status == "pending" %}
+            <form method="post" action="{% url 'grime:job_cancel' job_pk=job.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger py-0">Cancel</button>
+            </form>
+            {% else %}
+            <form method="post" action="{% url 'grime:job_rerun' job_pk=job.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-secondary py-0">Rerun</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  {% else %}
-  <p class="text-muted">No jobs yet.</p>
-  {% endif %}
-</main>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
-</body>
-</html>
+</div>
+{% else %}
+<p class="text-muted">No jobs yet.</p>
+{% endif %}
+{% endblock %}
