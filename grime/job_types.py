@@ -53,14 +53,8 @@ class OCRJobType(JobType):
     label = "OCR"
     params_form_class = OCRParamsForm
 
-    def clean_pages(self, page_ids) -> None:
-        from grime.models import OCRPass, Word
-
-        Word.objects.filter(page_id__in=page_ids).delete()
-        OCRPass.objects.filter(page_id__in=page_ids).delete()
-
     def run(self, job: "AsyncJob") -> None:
-        from grime.models import OCRPass
+        from grime.models import OCRPass, Word
         from grime.pipeline.ocr import run_page
 
         engine = job.params.get("engine") or None
@@ -80,7 +74,8 @@ class OCRJobType(JobType):
 
         words_created = 0
         for page in pages:
-            self.clean_pages([page.pk])
+            Word.objects.filter(page=page).delete()
+            OCRPass.objects.filter(page=page).delete()
             run_page(page, engine=engine, force=True)
             words_created += page.words.count()
             job.pages_done += 1
@@ -89,7 +84,11 @@ class OCRJobType(JobType):
         job.result = {"words_created": words_created}
 
     def clean(self, job: "AsyncJob") -> None:
-        self.clean_pages(job.document.pages.values_list("pk", flat=True))
+        from grime.models import OCRPass, Word
+
+        page_ids = job.document.pages.values_list("pk", flat=True)
+        Word.objects.filter(page_id__in=page_ids).delete()
+        OCRPass.objects.filter(page_id__in=page_ids).delete()
 
     def results_summary(self, job: "AsyncJob") -> str:
         w = job.result.get("words_created", 0)
@@ -106,12 +105,6 @@ class NERJobType(JobType):
     params_form_class = None
 
     SCHEMA_NAME = "hf-historical-ner"
-
-    def clean_pages(self, page_ids) -> None:
-        from grime.models import NERPass, Word
-
-        NERPass.objects.filter(page_id__in=page_ids, schema_name=self.SCHEMA_NAME).delete()
-        Word.objects.filter(page_id__in=page_ids).update(ner_label=None)
 
     def run(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
@@ -132,7 +125,8 @@ class NERJobType(JobType):
 
         entities_found = 0
         for page in pages:
-            self.clean_pages([page.pk])
+            NERPass.objects.filter(page=page, schema_name=self.SCHEMA_NAME).delete()
+            Word.objects.filter(page=page).update(ner_label=None)
             entities = extract_entities(
                 page.text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD
             )
@@ -159,7 +153,11 @@ class NERJobType(JobType):
         job.result = {"entities_found": entities_found}
 
     def clean(self, job: "AsyncJob") -> None:
-        self.clean_pages(job.document.pages.values_list("pk", flat=True))
+        from grime.models import NERPass, Word
+
+        page_ids = job.document.pages.values_list("pk", flat=True)
+        NERPass.objects.filter(page_id__in=page_ids, schema_name=self.SCHEMA_NAME).delete()
+        Word.objects.filter(page_id__in=page_ids).update(ner_label=None)
 
     def results_summary(self, job: "AsyncJob") -> str:
         e = job.result.get("entities_found", 0)
