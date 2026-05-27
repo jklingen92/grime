@@ -686,6 +686,8 @@ dev = [
     { name = "opencv-python" },
     { name = "pre-commit" },
     { name = "pytesseract" },
+    { name = "torch" },
+    { name = "transformers" },
 ]
 
 [package.metadata]
@@ -719,6 +721,8 @@ dev = [
     { name = "opencv-python" },
     { name = "pre-commit" },
     { name = "pytesseract" },
+    { name = "torch" },
+    { name = "transformers" },
 ]
 
 [[package]]
