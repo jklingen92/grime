@@ -20,20 +20,23 @@ def run_job(self, job_pk: int) -> None:
 
     job = AsyncJob.objects.get(pk=job_pk)
     if job.status == AsyncJob.STATUS_COMPLETE:
-        return  # broker re-queued after a blip — work already done
+        logger.info("Job %d already complete, skipping (broker re-queue?)", job_pk)
+        return
 
     job.status = AsyncJob.STATUS_RUNNING
     job.task_id = self.request.id
     job.started_at = timezone.now()
     job.save()
 
+    logger.info("Job %d starting: type=%s doc='%s'", job_pk, job.job_type, job.document)
     try:
         job.handler.run(job)
         job.status = AsyncJob.STATUS_COMPLETE
         job.completed_at = timezone.now()
         job.save()
+        logger.info("Job %d complete", job_pk)
     except Exception as exc:
-        logger.exception("Job %d (%s) failed", job_pk, job.job_type)
+        logger.exception("Job %d (%s) failed: %s", job_pk, job.job_type, exc)
         job.status = AsyncJob.STATUS_FAILED
         job.error = str(exc)
         job.completed_at = timezone.now()

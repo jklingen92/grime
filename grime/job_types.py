@@ -74,15 +74,22 @@ class OCRJobType(JobType):
         job.pages_done = 0
         job.save()
 
+        logger.info("[OCR job %d] engine=%s, processing %d page(s)", job.pk, engine or "auto", len(pages))
+
         words_created = 0
         for page in pages:
+            page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
+            logger.info("[OCR job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             Word.objects.filter(page=page).delete()
             OCRPass.objects.filter(page=page).delete()
             run_page(page, engine=engine, force=True)
-            words_created += page.words.count()
+            words = page.words.count()
+            words_created += words
+            logger.info("[OCR job %d] %s done — %d word(s) extracted", job.pk, page_label, words)
             job.pages_done += 1
             job.save()
 
+        logger.info("[OCR job %d] Complete — %d word(s) across %d page(s)", job.pk, words_created, job.pages_done)
         job.result = {"words_created": words_created}
 
     def clean(self, job: "AsyncJob") -> None:
@@ -120,10 +127,17 @@ class NERJobType(JobType):
 
     def run(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
-        from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
+        from grime.pipeline.ner import (
+            DEFAULT_CONFIDENCE_THRESHOLD,
+            MODEL_REGISTRY,
+            _pipelines,
+            extract_entities,
+            label_ocr_words,
+        )
 
         model_key = job.params.get("model") or DEFAULT_MODEL
         schema_name = self._schema_name(model_key)
+        model_id = MODEL_REGISTRY.get(model_key, model_key)
 
         pages = list(job.document.pages.order_by("page_number"))
         if not job.force:
@@ -138,8 +152,21 @@ class NERJobType(JobType):
         job.pages_done = 0
         job.save()
 
+        if model_key not in _pipelines:
+            logger.info(
+                "[NER job %d] Loading model '%s' (%s) — may download weights on first use",
+                job.pk, model_key, model_id,
+            )
+        else:
+            logger.info(
+                "[NER job %d] Using cached model '%s', processing %d page(s)",
+                job.pk, model_key, len(pages),
+            )
+
         entities_found = 0
         for page in pages:
+            page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
+            logger.info("[NER job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             NERPass.objects.filter(page=page, schema_name=schema_name).delete()
             Word.objects.filter(page=page).update(ner_label=None)
             entities = extract_entities(
@@ -163,10 +190,12 @@ class NERJobType(JobType):
                     w.ner_pass = ner_pass
                 Word.objects.bulk_update(labelled, ["ner_pass"])
                 entities_found += len(labelled)
+            logger.info("[NER job %d] %s done — %d entity word(s) labelled", job.pk, page_label, len(labelled))
 
             job.pages_done += 1
             job.save()
 
+        logger.info("[NER job %d] Complete — %d entity word(s) across %d page(s)", job.pk, entities_found, job.pages_done)
         job.result = {"entities_found": entities_found}
 
     def clean(self, job: "AsyncJob") -> None:
