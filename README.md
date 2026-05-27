@@ -20,7 +20,7 @@ git clone https://github.com/jklingen92/grime.git
 cd grime
 
 # Install dependencies (creates .venv)
-uv sync --extra dev
+uv sync
 
 # Copy and configure environment variables
 cp .env.example .env  # edit SECRET_KEY and any AWS/broker settings
