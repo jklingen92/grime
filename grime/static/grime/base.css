@@ -1,0 +1,19 @@
+:root {
+  --grime-primary:      #417690;
+  --grime-primary-dark: #205067;
+  --bs-primary-rgb: 65, 118, 144;
+}
+
+body { background: #f8f8f8; font-size: 13px; }
+
+#gl-header { background: var(--grime-primary); }
+
+a { color: var(--grime-primary-dark); }
+a:hover { color: var(--grime-primary); }
+
+.table thead th { background: var(--grime-primary); color: #fff; }
+
+.btn-grime { background: var(--grime-primary); border-color: var(--grime-primary); color: #fff; }
+.btn-grime:hover,
+.btn-grime:focus  { background: var(--grime-primary-dark); border-color: var(--grime-primary-dark); color: #fff; }
+.btn-grime:disabled { background: var(--grime-primary); border-color: var(--grime-primary); opacity: .5; }
