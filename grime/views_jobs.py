@@ -93,7 +93,7 @@ def job_form_fields(request):
         return JsonResponse({"error": "Unknown job type"}, status=400)
 
     form = handler.params_form_class() if handler.params_form_class else None
-    template = f"grime/job_form_fields_{job_type}.html"
+    template = f"grime/job_form_fields/{job_type}.html"
     return render(request, template, {"form": form})
 
 

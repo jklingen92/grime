@@ -234,8 +234,8 @@ Set `params_form_class = MyJobParamsForm` on your subclass. The form is rendered
 
 ### 4. Add the params template fragment
 
-Create `grime/templates/grime/job_form_fields_myjob.html` (copy
-`job_form_fields_ocr.html` as a starting point). The fragment is fetched via AJAX when
+Create `grime/templates/grime/job_form_fields/myjob.html` (copy
+`job_form_fields/ocr.html` as a starting point). The fragment is fetched via AJAX when
 the user selects your job type in the modal.
 
 If `params_form_class = None`, no fragment is needed — the modal shows no extra fields.
