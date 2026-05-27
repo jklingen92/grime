@@ -37,7 +37,10 @@
     </div>
 
     <div class="dp-toolbar-sep" id="dp-sep-ner"></div>
-    <button id="dp-rerun-ner" type="button" class="btn btn-sm btn-outline-secondary">Run NER</button>
+    <div class="dp-split-btn btn-group btn-group-sm" id="dp-ner-split" role="group">
+      <button id="dp-rerun-ner" type="button" class="btn btn-outline-secondary">Run NER</button><button id="dp-rerun-ner-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose NER model">&#9662;</button>
+      <div id="dp-rerun-ner-menu" class="dp-menu dropdown-menu"></div>
+    </div>
     {% endif %}
 
     <div class="dp-toolbar-sep"></div>
@@ -65,6 +68,9 @@
 
     <button id="dp-image-save-btn" type="button" class="btn btn-sm btn-warning" style="display:none;margin-left:auto">Save adjusted image</button>
   </div>
+
+  <!-- NER progress bar — shown while the NER request is in-flight -->
+  <div id="dp-ner-progress-wrap"><div id="dp-ner-progress-bar"></div></div>
 
   <!-- viewer + panels -->
   <div id="dp-outer">
@@ -344,6 +350,7 @@ window.VIEWER_CONFIG = {
   bulkDeleteUrl:     "{{ ocr_bulk_delete_url }}",
   rerunSelectionUrl: "{{ ocr_rerun_selection_url }}",
   nerRerunUrl:       "{{ ner_rerun_url }}",
+  nerModels:         {{ ner_models_json }},
 {% endif %}
 };
 </script>

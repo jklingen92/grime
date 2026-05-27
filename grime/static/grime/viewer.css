@@ -364,9 +364,24 @@
   #dp-person-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
   #dp-person-msg { font-size: 0.85em; margin-top: 8px; display: none; }
 
-  /* ── OCR split-button (engine picker) ─────────────────────── */
+  /* ── split-button (OCR engine / NER model pickers) ────────── */
   /* .btn-group from Bootstrap handles the joined-button layout */
   .dp-split-btn { position: relative; }
-  /* Custom JS toggles .open; Bootstrap dropdown-menu needs .show — use .open here */
-  .dp-menu { display: none; min-width: 120px; margin-top: 2px; }
+  /* Custom JS toggles .open; Bootstrap dropdown-menu handles positioning */
+  .dp-menu { display: none; min-width: 160px; margin-top: 2px; }
   .dp-menu.open { display: block; }
+
+  /* ── NER progress bar ─────────────────────────────────────── */
+  #dp-ner-progress-wrap {
+    display: none; height: 3px; background: #e8e8e8; border-radius: 2px;
+    overflow: hidden; margin-bottom: 4px;
+  }
+  #dp-ner-progress-wrap.visible { display: block; }
+  #dp-ner-progress-bar {
+    height: 100%; width: 35%; background: var(--grime-primary); border-radius: 2px;
+    animation: dp-ner-sweep 1.5s ease-in-out infinite;
+  }
+  @keyframes dp-ner-sweep {
+    0%   { transform: translateX(-200%); }
+    100% { transform: translateX(450%); }
+  }

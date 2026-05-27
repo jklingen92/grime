@@ -1,16 +1,20 @@
 """
-Run HuggingFace historical NER on a Document's pages.
+Run HuggingFace NER on a Document's pages.
 
 Annotates ``Word.ner_label`` with BIO entity labels (B-PER, I-PER, B-LOC,
 I-LOC, B-ORG, I-ORG) and records each run as a ``NERPass``.
 
 Examples::
 
-    python manage.py ner --document 42
-    python manage.py ner --document 42 --page 5
-    python manage.py ner --document 42 --threshold 0.85
-    python manage.py ner --document 42 --force
-    python manage.py ner --document 42 --dry-run
+    python manage.py run_ner --document 42
+    python manage.py run_ner --document 42 --model historical
+    python manage.py run_ner --document 42 --page 5
+    python manage.py run_ner --document 42 --threshold 0.85
+    python manage.py run_ner --document 42 --force
+    python manage.py run_ner --document 42 --dry-run
+
+Available models: general (default), historical, large, fast.
+See ``grime.pipeline.ner.MODEL_REGISTRY`` for the full list.
 
 Requires the ``[hf]`` optional dependencies::
 
@@ -20,12 +24,11 @@ Requires the ``[hf]`` optional dependencies::
 from django.core.management.base import BaseCommand, CommandError
 
 from grime.models import Document, NERPass, Word
-
-SCHEMA_NAME = "hf-historical-ner"
+from grime.pipeline.ner import DEFAULT_MODEL, MODEL_REGISTRY
 
 
 class Command(BaseCommand):
-    help = "Run HuggingFace historical NER on a document's pages; annotates Word.ner_label."
+    help = "Run HuggingFace NER on a document's pages; annotates Word.ner_label."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -33,6 +36,16 @@ class Command(BaseCommand):
             required=True,
             metavar="ID",
             help="Document pk or document_id",
+        )
+        parser.add_argument(
+            "--model",
+            default=DEFAULT_MODEL,
+            choices=list(MODEL_REGISTRY),
+            metavar="KEY",
+            help=(
+                f"NER model to use (default: {DEFAULT_MODEL}). "
+                f"Choices: {', '.join(MODEL_REGISTRY)}"
+            ),
         )
         parser.add_argument(
             "--page",
@@ -63,10 +76,12 @@ class Command(BaseCommand):
     def handle(self, **options):
         self.dry_run = options["dry_run"]
         self.force = options["force"]
+        self.model_key = options["model"]
 
         from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD
 
         self.threshold = options["threshold"] or DEFAULT_CONFIDENCE_THRESHOLD
+        self.schema_name = f"hf-ner-{self.model_key}"
 
         doc = self._resolve_document(options["document"])
         pages_qs = doc.pages.order_by("page_number")
@@ -93,16 +108,16 @@ class Command(BaseCommand):
     def _should_skip(self, page) -> tuple[bool, str]:
         if self.force:
             return False, ""
-        if NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).exists():
+        if NERPass.objects.filter(page=page, schema_name=self.schema_name).exists():
             return True, "skipped (NERPass exists; use --force to re-run)"
         return False, ""
 
     def _run_pages(self, pages, label):
+        model_id = MODEL_REGISTRY[self.model_key]
         self.stdout.write(f"{label} — {len(pages)} page(s) to process")
+        self.stdout.write(f"Model: {self.model_key} ({model_id})")
         if not self.dry_run:
-            self.stdout.write(
-                "Loading model (first run will download weights ~440 MB)…"
-            )
+            self.stdout.write("Loading model (first run will download weights)…")
         processed = skipped = 0
         for i, page in enumerate(pages, 1):
             page_label = (
@@ -139,21 +154,22 @@ class Command(BaseCommand):
         from grime.pipeline.ner import extract_entities, label_ocr_words
 
         if self.force:
-            NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).delete()
+            NERPass.objects.filter(page=page, schema_name=self.schema_name).delete()
             Word.objects.filter(page=page).update(ner_label=None)
 
-        entities = extract_entities(page.text, confidence_threshold=self.threshold)
+        entities = extract_entities(
+            page.text, confidence_threshold=self.threshold, model=self.model_key
+        )
         ner_pass = NERPass.objects.create(
             page=page,
-            schema_name=SCHEMA_NAME,
-            method="hf-historical-ner",
+            schema_name=self.schema_name,
+            method=f"hf-ner-{self.model_key}",
             used_llm=False,
             threshold=self.threshold,
             status=NERPass.STATUS_COMPLETE,
         )
         words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
         label_ocr_words(words, page.text, entities)
-        # Link the labelled words back to this NERPass run for traceability.
         labelled = [w for w in words if w.ner_label]
         if labelled:
             for w in labelled:

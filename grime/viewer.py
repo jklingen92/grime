@@ -194,6 +194,11 @@ def _tag_to_dict(tag: Tag) -> dict:
     }
 
 
+from grime.pipeline.ner import DEFAULT_MODEL as _NER_DEFAULT_MODEL
+from grime.pipeline.ner import MODEL_LABELS as _NER_MODEL_LABELS
+from grime.pipeline.ner import MODEL_REGISTRY as _NER_MODEL_REGISTRY
+
+
 def build_viewer_context(page: DocumentPage) -> dict:
     """Build the template context the viewer needs to render and call its endpoints."""
     image_url = page.display_image.url if page.display_image else None
@@ -234,6 +239,11 @@ def build_viewer_context(page: DocumentPage) -> dict:
         )
     )
 
+    ner_models = [
+        {"key": k, "label": _NER_MODEL_LABELS.get(k, k.capitalize()), "default": k == _NER_DEFAULT_MODEL}
+        for k in _NER_MODEL_REGISTRY
+    ]
+
     def _url(name: str) -> str:
         return reverse(f"grime:{name}", args=[page.pk])
 
@@ -243,6 +253,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "image_has_corrected": bool(page.corrected_image),
         "image_adjustments_json": _safe_json(page.image_adjustments),
         "image_alt": str(page),
+        "ner_models_json": _safe_json(ner_models),
         "ocr_words_json": _safe_json([_word_to_dict(w) for w in words]),
         "tags_json": _safe_json(tags),
         "citations_json": _safe_json([]),
@@ -815,6 +826,10 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
     Clears existing NERPass records and ner_label values, then runs the HF NER
     pipeline, saving results as a new NERPass. Returns the full word list with
     updated ner_label fields so the viewer can refresh without a reload.
+
+    POST params:
+      ``model``  NER model key (optional; defaults to DEFAULT_MODEL).
+                 Must be a key in MODEL_REGISTRY.
     """
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
@@ -823,9 +838,16 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
     from grime.models import NERPass, Word
     from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
 
-    SCHEMA_NAME = "hf-historical-ner"
+    model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
+    if model_key not in _NER_MODEL_REGISTRY:
+        return JsonResponse(
+            {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"},
+            status=400,
+        )
+
+    schema_name = f"hf-ner-{model_key}"
     try:
-        NERPass.objects.filter(page=page, schema_name=SCHEMA_NAME).delete()
+        NERPass.objects.filter(page=page, schema_name=schema_name).delete()
         words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
         if not words:
             return JsonResponse({"error": "Page has no words to run NER on"}, status=400)
@@ -836,11 +858,13 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
         )
         if not text.strip():
             return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
-        entities = extract_entities(text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+        entities = extract_entities(
+            text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD, model=model_key
+        )
         ner_pass = NERPass.objects.create(
             page=page,
-            schema_name=SCHEMA_NAME,
-            method="hf-historical-ner",
+            schema_name=schema_name,
+            method=f"hf-ner-{model_key}",
             used_llm=False,
             threshold=DEFAULT_CONFIDENCE_THRESHOLD,
             status=NERPass.STATUS_COMPLETE,
@@ -859,7 +883,7 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
         .order_by("line_num", "word_num")
         .values("id", "ner_label", "corrected_label")
     )
-    return JsonResponse({"ok": True, "words": words})
+    return JsonResponse({"ok": True, "words": words, "model": model_key})
 
 
 # ---------------------------------------------------------------------------
