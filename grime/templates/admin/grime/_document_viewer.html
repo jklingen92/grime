@@ -8,51 +8,51 @@
 
   <!-- tabs -->
   <div id="dp-tabs" class="nav nav-tabs">
-    <button class="dp-tab nav-link active" id="tab-ocr" onclick="dpShowTab('ocr')">OCR</button>
-    <button class="dp-tab nav-link" id="tab-ner" onclick="dpShowTab('ner')">NER</button>
-    <button class="dp-tab nav-link" id="tab-label" onclick="dpShowTab('label')">Label</button>
-    <button class="dp-tab nav-link" id="tab-image" onclick="dpShowTab('image')">Image</button>
+    <button class="dp-tab nav-link active" id="tab-ocr" onclick="dpShowTab('ocr')"><i class="fa-solid fa-font me-1"></i>OCR</button>
+    <button class="dp-tab nav-link" id="tab-ner" onclick="dpShowTab('ner')"><i class="fa-solid fa-tag me-1"></i>NER</button>
+    <button class="dp-tab nav-link" id="tab-label" onclick="dpShowTab('label')"><i class="fa-solid fa-bookmark me-1"></i>Label</button>
+    <button class="dp-tab nav-link" id="tab-image" onclick="dpShowTab('image')"><i class="fa-solid fa-image me-1"></i>Image</button>
   </div>
 
 
   <!-- toolbar -->
   <div id="dp-toolbar" style="margin-top:6px">
-    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomOut()">−</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomOut()"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
     <span id="dp-zoom-label">100%</span>
-    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomIn()">+</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomReset()">Fit</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomIn()"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dpZoomReset()"><i class="fa-solid fa-expand me-1"></i>Fit</button>
 
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
       <div class="dp-split-btn btn-group btn-group-sm" role="group">
-        <button id="dp-rerun-ocr" type="button" class="btn btn-outline-secondary">Run OCR</button><button id="dp-rerun-ocr-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose OCR engine">&#9662;</button>
+        <button id="dp-rerun-ocr" type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-gears me-1"></i>Run OCR</button><button id="dp-rerun-ocr-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose OCR engine">&#9662;</button>
         <div id="dp-rerun-ocr-menu" class="dp-menu dropdown-menu">
           <a href="#" data-engine="textract" class="dropdown-item active">Textract</a>
           <a href="#" data-engine="tesseract" class="dropdown-item">Tesseract</a>
         </div>
       </div>
       <button id="dp-boxes-toggle" type="button" class="btn btn-sm btn-outline-secondary">Hide boxes</button>
-      <button id="dp-draw-toggle" type="button" class="btn btn-sm btn-outline-secondary">Add region (a)</button>
+      <button id="dp-draw-toggle" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-draw-polygon me-1"></i>Add region (a)</button>
     </div>
 
     <div class="dp-toolbar-sep" id="dp-sep-ner"></div>
     <div class="dp-split-btn btn-group btn-group-sm" id="dp-ner-split" role="group">
-      <button id="dp-rerun-ner" type="button" class="btn btn-outline-secondary">Run NER</button><button id="dp-rerun-ner-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose NER model">&#9662;</button>
+      <button id="dp-rerun-ner" type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-tags me-1"></i>Run NER</button><button id="dp-rerun-ner-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose NER model">&#9662;</button>
       <div id="dp-rerun-ner-menu" class="dp-menu dropdown-menu"></div>
     </div>
     {% endif %}
 
     <div class="dp-toolbar-sep"></div>
-    {% if prev_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ prev_url }}" title="{{ nav_prev_label }}">&#8592;</a>
-    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true">&#8592;</a>{% endif %}
+    {% if prev_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ prev_url }}" title="{{ nav_prev_label }}"><i class="fa-solid fa-arrow-left"></i></a>
+    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true"><i class="fa-solid fa-arrow-left"></i></a>{% endif %}
     {% if page_list_json %}
     <select id="dp-page-select" class="form-select form-select-sm dp-page-select"></select>
     {% elif page_position and total_count %}
     <span id="dp-page-indicator">{{ nav_prefix }}{{ page_position }} / {{ total_count }}</span>
     {% endif %}
-    {% if next_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ next_url }}" title="{{ nav_next_label }}">&#8594;</a>
-    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true">&#8594;</a>{% endif %}
+    {% if next_url %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary" href="{{ next_url }}" title="{{ nav_next_label }}"><i class="fa-solid fa-arrow-right"></i></a>
+    {% else %}<a class="dp-nav-btn btn btn-sm btn-outline-secondary disabled" aria-disabled="true"><i class="fa-solid fa-arrow-right"></i></a>{% endif %}
 
     {% if doc_tag_count is not None %}
     <div class="dp-toolbar-sep"></div>
@@ -60,13 +60,13 @@
     {% endif %}
     {% if autogen_unreviewed_count %}
     <div class="dp-toolbar-sep"></div>
-    <a class="dp-nav-btn btn btn-sm btn-warning" href="{{ review_tags_url }}" title="Review autogenerated tags">Review {{ autogen_unreviewed_count }} tag{{ autogen_unreviewed_count|pluralize }}</a>
+    <a class="dp-nav-btn btn btn-sm btn-warning" href="{{ review_tags_url }}" title="Review autogenerated tags"><i class="fa-solid fa-flag me-1"></i>Review {{ autogen_unreviewed_count }} tag{{ autogen_unreviewed_count|pluralize }}</a>
     {% endif %}
 
     <div class="dp-toolbar-sep"></div>
     <span id="dp-tab-badge" style="font-size:0.82em;color:#666"></span>
 
-    <button id="dp-image-save-btn" type="button" class="btn btn-sm btn-warning" style="display:none;margin-left:auto">Save adjusted image</button>
+    <button id="dp-image-save-btn" type="button" class="btn btn-sm btn-warning" style="display:none;margin-left:auto"><i class="fa-solid fa-floppy-disk me-1"></i>Save adjusted image</button>
   </div>
 
   <!-- NER progress bar — shown while the NER request is in-flight -->
@@ -142,16 +142,16 @@
         <div id="dp-tag-sub-input-row" style="display:none">
           <div style="display:flex;gap:4px;align-items:center">
             <input id="dp-tag-sub-input" type="text" list="dp-sub-label-list" class="form-control form-control-sm" placeholder="Label for selection…" autocomplete="off" style="flex:1;min-width:0">
-            <button id="dp-tag-sub-clear-btn" type="button" class="btn btn-sm btn-outline-danger" title="Remove selected from pattern" style="flex-shrink:0">×</button>
+            <button id="dp-tag-sub-clear-btn" type="button" class="btn btn-sm btn-outline-danger" title="Remove selected from pattern" style="flex-shrink:0"><i class="fa-solid fa-xmark"></i></button>
           </div>
           <datalist id="dp-sub-label-list"></datalist>
           <div id="dp-tag-sub-hint">Enter to label · × to remove · Esc to deselect</div>
         </div>
         <div id="dp-tag-subcomp-list"></div>
         <div id="dp-tag-actions">
-          <button id="dp-tag-save-btn" type="button" class="btn btn-sm btn-primary">Save ↵</button>
-          <button id="dp-tag-cancel-btn" type="button" class="btn btn-sm btn-outline-secondary">Cancel ⎋</button>
-          <button id="dp-tag-delete-btn" type="button" class="btn btn-sm btn-outline-danger" style="display:none">Delete</button>
+          <button id="dp-tag-save-btn" type="button" class="btn btn-sm btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Save ↵</button>
+          <button id="dp-tag-cancel-btn" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel ⎋</button>
+          <button id="dp-tag-delete-btn" type="button" class="btn btn-sm btn-outline-danger" style="display:none"><i class="fa-solid fa-trash me-1"></i>Delete</button>
         </div>
       </div>
     </div>
@@ -190,10 +190,10 @@
       </div>
       <div class="dp-image-section-title">Tools</div>
       <div class="dp-image-btn-group">
-        <button id="dp-image-autocontrast-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Set black/white levels to 1% histogram cutoffs">Auto contrast</button>
-        <button id="dp-image-grayscale-btn"    type="button" class="btn btn-sm btn-outline-secondary" title="Desaturate to greyscale">Grayscale</button>
-        <button id="dp-image-invert-btn"       type="button" class="btn btn-sm btn-outline-secondary" title="Invert colours (negative)">Invert</button>
-        <button id="dp-image-sharpen-btn"      type="button" class="btn btn-sm btn-outline-secondary" title="Unsharp mask — applied on save, no live preview">Sharpen</button>
+        <button id="dp-image-autocontrast-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Set black/white levels to 1% histogram cutoffs"><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto contrast</button>
+        <button id="dp-image-grayscale-btn"    type="button" class="btn btn-sm btn-outline-secondary" title="Desaturate to greyscale"><i class="fa-solid fa-circle-half-stroke me-1"></i>Grayscale</button>
+        <button id="dp-image-invert-btn"       type="button" class="btn btn-sm btn-outline-secondary" title="Invert colours (negative)"><i class="fa-solid fa-adjust me-1"></i>Invert</button>
+        <button id="dp-image-sharpen-btn"      type="button" class="btn btn-sm btn-outline-secondary" title="Unsharp mask — applied on save, no live preview"><i class="fa-solid fa-braille me-1"></i>Sharpen</button>
       </div>
       <small id="dp-image-sharpen-note" class="dp-image-sharpen-note" style="display:none">Sharpening is applied on save (no live preview)</small>
       <div class="dp-image-section-title">Threshold / Binarize</div>
@@ -208,8 +208,8 @@
       </div>
       <div class="dp-image-section-title">Rotate / Deskew</div>
       <div class="dp-image-btn-group">
-        <button id="dp-image-rotate-ccw-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° counter-clockwise">↺ 90°</button>
-        <button id="dp-image-rotate-cw-btn"  type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° clockwise">↻ 90°</button>
+        <button id="dp-image-rotate-ccw-btn" type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° counter-clockwise"><i class="fa-solid fa-rotate-left me-1"></i>90°</button>
+        <button id="dp-image-rotate-cw-btn"  type="button" class="btn btn-sm btn-outline-secondary" title="Rotate 90° clockwise"><i class="fa-solid fa-rotate-right me-1"></i>90°</button>
       </div>
       <div class="dp-image-slider-row">
         <label for="dp-image-rotate-fine">Fine</label>
@@ -217,7 +217,7 @@
         <span id="dp-image-rotate-fine-val" class="dp-image-val">0.0°</span>
       </div>
       <div id="dp-image-actions">
-        <button id="dp-image-reset-btn" type="button" class="btn btn-sm btn-outline-secondary">Reset</button>
+        <button id="dp-image-reset-btn" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-arrow-rotate-left me-1"></i>Reset</button>
       </div>
     </div>
 
@@ -240,7 +240,7 @@
       </div>
       <div id="dp-text-search-row">
         <input id="dp-text-search" type="search" class="form-control form-control-sm" placeholder="Search text…" autocomplete="off">
-        <button id="dp-text-search-clear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear search" style="display:none">×</button>
+        <button id="dp-text-search-clear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear search" style="display:none"><i class="fa-solid fa-xmark"></i></button>
         <span id="dp-text-search-count"></span>
       </div>
       <div id="dp-corrected-text"></div>
@@ -256,10 +256,10 @@
   <div class="ocr-popup-original" id="ocr-popup-original"></div>
   <input type="text" id="ocr-popup-input" placeholder="Corrected text… (Enter to save)">
   <div class="ocr-popup-actions">
-    <button id="ocr-popup-confirm" class="btn btn-sm btn-primary">Confirm</button>
-    <button id="ocr-popup-ditto"   class="btn btn-sm btn-outline-secondary">Ditto</button>
-    <button id="ocr-popup-delete"  class="btn btn-sm btn-outline-danger">Delete</button>
-    <button id="ocr-popup-cancel"  class="btn btn-sm btn-outline-secondary">Cancel</button>
+    <button id="ocr-popup-confirm" class="btn btn-sm btn-primary"><i class="fa-solid fa-check me-1"></i>Confirm</button>
+    <button id="ocr-popup-ditto"   class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-copy me-1"></i>Ditto</button>
+    <button id="ocr-popup-delete"  class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+    <button id="ocr-popup-cancel"  class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
     <span class="ocr-popup-hint">Enter · Esc</span>
   </div>
 </div>
@@ -267,18 +267,18 @@
 <!-- Unsaved image-adjustments confirmation bar -->
 <div id="dp-image-unsaved-bar">
   <label id="dp-image-unsaved-label">You have unsaved image adjustments.</label>
-  <button id="dp-image-unsaved-save"   class="btn btn-sm btn-primary">Save &amp; continue</button>
-  <button id="dp-image-unsaved-skip"   class="btn btn-sm btn-outline-secondary">Use last-saved image</button>
-  <button id="dp-image-unsaved-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
+  <button id="dp-image-unsaved-save"   class="btn btn-sm btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Save &amp; continue</button>
+  <button id="dp-image-unsaved-skip"   class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-clock-rotate-left me-1"></i>Use last-saved image</button>
+  <button id="dp-image-unsaved-cancel" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
 </div>
 
 <!-- OCR selection bar (multi-select actions) -->
 <div id="ocr-merge-bar">
   <label id="ocr-merge-label">2 words selected</label>
-  <button id="ocr-rerun-ocr"   class="btn btn-sm btn-outline-secondary">Rerun OCR</button>
-  <button id="ocr-bulk-ditto"  class="btn btn-sm btn-outline-secondary">Ditto</button>
-  <button id="ocr-bulk-delete" class="btn btn-sm btn-outline-danger">Delete</button>
-  <button id="ocr-merge-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
+  <button id="ocr-rerun-ocr"   class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-gears me-1"></i>Rerun OCR</button>
+  <button id="ocr-bulk-ditto"  class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-copy me-1"></i>Ditto</button>
+  <button id="ocr-bulk-delete" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+  <button id="ocr-merge-cancel" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
   <span class="merge-bar-hint">Esc · ⌫</span>
 </div>
 
@@ -291,9 +291,9 @@
     <option value="LOC">Location</option>
     <option value="ORG">Organization</option>
   </select>
-  <button id="ner-select-apply" class="btn btn-sm btn-primary">Apply</button>
-  <button id="ner-select-delete" class="btn btn-sm btn-outline-danger">Delete</button>
-  <button id="ner-select-cancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
+  <button id="ner-select-apply" class="btn btn-sm btn-primary"><i class="fa-solid fa-check me-1"></i>Apply</button>
+  <button id="ner-select-delete" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+  <button id="ner-select-cancel" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
 </div>
 
 {% if image_url %}

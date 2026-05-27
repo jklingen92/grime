@@ -20,9 +20,9 @@
     <div class="d-flex align-items-center gap-2 mb-2">
       <span class="fw-semibold" style="color:var(--grime-primary)">Workers</span>
       <span class="badge bg-secondary" id="pending-count-badge">0 pending</span>
-      <a href="{% url 'grime:jobs_list' %}" class="btn btn-sm btn-outline-secondary ms-1">All jobs</a>
+      <a href="{% url 'grime:jobs_list' %}" class="btn btn-sm btn-outline-secondary ms-1"><i class="fa-solid fa-list me-1"></i>All jobs</a>
       <button class="btn btn-sm btn-grime ms-auto" data-bs-toggle="modal" data-bs-target="#addJobModal">
-        + Add Job
+        <i class="fa-solid fa-plus me-1"></i>Add Job
       </button>
     </div>
     <div class="row g-3" id="workers-panel">
@@ -75,7 +75,7 @@
             <div class="form-text">{{ form.title.help_text }}</div>
           {% endif %}
         </div>
-        <button type="submit" class="btn btn-grime btn-sm">Ingest PDF</button>
+        <button type="submit" class="btn btn-grime btn-sm"><i class="fa-solid fa-upload me-1"></i>Ingest PDF</button>
       </form>
     </div>
   </div>
@@ -97,7 +97,7 @@
             {% for entry in doc_list %}
             {% with doc=entry.doc %}
             <tr>
-              <td><a href="{% url 'grime:document' doc_pk=doc.pk %}">{{ doc.title }}</a></td>
+              <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i>{{ doc.title }}</a></td>
               <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             {% endwith %}
@@ -148,8 +148,8 @@
         </form>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-sm btn-grime" id="submit-job-btn">Start job</button>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+        <button type="button" class="btn btn-sm btn-grime" id="submit-job-btn"><i class="fa-solid fa-play me-1"></i>Start job</button>
       </div>
     </div>
   </div>
