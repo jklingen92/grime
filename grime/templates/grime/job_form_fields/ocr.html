@@ -1,0 +1,6 @@
+{% if form %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">{{ form.engine.label|default:"OCR engine" }}</label>
+  {{ form.engine }}
+</div>
+{% endif %}
