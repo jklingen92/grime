@@ -38,7 +38,7 @@ from pathlib import Path
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Max
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
@@ -133,6 +133,11 @@ def get_viewer_urls() -> list:
             "<int:page_pk>/viewer/image/autocontrast/",
             image_autocontrast,
             name="grime_documentpage_viewer_image_autocontrast",
+        ),
+        path(
+            "<int:page_pk>/viewer/export/pdf/",
+            export_page_pdf,
+            name="grime_documentpage_viewer_export_pdf",
         ),
     ]
 
@@ -992,5 +997,56 @@ def document_list_view(request):
             "job_form": job_form,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# PDF export
+# ---------------------------------------------------------------------------
+
+
+@staff_member_required
+def export_document_pdf_view(request, doc_pk: int):
+    """Download all pages of a document as a searchable sandwich PDF.
+
+    Query params:
+        confirmed_only=1  — include only words with a manual correction
+    """
+    doc = get_object_or_404(Document, pk=doc_pk)
+    confirmed_only = request.GET.get("confirmed_only") == "1"
+
+    from grime.pipeline.export import export_document_pdf
+
+    buf = io.BytesIO()
+    export_document_pdf(doc, buf, confirmed_only=confirmed_only)
+    buf.seek(0)
+
+    slug = doc.title.replace(" ", "_")[:60]
+    response = HttpResponse(buf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{slug}.pdf"'
+    return response
+
+
+@staff_member_required
+def export_page_pdf(request, page_pk: int):
+    """Download a single page as a searchable sandwich PDF.
+
+    Query params:
+        confirmed_only=1  — include only words with a manual correction
+    """
+    page = get_object_or_404(DocumentPage, pk=page_pk)
+    confirmed_only = request.GET.get("confirmed_only") == "1"
+
+    from grime.pipeline.export import export_document_pdf
+
+    buf = io.BytesIO()
+    export_document_pdf(
+        page.document, buf, confirmed_only=confirmed_only, page_pks=[page.pk]
+    )
+    buf.seek(0)
+
+    slug = str(page).replace(" ", "_").replace("/", "-")[:60]
+    response = HttpResponse(buf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{slug}.pdf"'
+    return response
 
 
