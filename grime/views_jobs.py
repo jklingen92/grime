@@ -169,7 +169,7 @@ def cancel_job(request, job_pk):
         job.error = "Cancelled by user"
         job.completed_at = timezone.now()
         job.save(update_fields=["status", "error", "completed_at"])
-    return JsonResponse({"job_id": job.pk, "status": job.status})
+    return redirect(request.META.get("HTTP_REFERER") or reverse("grime:jobs_list"))
 
 
 @staff_member_required
