@@ -97,6 +97,25 @@ CELERY_TIMEZONE = TIME_ZONE
 # Disabling it prevents connection errors when Redis is only used as a broker.
 CELERY_TASK_IGNORE_RESULT = True
 
+# Logging — ensure grime's loggers reach the console in both the Django dev
+# server and Celery workers (which hijack the root logger on startup).
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "grime": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 # Number of named worker slots. Each slot gets its own Celery queue and process.
 # WorkerSlot rows are created automatically on migrate via the post_migrate signal.
 # Update Procfile to match when changing this value.
