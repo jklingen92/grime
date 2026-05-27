@@ -13,7 +13,7 @@
 <header id="gl-header" class="py-2 px-3 mb-4">
   <h1 class="h6 mb-0 text-white fw-semibold">
     <a href="{% url 'grime:document_list' %}" class="text-white text-decoration-none">Documents</a>
-    &rsaquo; Jobs
+    <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>Jobs
   </h1>
 </header>
 {% endblock %}
@@ -47,13 +47,13 @@
           <td>{{ job.worker_slot|default:"—" }}</td>
           <td>
             {% if job.status == "complete" %}
-              <span class="badge bg-success">complete</span>
+              <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>complete</span>
             {% elif job.status == "failed" %}
-              <span class="badge bg-danger" title="{{ job.error }}">failed</span>
+              <span class="badge bg-danger" title="{{ job.error }}"><i class="fa-solid fa-circle-xmark me-1"></i>failed</span>
             {% elif job.status == "running" %}
-              <span class="badge bg-primary">running</span>
+              <span class="badge bg-primary"><i class="fa-solid fa-spinner fa-spin me-1"></i>running</span>
             {% else %}
-              <span class="badge bg-warning text-dark">pending</span>
+              <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>pending</span>
             {% endif %}
           </td>
           <td>
@@ -87,12 +87,12 @@
             {% if job.status == "running" or job.status == "pending" %}
             <form method="post" action="{% url 'grime:job_cancel' job_pk=job.pk %}" class="d-inline">
               {% csrf_token %}
-              <button class="btn btn-sm btn-outline-danger py-0">Cancel</button>
+              <button class="btn btn-sm btn-outline-danger py-0"><i class="fa-solid fa-stop me-1"></i>Cancel</button>
             </form>
             {% else %}
             <form method="post" action="{% url 'grime:job_rerun' job_pk=job.pk %}" class="d-inline">
               {% csrf_token %}
-              <button class="btn btn-sm btn-outline-secondary py-0">Rerun</button>
+              <button class="btn btn-sm btn-outline-secondary py-0"><i class="fa-solid fa-rotate-right me-1"></i>Rerun</button>
             </form>
             {% endif %}
           </td>
