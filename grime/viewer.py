@@ -194,12 +194,9 @@ def _tag_to_dict(tag: Tag) -> dict:
     }
 
 
-_NER_MODEL_LABELS: dict[str, str] = {
-    "general": "General",
-    "historical": "Historical newspapers",
-    "large": "Large (slower, higher accuracy)",
-    "fast": "Fast",
-}
+from grime.pipeline.ner import DEFAULT_MODEL as _NER_DEFAULT_MODEL
+from grime.pipeline.ner import MODEL_LABELS as _NER_MODEL_LABELS
+from grime.pipeline.ner import MODEL_REGISTRY as _NER_MODEL_REGISTRY
 
 
 def build_viewer_context(page: DocumentPage) -> dict:
@@ -242,11 +239,9 @@ def build_viewer_context(page: DocumentPage) -> dict:
         )
     )
 
-    from grime.pipeline.ner import DEFAULT_MODEL, MODEL_REGISTRY
-
     ner_models = [
-        {"key": k, "label": _NER_MODEL_LABELS.get(k, k.capitalize()), "default": k == DEFAULT_MODEL}
-        for k in MODEL_REGISTRY
+        {"key": k, "label": _NER_MODEL_LABELS.get(k, k.capitalize()), "default": k == _NER_DEFAULT_MODEL}
+        for k in _NER_MODEL_REGISTRY
     ]
 
     def _url(name: str) -> str:
@@ -841,18 +836,12 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
         return JsonResponse({"error": "Page not found"}, status=404)
 
     from grime.models import NERPass, Word
-    from grime.pipeline.ner import (
-        DEFAULT_CONFIDENCE_THRESHOLD,
-        DEFAULT_MODEL,
-        MODEL_REGISTRY,
-        extract_entities,
-        label_ocr_words,
-    )
+    from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
 
-    model_key = (request.POST.get("model") or DEFAULT_MODEL).strip()
-    if model_key not in MODEL_REGISTRY:
+    model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
+    if model_key not in _NER_MODEL_REGISTRY:
         return JsonResponse(
-            {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(MODEL_REGISTRY)}"},
+            {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"},
             status=400,
         )
 

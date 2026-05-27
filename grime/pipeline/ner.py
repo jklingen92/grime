@@ -39,6 +39,14 @@ MODEL_REGISTRY: dict[str, str] = {
     "fast": "dslim/distilbert-NER",
 }
 
+# Human-readable labels for each model key — used by forms and the viewer UI.
+MODEL_LABELS: dict[str, str] = {
+    "general": "General",
+    "historical": "Historical newspapers",
+    "large": "Large (slower, higher accuracy)",
+    "fast": "Fast",
+}
+
 DEFAULT_MODEL = "general"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.80
 

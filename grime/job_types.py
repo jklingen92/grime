@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from django import forms
 
+from grime.pipeline.ner import DEFAULT_MODEL, MODEL_LABELS, MODEL_REGISTRY
+
 if TYPE_CHECKING:
     from grime.models import AsyncJob
 
@@ -99,22 +101,35 @@ class OCRJobType(JobType):
 # NER
 # ---------------------------------------------------------------------------
 
+class NERParamsForm(forms.Form):
+    model = forms.ChoiceField(
+        label="NER model",
+        choices=[(k, MODEL_LABELS.get(k, k.capitalize())) for k in MODEL_REGISTRY],
+        initial=DEFAULT_MODEL,
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+    )
+
+
 class NERJobType(JobType):
     key = "ner"
     label = "NER"
-    params_form_class = None
+    params_form_class = NERParamsForm
 
-    SCHEMA_NAME = "hf-historical-ner"
+    def _schema_name(self, model_key: str) -> str:
+        return f"hf-ner-{model_key}"
 
     def run(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
         from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
 
+        model_key = job.params.get("model") or DEFAULT_MODEL
+        schema_name = self._schema_name(model_key)
+
         pages = list(job.document.pages.order_by("page_number"))
         if not job.force:
             nerd_ids = set(
                 NERPass.objects.filter(
-                    page__in=pages, schema_name=self.SCHEMA_NAME
+                    page__in=pages, schema_name=schema_name
                 ).values_list("page_id", flat=True)
             )
             pages = [p for p in pages if p.pk not in nerd_ids]
@@ -125,15 +140,17 @@ class NERJobType(JobType):
 
         entities_found = 0
         for page in pages:
-            NERPass.objects.filter(page=page, schema_name=self.SCHEMA_NAME).delete()
+            NERPass.objects.filter(page=page, schema_name=schema_name).delete()
             Word.objects.filter(page=page).update(ner_label=None)
             entities = extract_entities(
-                page.text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD
+                page.text,
+                confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+                model=model_key,
             )
             ner_pass = NERPass.objects.create(
                 page=page,
-                schema_name=self.SCHEMA_NAME,
-                method="hf-historical-ner",
+                schema_name=schema_name,
+                method=f"hf-ner-{model_key}",
                 used_llm=False,
                 threshold=DEFAULT_CONFIDENCE_THRESHOLD,
                 status=NERPass.STATUS_COMPLETE,
@@ -155,13 +172,17 @@ class NERJobType(JobType):
     def clean(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
 
+        # Wipe all NER passes for this document regardless of model, so a
+        # forced re-run always starts from a clean slate.
         page_ids = job.document.pages.values_list("pk", flat=True)
-        NERPass.objects.filter(page_id__in=page_ids, schema_name=self.SCHEMA_NAME).delete()
+        NERPass.objects.filter(page_id__in=page_ids).delete()
         Word.objects.filter(page_id__in=page_ids).update(ner_label=None)
 
     def results_summary(self, job: "AsyncJob") -> str:
+        model_key = job.params.get("model") or DEFAULT_MODEL
+        label = MODEL_LABELS.get(model_key, model_key)
         e = job.result.get("entities_found", 0)
-        return f"NER'd {job.pages_done} pages, {e} entities found"
+        return f"NER'd {job.pages_done} pages, {e} entities found ({label})"
 
 
 # ---------------------------------------------------------------------------
