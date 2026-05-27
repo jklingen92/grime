@@ -61,6 +61,8 @@ dev = [
     "opencv-python",
     "numpy",
     "boto3",
+    "transformers",
+    "torch",
     "imageio[ffmpeg]",
     "celery[sqlalchemy]",
     "black",
