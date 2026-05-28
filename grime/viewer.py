@@ -279,6 +279,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "tag_create_url": _url("grime_documentpage_viewer_tag_create"),
         "tag_update_url": _url("grime_documentpage_viewer_tag_update"),
         "tag_delete_url": _url("grime_documentpage_viewer_tag_delete"),
+        "export_pdf_url": _url("grime_documentpage_viewer_export_pdf"),
         "image_save_url": _url("grime_documentpage_viewer_image_save"),
         "image_reset_url": _url("grime_documentpage_viewer_image_reset"),
         "image_autocontrast_url": _url("grime_documentpage_viewer_image_autocontrast"),
