@@ -91,6 +91,7 @@
             <tr>
               <th>Title</th>
               <th>Pages</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -99,6 +100,7 @@
             <tr>
               <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i>{{ doc.title }}</a></td>
               <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a></td>
             </tr>
             {% endwith %}
             {% endfor %}

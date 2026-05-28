@@ -66,6 +66,7 @@
     <div class="dp-toolbar-sep"></div>
     <span id="dp-tab-badge" style="font-size:0.82em;color:#666"></span>
 
+    {% if export_pdf_url %}<a href="{{ export_pdf_url }}" class="btn btn-sm btn-outline-secondary" style="margin-left:auto" title="Download this page as a searchable PDF">Export PDF</a>{% endif %}
     <button id="dp-image-save-btn" type="button" class="btn btn-sm btn-warning" style="display:none;margin-left:auto"><i class="fa-solid fa-floppy-disk me-1"></i>Save adjusted image</button>
   </div>
 

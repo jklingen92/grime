@@ -30,6 +30,7 @@ dependencies = [
     "pdf2image",
     "pdfplumber",
     "django-environ",
+    "reportlab",
 ]
 
 [project.urls]
