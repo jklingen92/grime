@@ -184,17 +184,19 @@
         <h5 class="modal-title h6" id="editDocModalLabel">Edit Document</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
-        <div id="edit-doc-error" class="alert alert-danger py-2 d-none"></div>
-        <div class="mb-3">
-          <label for="edit-doc-title" class="form-label fw-semibold">Title</label>
-          <input type="text" id="edit-doc-title" class="form-control" required>
+      <form id="edit-doc-form">
+        <div class="modal-body">
+          <div id="edit-doc-error" class="alert alert-danger py-2 d-none"></div>
+          <div class="mb-3">
+            <label for="edit-doc-title" class="form-label fw-semibold">Title</label>
+            <input type="text" id="edit-doc-title" class="form-control" required autofocus>
+          </div>
         </div>
-      </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
-        <button type="button" class="btn btn-sm btn-grime" id="save-doc-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save</button>
-      </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+          <button type="submit" class="btn btn-sm btn-grime" id="save-doc-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -207,14 +209,16 @@
         <h5 class="modal-title h6" id="deleteDocModalLabel">Delete Document</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
-        <div id="delete-doc-error" class="alert alert-danger py-2 d-none"></div>
-        <p class="mb-0">Are you sure you want to delete <strong id="delete-doc-name"></strong>? This cannot be undone.</p>
-      </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
-        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn"><i class="fa-solid fa-trash me-1"></i>Delete</button>
-      </div>
+      <form id="delete-doc-form">
+        <div class="modal-body">
+          <div id="delete-doc-error" class="alert alert-danger py-2 d-none"></div>
+          <p class="mb-0">Are you sure you want to delete <strong id="delete-doc-name"></strong>? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+          <button type="submit" class="btn btn-sm btn-danger" id="confirm-delete-btn"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

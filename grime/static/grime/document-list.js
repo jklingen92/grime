@@ -133,23 +133,11 @@ document.getElementById("editDocModal").addEventListener("show.bs.modal", e => {
   document.getElementById("edit-doc-error").classList.add("d-none");
 });
 
-document.getElementById("editDocModal").addEventListener("shown.bs.modal", () => {
-  document.getElementById("edit-doc-title").focus();
-});
-
-document.getElementById("edit-doc-title").addEventListener("keydown", e => {
-  if (e.key === "Enter") document.getElementById("save-doc-btn").click();
-});
-
-document.getElementById("save-doc-btn").addEventListener("click", async () => {
+document.getElementById("edit-doc-form").addEventListener("submit", async e => {
+  e.preventDefault();
   const errBox = document.getElementById("edit-doc-error");
   errBox.classList.add("d-none");
   const title = document.getElementById("edit-doc-title").value.trim();
-  if (!title) {
-    errBox.textContent = "Title cannot be empty.";
-    errBox.classList.remove("d-none");
-    return;
-  }
   try {
     const res = await fetch(RENAME_URL_TPL.replace("{pk}", editDocPk), {
       method: "POST",
@@ -179,10 +167,6 @@ document.getElementById("save-doc-btn").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 let deleteDocPk = null;
 
-document.getElementById("deleteDocModal").addEventListener("keydown", e => {
-  if (e.key === "Enter") document.getElementById("confirm-delete-btn").click();
-});
-
 document.getElementById("deleteDocModal").addEventListener("show.bs.modal", e => {
   const btn = e.relatedTarget;
   deleteDocPk = btn.dataset.docPk;
@@ -190,7 +174,8 @@ document.getElementById("deleteDocModal").addEventListener("show.bs.modal", e =>
   document.getElementById("delete-doc-error").classList.add("d-none");
 });
 
-document.getElementById("confirm-delete-btn").addEventListener("click", async () => {
+document.getElementById("delete-doc-form").addEventListener("submit", async e => {
+  e.preventDefault();
   const errBox = document.getElementById("delete-doc-error");
   errBox.classList.add("d-none");
   try {
