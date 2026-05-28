@@ -64,6 +64,9 @@ class OCRJobType(JobType):
             engine = None
 
         pages = list(job.document.pages.order_by("page_number"))
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            pages = [p for p in pages if p.pk == int(page_pk)]
         if not job.force:
             ocrd_ids = set(
                 OCRPass.objects.filter(page__in=pages).values_list("page_id", flat=True)
@@ -140,6 +143,9 @@ class NERJobType(JobType):
         model_id = MODEL_REGISTRY.get(model_key, model_key)
 
         pages = list(job.document.pages.order_by("page_number"))
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            pages = [p for p in pages if p.pk == int(page_pk)]
         if not job.force:
             nerd_ids = set(
                 NERPass.objects.filter(

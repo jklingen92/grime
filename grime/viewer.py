@@ -291,7 +291,14 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
         "ocr_rerun_selection_url": "",
-        "ner_rerun_url": _url("grime_documentpage_viewer_words_rerun_ner"),
+        "ner_rerun_url": "",
+        "job_create_url": reverse("grime:job_create"),
+        "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace("/0/", "/{pk}/"),
+        "job_form_fields_url": reverse("grime:job_form_fields"),
+        "worker_slots_json": _safe_json(
+            list(WorkerSlot.objects.order_by("slot_number").values("pk", "name"))
+        ),
+        "document_pk": page.document_id,
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
         "ocr_reorder_url": "",

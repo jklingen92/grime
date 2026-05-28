@@ -23,6 +23,7 @@ urlpatterns = [
     path("jobs/form-fields/", views_jobs.job_form_fields, name="job_form_fields"),
     path("jobs/status/", views_jobs.jobs_status, name="jobs_status"),
     path("jobs/<int:job_pk>/cancel/", views_jobs.cancel_job, name="job_cancel"),
+    path("jobs/<int:job_pk>/poll/", views_jobs.poll_job, name="job_poll"),
     path("jobs/<int:job_pk>/rerun/", views_jobs.rerun_job, name="job_rerun"),
     path("jobs/slots/<int:slot_number>/rename/", views_jobs.rename_worker_slot, name="worker_slot_rename"),
 ]

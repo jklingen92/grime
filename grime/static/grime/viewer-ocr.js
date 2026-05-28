@@ -718,21 +718,12 @@ export function createOcrModule(core) {
       }).catch(function() { btn.disabled = false; });
     });
 
-    var rerunOcrBtn   = document.getElementById('dp-rerun-ocr');
-    var rerunCaretBtn = document.getElementById('dp-rerun-ocr-caret');
-    var rerunMenu     = document.getElementById('dp-rerun-ocr-menu');
+    var rerunOcrBtn = document.getElementById('dp-rerun-ocr');
     if (rerunOcrBtn) {
-      rerunOcrBtn.textContent = ocrBtnLabel();
-      rerunOcrBtn.addEventListener('click', function(e) { e.preventDefault(); runOcr(state.ocrEngine || 'textract'); });
-    }
-    if (rerunCaretBtn && rerunMenu) {
-      rerunCaretBtn.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); rerunMenu.classList.toggle('open'); });
-      rerunMenu.querySelectorAll('[data-engine]').forEach(function(item) {
-        item.addEventListener('click', function(e) {
-          e.preventDefault(); state.ocrEngine = item.dataset.engine;
-          rerunMenu.querySelectorAll('[data-engine]').forEach(function(i) { i.classList.toggle('active', i === item); });
-          rerunMenu.classList.remove('open'); runOcr(state.ocrEngine);
-        });
+      rerunOcrBtn.innerHTML = '<i class="fa-solid fa-gears me-1"></i>' + ocrBtnLabel();
+      rerunOcrBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (core.openJobModal) core.openJobModal('ocr');
       });
     }
 

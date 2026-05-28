@@ -65,6 +65,13 @@ def create_job(request):
             return JsonResponse({"error": pf.errors.as_text()}, status=400)
         params = pf.cleaned_data
 
+    page_pk_raw = request.POST.get("page_pk")
+    if page_pk_raw:
+        try:
+            params["page_pk"] = int(page_pk_raw)
+        except (ValueError, TypeError):
+            pass
+
     from grime.models import Document
 
     try:
@@ -157,6 +164,18 @@ def jobs_status(request):
         "slots": slots_data,
         "pending_count": pending_count,
         "recent": [_job_to_dict(j) for j in recent],
+    })
+
+
+@staff_member_required
+def poll_job(request, job_pk):
+    """Return current status of a single job for the viewer spinner."""
+    job = get_object_or_404(AsyncJob, pk=job_pk)
+    return JsonResponse({
+        "status": job.status,
+        "pages_done": job.pages_done,
+        "pages_total": job.pages_total,
+        "error": job.error,
     })
 
 

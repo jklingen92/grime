@@ -25,21 +25,22 @@
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
-      <div class="dp-split-btn btn-group btn-group-sm" role="group">
-        <button id="dp-rerun-ocr" type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-gears me-1"></i>Run OCR</button><button id="dp-rerun-ocr-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose OCR engine">&#9662;</button>
-        <div id="dp-rerun-ocr-menu" class="dp-menu dropdown-menu">
-          <a href="#" data-engine="textract" class="dropdown-item active">Textract</a>
-          <a href="#" data-engine="tesseract" class="dropdown-item">Tesseract</a>
-        </div>
-      </div>
+      <button id="dp-rerun-ocr" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-gears me-1"></i>Run OCR</button>
+      <span id="dp-rerun-ocr-spinner" class="dp-job-spinner" style="display:none" aria-label="OCR running">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        <span class="dp-job-spinner-text">Running…</span>
+      </span>
       <button id="dp-boxes-toggle" type="button" class="btn btn-sm btn-outline-secondary">Hide boxes</button>
       <button id="dp-draw-toggle" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-draw-polygon me-1"></i>Add region (a)</button>
     </div>
 
     <div class="dp-toolbar-sep" id="dp-sep-ner"></div>
-    <div class="dp-split-btn btn-group btn-group-sm" id="dp-ner-split" role="group">
-      <button id="dp-rerun-ner" type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-tags me-1"></i>Run NER</button><button id="dp-rerun-ner-caret" type="button" class="btn btn-outline-secondary px-2" aria-label="Choose NER model">&#9662;</button>
-      <div id="dp-rerun-ner-menu" class="dp-menu dropdown-menu"></div>
+    <div id="dp-ner-split">
+      <button id="dp-rerun-ner" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-tags me-1"></i>Run NER</button>
+      <span id="dp-rerun-ner-spinner" class="dp-job-spinner" style="display:none" aria-label="NER running">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        <span class="dp-job-spinner-text">Running…</span>
+      </span>
     </div>
     {% endif %}
 
@@ -287,6 +288,37 @@
   <span class="merge-bar-hint">Esc · ⌫</span>
 </div>
 
+<!-- Per-page job modal (triggered by Run OCR / Run NER buttons in the toolbar) -->
+<div class="modal fade" id="dpPageJobModal" tabindex="-1" aria-labelledby="dpPageJobModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title h6" id="dpPageJobModalLabel">Run job on this page</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="dp-job-error" class="alert alert-danger py-2 d-none"></div>
+        <input type="hidden" id="dp-job-type" value="">
+        <input type="hidden" id="dp-job-document" value="">
+        <input type="hidden" id="dp-job-page" value="">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Worker</label>
+          <select id="dp-job-worker" class="form-select form-select-sm"></select>
+        </div>
+        <div class="mb-3 form-check">
+          <input id="dp-job-force" type="checkbox" class="form-check-input">
+          <label class="form-check-label" for="dp-job-force">Force (reprocess even if already done)</label>
+        </div>
+        <div id="dp-job-params"><!-- populated via AJAX --></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+        <button type="button" id="dp-job-submit" class="btn btn-sm btn-primary"><i class="fa-solid fa-play me-1"></i>Start job</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- NER selection bar -->
 <div id="ner-select-bar">
   <label id="ner-select-label"></label>
@@ -356,6 +388,12 @@ window.VIEWER_CONFIG = {
   rerunSelectionUrl: "{{ ocr_rerun_selection_url }}",
   nerRerunUrl:       "{{ ner_rerun_url }}",
   nerModels:         {{ ner_models_json }},
+  jobCreateUrl:      "{{ job_create_url }}",
+  jobPollUrlTpl:     "{{ job_poll_url_tpl }}",
+  jobFormFieldsUrl:  "{{ job_form_fields_url }}",
+  workerSlots:       {{ worker_slots_json }},
+  documentPk:        {{ document_pk }},
+  pagePk:            {{ tag_source_id }},
 {% endif %}
 };
 </script>
