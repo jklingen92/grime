@@ -8,7 +8,8 @@
  */
 
 const { csrfToken: CSRF, statusUrl: STATUS_URL, createUrl: CREATE_URL,
-        formFieldsUrl: FORM_FIELDS_URL, cancelUrlTpl: CANCEL_URL_TPL } = window.DOC_LIST_CONFIG;
+        formFieldsUrl: FORM_FIELDS_URL, cancelUrlTpl: CANCEL_URL_TPL,
+        renameUrlTpl: RENAME_URL_TPL, deleteUrlTpl: DELETE_URL_TPL } = window.DOC_LIST_CONFIG;
 
 // ---------------------------------------------------------------------------
 // Add Job modal — dynamic params fragment
@@ -119,3 +120,91 @@ function updateWorkersPanel(slots) {
 
 setInterval(pollJobs, 3000);
 pollJobs();
+
+// ---------------------------------------------------------------------------
+// Edit Document modal
+// ---------------------------------------------------------------------------
+let editDocPk = null;
+
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-edit-doc]");
+  if (!btn) return;
+  editDocPk = btn.dataset.editDoc;
+  document.getElementById("edit-doc-title").value = btn.dataset.editTitle;
+  document.getElementById("edit-doc-error").classList.add("d-none");
+  bootstrap.Modal.getOrCreateInstance(document.getElementById("editDocModal")).show();
+});
+
+document.getElementById("editDocModal").addEventListener("shown.bs.modal", () => {
+  document.getElementById("edit-doc-title").focus();
+});
+
+document.getElementById("save-doc-btn").addEventListener("click", async () => {
+  const errBox = document.getElementById("edit-doc-error");
+  errBox.classList.add("d-none");
+  const title = document.getElementById("edit-doc-title").value.trim();
+  if (!title) {
+    errBox.textContent = "Title cannot be empty.";
+    errBox.classList.remove("d-none");
+    return;
+  }
+  try {
+    const res = await fetch(RENAME_URL_TPL.replace("{pk}", editDocPk), {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ title }),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      const row = document.querySelector(`[data-doc-row="${editDocPk}"]`);
+      if (row) {
+        row.querySelector(".doc-title-cell").textContent = json.title;
+        row.querySelector("[data-edit-doc]").dataset.editTitle = json.title;
+        row.querySelector("[data-delete-doc]").dataset.deleteTitle = json.title;
+      }
+      bootstrap.Modal.getInstance(document.getElementById("editDocModal")).hide();
+    } else {
+      errBox.textContent = json.error || "Failed to save.";
+      errBox.classList.remove("d-none");
+    }
+  } catch {
+    errBox.textContent = "Could not reach server.";
+    errBox.classList.remove("d-none");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Delete Document modal
+// ---------------------------------------------------------------------------
+let deleteDocPk = null;
+
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-delete-doc]");
+  if (!btn) return;
+  deleteDocPk = btn.dataset.deleteDoc;
+  document.getElementById("delete-doc-name").textContent = btn.dataset.deleteTitle;
+  document.getElementById("delete-doc-error").classList.add("d-none");
+  bootstrap.Modal.getOrCreateInstance(document.getElementById("deleteDocModal")).show();
+});
+
+document.getElementById("confirm-delete-btn").addEventListener("click", async () => {
+  const errBox = document.getElementById("delete-doc-error");
+  errBox.classList.add("d-none");
+  try {
+    const res = await fetch(DELETE_URL_TPL.replace("{pk}", deleteDocPk), {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF },
+    });
+    if (res.ok) {
+      document.querySelector(`[data-doc-row="${deleteDocPk}"]`)?.remove();
+      bootstrap.Modal.getInstance(document.getElementById("deleteDocModal")).hide();
+    } else {
+      const json = await res.json().catch(() => ({}));
+      errBox.textContent = json.error || "Failed to delete.";
+      errBox.classList.remove("d-none");
+    }
+  } catch {
+    errBox.textContent = "Could not reach server.";
+    errBox.classList.remove("d-none");
+  }
+});

@@ -97,10 +97,26 @@
           <tbody>
             {% for entry in doc_list %}
             {% with doc=entry.doc %}
-            <tr>
-              <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i>{{ doc.title }}</a></td>
+            <tr data-doc-row="{{ doc.pk }}">
+              <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i><span class="doc-title-cell">{{ doc.title }}</span></a></td>
               <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-              <td><a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a></td>
+              <td>
+                <div class="d-flex gap-2 justify-content-end">
+                  <a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a>
+                  <button class="btn btn-sm btn-outline-primary"
+                          data-edit-doc="{{ doc.pk }}"
+                          data-edit-title="{{ doc.title|escapejs }}"
+                          title="Edit document">
+                    <i class="fa-solid fa-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger"
+                          data-delete-doc="{{ doc.pk }}"
+                          data-delete-title="{{ doc.title|escapejs }}"
+                          title="Delete document">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </td>
             </tr>
             {% endwith %}
             {% endfor %}
@@ -156,6 +172,48 @@
     </div>
   </div>
 </div>
+<!-- Edit Document modal -->
+<div class="modal fade" id="editDocModal" tabindex="-1" aria-labelledby="editDocModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title h6" id="editDocModalLabel">Edit Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="edit-doc-error" class="alert alert-danger py-2 d-none"></div>
+        <div class="mb-3">
+          <label for="edit-doc-title" class="form-label fw-semibold">Title</label>
+          <input type="text" id="edit-doc-title" class="form-control" required>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+        <button type="button" class="btn btn-sm btn-grime" id="save-doc-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Document modal -->
+<div class="modal fade" id="deleteDocModal" tabindex="-1" aria-labelledby="deleteDocModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title h6" id="deleteDocModalLabel">Delete Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="delete-doc-error" class="alert alert-danger py-2 d-none"></div>
+        <p class="mb-0">Are you sure you want to delete <strong id="delete-doc-name"></strong>? This cannot be undone.</p>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -166,6 +224,8 @@ window.DOC_LIST_CONFIG = {
   createUrl:    "{% url 'grime:job_create' %}",
   formFieldsUrl:"{% url 'grime:job_form_fields' %}",
   cancelUrlTpl: "{% url 'grime:job_cancel' job_pk=0 %}".replace("/0/", "/{pk}/"),
+  renameUrlTpl: "{% url 'grime:document_rename' doc_pk=0 %}".replace("/0/", "/{pk}/"),
+  deleteUrlTpl: "{% url 'grime:document_delete' doc_pk=0 %}".replace("/0/", "/{pk}/"),
 };
 </script>
 <script src="{% static 'grime/document-list.js' %}"></script>

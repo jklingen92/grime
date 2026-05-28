@@ -1001,6 +1001,31 @@ def document_list_view(request):
 
 
 # ---------------------------------------------------------------------------
+# Document rename / delete
+# ---------------------------------------------------------------------------
+
+
+@staff_member_required
+@require_POST
+def rename_document_view(request, doc_pk: int):
+    doc = get_object_or_404(Document, pk=doc_pk)
+    title = request.POST.get("title", "").strip()
+    if not title:
+        return JsonResponse({"error": "Title cannot be empty."}, status=400)
+    doc.title = title
+    doc.save(update_fields=["title"])
+    return JsonResponse({"ok": True, "title": doc.title})
+
+
+@staff_member_required
+@require_POST
+def delete_document_view(request, doc_pk: int):
+    doc = get_object_or_404(Document, pk=doc_pk)
+    doc.delete()
+    return JsonResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # PDF export
 # ---------------------------------------------------------------------------
 
