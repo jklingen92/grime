@@ -216,8 +216,8 @@ export function createOcrModule(core) {
     document.querySelectorAll('.ocr-word').forEach(function(el) {
       el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
     });
-    updateOcrMergeBar();
     updateTextPanels();
+    if (state.ocrSelectedIds.size > 0) openEditPopup(null, null);
   }
 
   /* ── undo / redo ───────────────────────────────────────────── */
@@ -249,28 +249,37 @@ export function createOcrModule(core) {
   }
 
   /* ── edit popup ────────────────────────────────────────────── */
-  // Open the single-word correction popup for word/el.
+  // Open the correction popup for the current selection (single or multi-word).
   function openEditPopup(word, el) {
     if (!HAS_REPAIR) return;
     var popup = document.getElementById('ocr-popup');
     var mergeBar = document.getElementById('ocr-merge-bar'); if (mergeBar) mergeBar.style.display = 'none';
     state.currentWord = word; state.currentEl = el;
-    document.getElementById('ocr-popup-original').textContent = 'Original: ' + word.text;
-    document.getElementById('ocr-popup-input').value = word.corrected_text || '';
-    core.positionAtViewerEdge(popup);
+    var count = state.ocrSelectedIds.size;
+    var titleEl = document.getElementById('ocr-popup-title');
+    if (titleEl) titleEl.textContent = count === 1 ? '1 word selected' : count + ' words selected';
+    var originalEl = document.getElementById('ocr-popup-original');
+    var input = document.getElementById('ocr-popup-input');
+    if (count === 1 && word) {
+      if (originalEl) { originalEl.textContent = 'Original: ' + word.text; originalEl.style.display = ''; }
+      if (input) { input.value = word.corrected_text || ''; input.placeholder = 'Corrected text…'; }
+    } else {
+      if (originalEl) originalEl.style.display = 'none';
+      if (input) { input.value = ''; input.placeholder = 'Replace all with…'; }
+    }
     var confirmBtn = document.getElementById('ocr-popup-confirm'); if (confirmBtn) confirmBtn.style.display = '';
     var delBtn    = document.getElementById('ocr-popup-delete');  if (delBtn)    delBtn.style.display    = '';
     var dittoBtn  = document.getElementById('ocr-popup-ditto');   if (dittoBtn)  dittoBtn.style.display   = '';
-    document.getElementById('ocr-popup-input').focus();
-    document.getElementById('ocr-popup-input').select();
+    core.positionAtViewerEdge(popup);
+    if (input) { input.focus(); if (count === 1) input.select(); }
   }
 
-  // Hide the correction popup and clear currentWord/currentEl.
+  // Hide the correction popup, clear currentWord/currentEl, and deselect all words.
   function closeEditPopup() {
     var popup = document.getElementById('ocr-popup');
     popup.style.display = 'none'; popup._pendingRegion = null;
     state.currentWord = null; state.currentEl = null;
-    if (state.ocrSelectedIds.size >= 2) updateOcrMergeBar();
+    clearSelection();
   }
 
   // POST corrected_text for word, update the overlay class/title, and record an undo entry.
@@ -300,20 +309,56 @@ export function createOcrModule(core) {
       if (t) saveAddRegion(pending, t); else document.getElementById('dp-draw-rect').style.display = 'none';
       return;
     }
+    var text = input.value.trim();
+    if (state.ocrSelectedIds.size > 1) {
+      if (!text) { closeEditPopup(); return; }
+      var ids = Array.from(state.ocrSelectedIds);
+      closeEditPopup();
+      ids.forEach(function(id) {
+        var w = core.wordById[id];
+        var wordEl = document.querySelector("[data-word-id='" + id + "']");
+        if (w) postCorrection(w, wordEl, text);
+      });
+      return;
+    }
     if (!state.currentWord) return;
-    postCorrection(state.currentWord, state.currentEl, input.value.trim());
+    postCorrection(state.currentWord, state.currentEl, text);
     closeEditPopup();
   }
 
   // Confirm the word's existing text as its corrected_text without editing.
   function confirmEdit() {
+    if (state.ocrSelectedIds.size > 1) {
+      var ids = Array.from(state.ocrSelectedIds);
+      closeEditPopup();
+      ids.forEach(function(id) {
+        var w = core.wordById[id];
+        var wordEl = document.querySelector("[data-word-id='" + id + "']");
+        if (w) postCorrection(w, wordEl, w.corrected_text || w.text);
+      });
+      return;
+    }
     if (!state.currentWord) return;
     postCorrection(state.currentWord, state.currentEl, state.currentWord.text);
     closeEditPopup();
   }
 
-  // Delete the current word, recording an undo entry.
+  // Delete the selected word(s), recording an undo entry for single-word deletes.
   function deleteWord() {
+    if (state.ocrSelectedIds.size > 1) {
+      if (!C.bulkDeleteUrl) return;
+      var pks = Array.from(state.ocrSelectedIds);
+      if (!confirm('Delete ' + pks.length + ' words?')) return;
+      closeEditPopup();
+      core.postJson(C.bulkDeleteUrl, 'word_pks=' + encodeURIComponent(pks.join(','))).then(function(data) {
+        if (!data.ok) return;
+        var del = new Set(data.deleted_ids);
+        core.OCR_WORDS = core.OCR_WORDS.filter(function(w) { return !del.has(w.id); });
+        data.deleted_ids.forEach(function(id) { delete core.wordById[id]; });
+        core.renderOverlays(); updateTextPanels();
+      });
+      return;
+    }
     if (!state.currentWord) return;
     var snap = Object.assign({}, state.currentWord), id = state.currentWord.id;
     closeEditPopup();
@@ -339,8 +384,25 @@ export function createOcrModule(core) {
     core.renderOverlays(); updateTextPanels();
   }
 
-  // Mark the current word (or a pending drawn region) as a ditto mark.
+  // Mark the selected word(s) as ditto mark(s).
   function markWordAsDitto() {
+    if (state.ocrSelectedIds.size > 1) {
+      if (!C.bulkDittoUrl) return;
+      var changes = Array.from(state.ocrSelectedIds).map(function(id) {
+        var w = core.wordById[id];
+        return { wordId: id, prevText: w ? (w.corrected_text || w.text || '') : '' };
+      });
+      var pks = Array.from(state.ocrSelectedIds);
+      closeEditPopup();
+      core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(pks.join(','))).then(function(data) {
+        if (!data.ok) return;
+        core.recordUndo({ type: 'ocr-bulk-ditto', changes: changes });
+        data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.text = '"'; w.corrected_text = null; w.is_ditto = false; } });
+        data.updated.forEach(function(u) { var w = core.wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = true; } });
+        core.renderOverlays(); updateTextPanels();
+      });
+      return;
+    }
     if (!C.markAsDittoUrl) return;
     var popup = document.getElementById('ocr-popup');
     var pending = popup._pendingRegion;
@@ -506,7 +568,7 @@ export function createOcrModule(core) {
     }
   }
 
-  // Finalise a draw or selection gesture, or open the popup for a single-word click.
+  // Finalise a draw or selection gesture, or select a word and open the popup on click.
   function onMouseup(e) {
     if (state.drawMode) {
       if (!state.drawOrigin) return;
@@ -518,13 +580,14 @@ export function createOcrModule(core) {
       var pending = { left: Math.round(dx/scale), top: Math.round(dy/scale), width: Math.round(dw/scale), height: Math.round(dh/scale) };
       state.currentWord = null; state.currentEl = null;
       var popup = document.getElementById('ocr-popup');
-      document.getElementById('ocr-popup-original').textContent = 'New region';
-      document.getElementById('ocr-popup-input').value = '';
+      var titleEl = document.getElementById('ocr-popup-title'); if (titleEl) titleEl.textContent = 'New region';
+      var origEl = document.getElementById('ocr-popup-original'); if (origEl) { origEl.textContent = ''; origEl.style.display = 'none'; }
+      var inp = document.getElementById('ocr-popup-input'); if (inp) { inp.value = ''; inp.placeholder = 'Text for new region…'; }
       document.getElementById('ocr-popup-confirm').style.display = 'none';
       document.getElementById('ocr-popup-delete').style.display = 'none';
       core.positionAtViewerEdge(popup);
       popup._pendingRegion = pending;
-      document.getElementById('ocr-popup-input').focus();
+      if (inp) inp.focus();
     } else {
       if (!state.selectStart) return;
       if (state.isDragging) {
@@ -545,7 +608,16 @@ export function createOcrModule(core) {
               if (state.ocrSelectedIds.has(wid)) state.ocrSelectedIds.delete(wid); else state.ocrSelectedIds.add(wid);
               wordEl.classList.toggle('selected', state.ocrSelectedIds.has(wid));
               updateOcrMergeBar(); updateTextPanels();
-            } else { state.suppressClickClose = true; openEditPopup(word, wordEl); }
+            } else {
+              state.ocrSelectedIds.clear();
+              state.ocrSelectedIds.add(wid);
+              document.querySelectorAll('.ocr-word').forEach(function(el) {
+                el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
+              });
+              syncTextPanelSelection();
+              state.suppressClickClose = true;
+              openEditPopup(word, wordEl);
+            }
           }
         } else if (!e.shiftKey) { clearSelection(); }
       }
@@ -560,11 +632,7 @@ export function createOcrModule(core) {
     var tag = document.activeElement && document.activeElement.tagName;
     var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
     if (!HAS_REPAIR) return;
-    if (e.key === 'Escape') {
-      closeEditPopup(); state.ocrSelectedIds.clear();
-      var bar = document.getElementById('ocr-merge-bar'); if (bar) bar.style.display = 'none';
-      clearSelection(); return;
-    }
+    if (e.key === 'Escape') { closeEditPopup(); return; }
     if ((e.ctrlKey || e.metaKey) && !inInput) {
       if (e.key === 'a') { e.preventDefault(); selectAllOcrWords(); return; }
     }
@@ -669,8 +737,8 @@ export function createOcrModule(core) {
     if (ocpDitto) ocpDitto.addEventListener('click', function(e) { e.preventDefault(); markWordAsDitto(); });
     var ocpDelete = document.getElementById('ocr-popup-delete');
     if (ocpDelete) ocpDelete.addEventListener('click', function(e) { e.preventDefault(); deleteWord(); });
-    var ocpCancel = document.getElementById('ocr-popup-cancel');
-    if (ocpCancel) ocpCancel.addEventListener('click', function(e) { e.preventDefault(); closeEditPopup(); if (state.drawMode) setDrawMode(false); });
+    var ocpClose = document.getElementById('ocr-popup-close');
+    if (ocpClose) ocpClose.addEventListener('click', function(e) { e.preventDefault(); closeEditPopup(); if (state.drawMode) setDrawMode(false); });
     var ocpInput = document.getElementById('ocr-popup-input');
     if (ocpInput) ocpInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
