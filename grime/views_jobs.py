@@ -70,7 +70,7 @@ def create_job(request):
         try:
             params["page_pk"] = int(page_pk_raw)
         except (ValueError, TypeError):
-            pass
+            return JsonResponse({"error": "Invalid page_pk value"}, status=400)
 
     from grime.models import Document
 

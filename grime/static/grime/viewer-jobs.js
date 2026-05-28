@@ -144,6 +144,13 @@ export function createJobsModule(core) {
 
       if (errEl) errEl.classList.add('d-none');
 
+      // Guard: page_pk must be present — without it the job would process
+      // every page in the document instead of just the current one.
+      if (!pagePk) {
+        if (errEl) { errEl.textContent = 'Page context missing — please reload and try again.'; errEl.classList.remove('d-none'); }
+        return;
+      }
+
       var params = new URLSearchParams();
       params.set('job_type', jobType);
       params.set('document', docPk);
@@ -157,6 +164,7 @@ export function createJobsModule(core) {
       });
 
       submitBtn.disabled = true;
+      var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
       try {
         var res = await fetch(C.jobCreateUrl, {
           method: 'POST',
@@ -165,7 +173,7 @@ export function createJobsModule(core) {
         });
         var json = await res.json();
         if (res.ok) {
-          bootstrap.Modal.getInstance(modalEl).hide();
+          modal.hide();
           _showSpinner(jobType);
           _startPolling(json.job_id, jobType);
         } else {
