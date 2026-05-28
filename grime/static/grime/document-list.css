@@ -24,24 +24,11 @@
 .tag-chips {
   display: contents;
 }
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--grime-primary, #2c6f57);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
 .tag-chip-remove {
   all: unset;
   cursor: pointer;
-  line-height: 1;
-  font-size: 14px;
   opacity: .75;
+  line-height: 1;
 }
 .tag-chip-remove:hover { opacity: 1; }
 .tag-text-input {
@@ -52,16 +39,4 @@
   font-size: 14px;
   background: transparent;
   padding: 2px 0;
-}
-
-/* ---- label chips in the document list table ---- */
-.doc-label-chip {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--grime-primary, #2c6f57);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
 }

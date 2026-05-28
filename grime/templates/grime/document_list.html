@@ -112,7 +112,7 @@
               <td>
                 {% if doc.labels %}
                   <div class="d-flex flex-wrap gap-1">
-                    {% for label in doc.labels %}<span class="doc-label-chip">{{ label }}</span>{% endfor %}
+                    {% for label in doc.labels %}<span class="badge rounded-pill" style="background-color:var(--grime-primary)">{{ label }}</span>{% endfor %}
                   </div>
                 {% else %}
                   <span class="text-muted">—</span>
