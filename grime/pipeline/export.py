@@ -95,9 +95,7 @@ def _render_page(c: canvas.Canvas, page: DocumentPage, confirmed_only: bool) -> 
     scale_y = page_h_pts / img_h_px
 
     # Draw invisible text layer.
-    c.setFillColorRGB(0, 0, 0)
-    c.setTextRenderMode(3)  # PDF mode 3 = invisible (no fill, no stroke)
-
+    # setTextRenderMode(3) lives on PDFTextObject, not on Canvas directly.
     words_qs = page.words.order_by("line_num", "word_num")
     if confirmed_only:
         words_qs = words_qs.filter(corrected_text__isnull=False)
@@ -114,8 +112,11 @@ def _render_page(c: canvas.Canvas, page: DocumentPage, confirmed_only: bool) -> 
         x = word.left * scale_x
         y = page_h_pts - (word.top + word.height) * scale_y
 
-        c.setFont("Helvetica", font_size)
-        c.drawString(x, y, text)
+        text_obj = c.beginText(x, y)
+        text_obj.setFont("Helvetica", font_size)
+        text_obj.setTextRenderMode(3)  # invisible: no fill, no stroke
+        text_obj.textOut(text)
+        c.drawText(text_obj)
 
     c.showPage()
 
