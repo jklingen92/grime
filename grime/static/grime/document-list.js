@@ -8,7 +8,8 @@
  */
 
 const { csrfToken: CSRF, statusUrl: STATUS_URL, createUrl: CREATE_URL,
-        formFieldsUrl: FORM_FIELDS_URL, cancelUrlTpl: CANCEL_URL_TPL } = window.DOC_LIST_CONFIG;
+        formFieldsUrl: FORM_FIELDS_URL, cancelUrlTpl: CANCEL_URL_TPL,
+        renameUrlTpl: RENAME_URL_TPL, deleteUrlTpl: DELETE_URL_TPL } = window.DOC_LIST_CONFIG;
 
 // ---------------------------------------------------------------------------
 // Add Job modal — dynamic params fragment
@@ -119,3 +120,79 @@ function updateWorkersPanel(slots) {
 
 setInterval(pollJobs, 3000);
 pollJobs();
+
+// ---------------------------------------------------------------------------
+// Edit Document modal
+// ---------------------------------------------------------------------------
+let editDocPk = null;
+
+document.getElementById("editDocModal").addEventListener("show.bs.modal", e => {
+  const btn = e.relatedTarget;
+  editDocPk = btn.dataset.docPk;
+  document.getElementById("edit-doc-title").value = btn.dataset.docTitle;
+  document.getElementById("edit-doc-error").classList.add("d-none");
+});
+
+document.getElementById("edit-doc-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const errBox = document.getElementById("edit-doc-error");
+  errBox.classList.add("d-none");
+  const title = document.getElementById("edit-doc-title").value.trim();
+  try {
+    const res = await fetch(RENAME_URL_TPL.replace("{pk}", editDocPk), {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ title }),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      const row = document.querySelector(`[data-doc-row="${editDocPk}"]`);
+      if (row) {
+        row.querySelector(".doc-title-cell").textContent = json.title;
+        row.querySelectorAll("[data-doc-pk]").forEach(el => el.dataset.docTitle = json.title);
+      }
+      bootstrap.Modal.getInstance(document.getElementById("editDocModal")).hide();
+    } else {
+      errBox.textContent = json.error || "Failed to save.";
+      errBox.classList.remove("d-none");
+    }
+  } catch {
+    errBox.textContent = "Could not reach server.";
+    errBox.classList.remove("d-none");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Delete Document modal
+// ---------------------------------------------------------------------------
+let deleteDocPk = null;
+
+document.getElementById("deleteDocModal").addEventListener("show.bs.modal", e => {
+  const btn = e.relatedTarget;
+  deleteDocPk = btn.dataset.docPk;
+  document.getElementById("delete-doc-name").textContent = btn.dataset.docTitle;
+  document.getElementById("delete-doc-error").classList.add("d-none");
+});
+
+document.getElementById("delete-doc-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const errBox = document.getElementById("delete-doc-error");
+  errBox.classList.add("d-none");
+  try {
+    const res = await fetch(DELETE_URL_TPL.replace("{pk}", deleteDocPk), {
+      method: "POST",
+      headers: { "X-CSRFToken": CSRF },
+    });
+    if (res.ok) {
+      document.querySelector(`[data-doc-row="${deleteDocPk}"]`)?.remove();
+      bootstrap.Modal.getInstance(document.getElementById("deleteDocModal")).hide();
+    } else {
+      const json = await res.json().catch(() => ({}));
+      errBox.textContent = json.error || "Failed to delete.";
+      errBox.classList.remove("d-none");
+    }
+  } catch {
+    errBox.textContent = "Could not reach server.";
+    errBox.classList.remove("d-none");
+  }
+});
