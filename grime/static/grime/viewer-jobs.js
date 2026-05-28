@@ -4,17 +4,49 @@ export function createJobsModule(core) {
   var _pollTimers = {};
   var _activeJobs = {};
 
-  /* ── worker slot select ─────────────────────────────────────── */
-  function _populateWorkerSelect() {
+  /* ── fetch live worker slots and populate select ────────────── */
+  async function _populateWorkerSelect() {
     var sel = document.getElementById('dp-job-worker');
-    if (!sel || !C.workerSlots) return;
-    sel.innerHTML = '';
-    C.workerSlots.forEach(function(slot) {
-      var opt = document.createElement('option');
-      opt.value = slot.pk;
-      opt.textContent = slot.name;
-      sel.appendChild(opt);
-    });
+    if (!sel || !C.jobStatusUrl) return;
+
+    sel.innerHTML = '<option disabled value="">Loading workers…</option>';
+
+    try {
+      var res = await fetch(C.jobStatusUrl);
+      if (!res.ok) throw new Error('status ' + res.status);
+      var data = await res.json();
+      var slots = data.slots || [];
+
+      sel.innerHTML = '';
+      var firstIdleOpt = null;
+
+      slots.forEach(function(slot) {
+        var opt = document.createElement('option');
+        opt.value = slot.pk;
+
+        var stateLabel;
+        if (slot.job) {
+          stateLabel = 'running: ' + slot.job.job_type_label;
+        } else if (slot.pending_count) {
+          stateLabel = slot.pending_count + ' pending';
+        } else {
+          stateLabel = 'idle';
+          if (!firstIdleOpt) firstIdleOpt = opt;
+        }
+
+        opt.textContent = slot.name + ' (' + stateLabel + ')';
+        sel.appendChild(opt);
+      });
+
+      // Default to the lowest-indexed idle worker; fall back to first slot
+      if (firstIdleOpt) {
+        firstIdleOpt.selected = true;
+      } else if (sel.options.length) {
+        sel.options[0].selected = true;
+      }
+    } catch (err) {
+      sel.innerHTML = '<option disabled value="">Could not load workers</option>';
+    }
   }
 
   /* ── load job-specific param fields via AJAX ────────────────── */
@@ -28,11 +60,11 @@ export function createJobsModule(core) {
     } catch { container.innerHTML = ''; }
   }
 
-  /* ── configure modal before Bootstrap shows it ──────────────── */
+  /* ── configure modal content before Bootstrap shows it ──────── */
   function _configureModal(jobType) {
-    (document.getElementById('dp-job-type') || {}).value = jobType;
+    (document.getElementById('dp-job-type')     || {}).value = jobType;
     (document.getElementById('dp-job-document') || {}).value = C.documentPk || '';
-    (document.getElementById('dp-job-page') || {}).value = C.pagePk || '';
+    (document.getElementById('dp-job-page')     || {}).value = C.pagePk || '';
     var forceEl = document.getElementById('dp-job-force');
     if (forceEl) forceEl.checked = false;
 
@@ -48,6 +80,7 @@ export function createJobsModule(core) {
     var submitBtn = document.getElementById('dp-job-submit');
     if (submitBtn) submitBtn.disabled = false;
 
+    // Both fetches are fire-and-forget; each updates the DOM on completion
     _populateWorkerSelect();
     _loadJobParams(jobType);
   }
@@ -89,8 +122,6 @@ export function createJobsModule(core) {
 
   /* ── setup ──────────────────────────────────────────────────── */
   function setupUI() {
-    // Use the Bootstrap show.bs.modal event so data-bs-toggle on the buttons
-    // triggers the modal natively; we configure its content here before it appears.
     var modalEl = document.getElementById('dpPageJobModal');
     if (modalEl) {
       modalEl.addEventListener('show.bs.modal', function(event) {
@@ -120,6 +151,7 @@ export function createJobsModule(core) {
       params.set('page_pk', pagePk);
       if (force) params.set('force', 'on');
 
+      // Collect type-specific params (engine, model, etc.)
       document.querySelectorAll('#dp-job-params select, #dp-job-params input').forEach(function(el) {
         if (el.name) params.set(el.name, el.value);
       });

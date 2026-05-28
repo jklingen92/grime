@@ -129,7 +129,7 @@ def jobs_status(request):
         completed_at=now,
     )
 
-    slots = WorkerSlot.objects.all()
+    slots = WorkerSlot.objects.order_by("slot_number")
     # Map first running job per slot (ordered by created_at asc)
     running = list(
         AsyncJob.objects.filter(status=AsyncJob.STATUS_RUNNING)
@@ -141,13 +141,24 @@ def jobs_status(request):
         if job.worker_slot_id and job.worker_slot_id not in running_by_slot:
             running_by_slot[job.worker_slot_id] = job
 
+    # Count pending jobs per slot
+    from django.db.models import Count
+    pending_by_slot = dict(
+        AsyncJob.objects.filter(status=AsyncJob.STATUS_PENDING)
+        .values("worker_slot_id")
+        .annotate(n=Count("id"))
+        .values_list("worker_slot_id", "n")
+    )
+
     slots_data = []
     for slot in slots:
         job = running_by_slot.get(slot.pk)
         slots_data.append({
+            "pk": slot.pk,
             "slot_number": slot.slot_number,
             "name": slot.name,
             "job": _job_to_dict(job) if job else None,
+            "pending_count": pending_by_slot.get(slot.pk, 0),
         })
 
     pending_count = AsyncJob.objects.filter(status=AsyncJob.STATUS_PENDING).count()

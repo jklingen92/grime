@@ -295,9 +295,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "job_create_url": reverse("grime:job_create"),
         "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace("/0/", "/{pk}/"),
         "job_form_fields_url": reverse("grime:job_form_fields"),
-        "worker_slots_json": _safe_json(
-            list(WorkerSlot.objects.order_by("slot_number").values("pk", "name"))
-        ),
+        "job_status_url": reverse("grime:jobs_status"),
         "document_pk": page.document_id,
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
