@@ -721,10 +721,7 @@ export function createOcrModule(core) {
     var rerunOcrBtn = document.getElementById('dp-rerun-ocr');
     if (rerunOcrBtn) {
       rerunOcrBtn.innerHTML = '<i class="fa-solid fa-gears me-1"></i>' + ocrBtnLabel();
-      rerunOcrBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        if (core.openJobModal) core.openJobModal('ocr');
-      });
+      // data-bs-toggle on the button handles opening the job modal
     }
 
     var searchInput = document.getElementById('dp-text-search');

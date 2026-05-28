@@ -18,9 +18,6 @@ core.registerModule('ner',   ner);
 core.registerModule('label', annotation);
 core.registerModule('image', img);
 
-// Expose openJobModal so ocr/ner modules can call it from their setupUI
-core.openJobModal = jobs.openJobModal;
-
 jobs.setupUI();
 ocr.setupUI();
 ner.setupUI();

@@ -25,7 +25,8 @@
     {% if ocr_record_pk %}
     <div class="dp-toolbar-sep" id="dp-sep-ocr" style="display:none"></div>
     <div id="dp-ocr-actions">
-      <button id="dp-rerun-ocr" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-gears me-1"></i>Run OCR</button>
+      <button id="dp-rerun-ocr" type="button" class="btn btn-sm btn-outline-secondary"
+              data-bs-toggle="modal" data-bs-target="#dpPageJobModal" data-dp-job-type="ocr"><i class="fa-solid fa-gears me-1"></i>Run OCR</button>
       <span id="dp-rerun-ocr-spinner" class="dp-job-spinner" style="display:none" aria-label="OCR running">
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
         <span class="dp-job-spinner-text">Running…</span>
@@ -36,7 +37,8 @@
 
     <div class="dp-toolbar-sep" id="dp-sep-ner"></div>
     <div id="dp-ner-split">
-      <button id="dp-rerun-ner" type="button" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-tags me-1"></i>Run NER</button>
+      <button id="dp-rerun-ner" type="button" class="btn btn-sm btn-outline-secondary"
+              data-bs-toggle="modal" data-bs-target="#dpPageJobModal" data-dp-job-type="ner"><i class="fa-solid fa-tags me-1"></i>Run NER</button>
       <span id="dp-rerun-ner-spinner" class="dp-job-spinner" style="display:none" aria-label="NER running">
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
         <span class="dp-job-spinner-text">Running…</span>

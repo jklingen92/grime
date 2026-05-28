@@ -383,10 +383,7 @@ export function createNerModule(core) {
     var rerunNerBtn = document.getElementById('dp-rerun-ner');
     if (rerunNerBtn) {
       rerunNerBtn.innerHTML = '<i class="fa-solid fa-tags me-1"></i>' + nerBtnLabel();
-      rerunNerBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        if (core.openJobModal) core.openJobModal('ner');
-      });
+      // data-bs-toggle on the button handles opening the job modal
     }
 
     core.registerUndoHandler('ner-correct', function(e, pushInverse) {

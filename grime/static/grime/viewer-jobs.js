@@ -28,16 +28,13 @@ export function createJobsModule(core) {
     } catch { container.innerHTML = ''; }
   }
 
-  /* ── open modal ─────────────────────────────────────────────── */
-  function openJobModal(jobType) {
-    var typeInput = document.getElementById('dp-job-type');
-    if (typeInput) typeInput.value = jobType;
-    var docInput = document.getElementById('dp-job-document');
-    if (docInput) docInput.value = C.documentPk;
-    var pageInput = document.getElementById('dp-job-page');
-    if (pageInput) pageInput.value = C.pagePk;
-    var forceInput = document.getElementById('dp-job-force');
-    if (forceInput) forceInput.checked = false;
+  /* ── configure modal before Bootstrap shows it ──────────────── */
+  function _configureModal(jobType) {
+    (document.getElementById('dp-job-type') || {}).value = jobType;
+    (document.getElementById('dp-job-document') || {}).value = C.documentPk || '';
+    (document.getElementById('dp-job-page') || {}).value = C.pagePk || '';
+    var forceEl = document.getElementById('dp-job-force');
+    if (forceEl) forceEl.checked = false;
 
     var titleEl = document.getElementById('dpPageJobModalLabel');
     if (titleEl) {
@@ -53,9 +50,6 @@ export function createJobsModule(core) {
 
     _populateWorkerSelect();
     _loadJobParams(jobType);
-
-    var modalEl = document.getElementById('dpPageJobModal');
-    if (modalEl) new bootstrap.Modal(modalEl).show();
   }
 
   /* ── spinner helpers ────────────────────────────────────────── */
@@ -93,18 +87,29 @@ export function createJobsModule(core) {
     }, 2000);
   }
 
-  /* ── submit handler ─────────────────────────────────────────── */
+  /* ── setup ──────────────────────────────────────────────────── */
   function setupUI() {
+    // Use the Bootstrap show.bs.modal event so data-bs-toggle on the buttons
+    // triggers the modal natively; we configure its content here before it appears.
+    var modalEl = document.getElementById('dpPageJobModal');
+    if (modalEl) {
+      modalEl.addEventListener('show.bs.modal', function(event) {
+        var trigger = event.relatedTarget;
+        var jobType = trigger ? trigger.dataset.dpJobType : '';
+        if (jobType) _configureModal(jobType);
+      });
+    }
+
     var submitBtn = document.getElementById('dp-job-submit');
     if (!submitBtn) return;
 
     submitBtn.addEventListener('click', async function() {
-      var jobType   = (document.getElementById('dp-job-type')     || {}).value || '';
-      var docPk     = (document.getElementById('dp-job-document') || {}).value || '';
-      var pagePk    = (document.getElementById('dp-job-page')     || {}).value || '';
-      var workerPk  = (document.getElementById('dp-job-worker')   || {}).value || '';
-      var force     = (document.getElementById('dp-job-force')    || {}).checked;
-      var errEl     = document.getElementById('dp-job-error');
+      var jobType  = (document.getElementById('dp-job-type')     || {}).value || '';
+      var docPk    = (document.getElementById('dp-job-document') || {}).value || '';
+      var pagePk   = (document.getElementById('dp-job-page')     || {}).value || '';
+      var workerPk = (document.getElementById('dp-job-worker')   || {}).value || '';
+      var force    = !!(document.getElementById('dp-job-force')  || {}).checked;
+      var errEl    = document.getElementById('dp-job-error');
 
       if (errEl) errEl.classList.add('d-none');
 
@@ -115,7 +120,6 @@ export function createJobsModule(core) {
       params.set('page_pk', pagePk);
       if (force) params.set('force', 'on');
 
-      // Collect type-specific params (engine, model, etc.)
       document.querySelectorAll('#dp-job-params select, #dp-job-params input').forEach(function(el) {
         if (el.name) params.set(el.name, el.value);
       });
@@ -129,7 +133,7 @@ export function createJobsModule(core) {
         });
         var json = await res.json();
         if (res.ok) {
-          bootstrap.Modal.getInstance(document.getElementById('dpPageJobModal')).hide();
+          bootstrap.Modal.getInstance(modalEl).hide();
           _showSpinner(jobType);
           _startPolling(json.job_id, jobType);
         } else {
@@ -143,5 +147,5 @@ export function createJobsModule(core) {
     });
   }
 
-  return { openJobModal, setupUI };
+  return { setupUI };
 }
