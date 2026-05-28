@@ -66,23 +66,15 @@ export function createJobsModule(core) {
     (document.getElementById('dp-job-document') || {}).value = C.documentPk || '';
     (document.getElementById('dp-job-page')     || {}).value = C.pagePk || '';
 
-    var forceEl = document.getElementById('dp-job-force');
-    var warnEl  = document.getElementById('dp-job-force-warning');
-
-    if (jobType === 'ocr') {
-      if (forceEl) forceEl.checked = true;
-      if (warnEl) {
-        var n = C.confirmedWordCount || 0;
-        if (n > 0) {
-          warnEl.textContent = 'This will delete ' + n + ' manually confirmed word' + (n === 1 ? '' : 's');
-          warnEl.classList.remove('d-none');
-        } else {
-          warnEl.classList.add('d-none');
-        }
+    var warnEl = document.getElementById('dp-job-force-warning');
+    if (warnEl) {
+      var n = jobType === 'ocr' ? (C.confirmedWordCount || 0) : 0;
+      if (n > 0) {
+        warnEl.textContent = 'This will delete ' + n + ' manually confirmed word' + (n === 1 ? '' : 's');
+        warnEl.classList.remove('d-none');
+      } else {
+        warnEl.classList.add('d-none');
       }
-    } else {
-      if (forceEl) forceEl.checked = false;
-      if (warnEl) warnEl.classList.add('d-none');
     }
 
     var titleEl = document.getElementById('dpPageJobModalLabel');
@@ -156,7 +148,6 @@ export function createJobsModule(core) {
       var docPk    = (document.getElementById('dp-job-document') || {}).value || '';
       var pagePk   = (document.getElementById('dp-job-page')     || {}).value || '';
       var workerPk = (document.getElementById('dp-job-worker')   || {}).value || '';
-      var force    = !!(document.getElementById('dp-job-force')  || {}).checked;
       var errEl    = document.getElementById('dp-job-error');
 
       if (errEl) errEl.classList.add('d-none');
@@ -173,7 +164,7 @@ export function createJobsModule(core) {
       params.set('document', docPk);
       params.set('worker_slot', workerPk);
       params.set('page_pk', pagePk);
-      if (force) params.set('force', 'on');
+      params.set('force', 'on');
 
       // Collect type-specific params (engine, model, etc.)
       document.querySelectorAll('#dp-job-params select, #dp-job-params input').forEach(function(el) {
