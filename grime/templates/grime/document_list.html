@@ -77,12 +77,12 @@
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold">Labels</label>
-          {{ form.labels }}
-          <div class="tag-input-wrap" id="labels-input-wrap">
-            <div class="tag-chips" id="labels-chips"></div>
-            <input type="text" class="tag-text-input" id="labels-text-input" placeholder="Type a label, press Space to add…" autocomplete="off">
+          {{ form.tags }}
+          <div class="tag-input-wrap" id="tags-input-wrap">
+            <div class="tag-chips" id="tags-chips"></div>
+            <input type="text" class="tag-text-input" id="tags-text-input" placeholder="Type a tag, press Space to add…" autocomplete="off">
           </div>
-          <div class="form-text">Optional — type a label and press Space or Enter to add it.</div>
+          <div class="form-text">Optional — type a tag and press Space or Enter to add it.</div>
         </div>
         <button type="submit" class="btn btn-grime btn-sm"><i class="fa-solid fa-upload me-1"></i>Ingest PDF</button>
       </form>
@@ -110,9 +110,9 @@
             <tr data-doc-row="{{ doc.pk }}">
               <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i><span class="doc-title-cell">{{ doc.title }}</span></a></td>
               <td>
-                {% if doc.labels %}
+                {% if doc.tags %}
                   <div class="d-flex flex-wrap gap-1">
-                    {% for label in doc.labels %}<span class="badge" style="background-color:var(--grime-primary)">{{ label }}</span>{% endfor %}
+                    {% for tag in doc.tags %}<span class="badge" style="background-color:var(--grime-primary)">{{ tag }}</span>{% endfor %}
                   </div>
                 {% else %}
                   <span class="text-muted">—</span>

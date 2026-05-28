@@ -957,7 +957,7 @@ def document_list_view(request):
         if form.is_valid():
             uploaded = form.cleaned_data["pdf_file"]
             title = form.cleaned_data.get("title") or None
-            labels = form.cleaned_data.get("labels") or []
+            tags = form.cleaned_data.get("tags") or []
             stem = Path(uploaded.name).stem
 
             tmp_dir = tempfile.mkdtemp()
@@ -977,9 +977,9 @@ def document_list_view(request):
                 os.rmdir(tmp_dir)
 
             if doc is not None:
-                if labels:
-                    doc.labels = labels
-                    doc.save(update_fields=["labels"])
+                if tags:
+                    doc.tags = tags
+                    doc.save(update_fields=["tags"])
                 return redirect("grime:document", doc_pk=doc.pk)
 
     doc_list = [

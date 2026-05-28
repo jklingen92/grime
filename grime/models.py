@@ -57,7 +57,7 @@ class Document(models.Model):
     )
     notes = models.TextField(blank=True)
     file = models.FileField(upload_to="documents/", null=True, blank=True)
-    labels = models.JSONField(default=list, blank=True)
+    tags = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["title"]

@@ -45,9 +45,9 @@ class DocumentUploadForm(forms.Form):
         label="Title",
         help_text="Optional — defaults to the filename.",
     )
-    labels = forms.CharField(
+    tags = forms.CharField(
         required=False,
-        widget=forms.HiddenInput(attrs={"id": "id_labels", "name": "labels"}),
+        widget=forms.HiddenInput(attrs={"id": "id_tags", "name": "tags"}),
     )
 
     def clean_pdf_file(self):
@@ -56,10 +56,10 @@ class DocumentUploadForm(forms.Form):
             raise forms.ValidationError("Only PDF files are accepted.")
         return f
 
-    def clean_labels(self):
+    def clean_tags(self):
         import json
 
-        raw = self.cleaned_data.get("labels", "")
+        raw = self.cleaned_data.get("tags", "")
         if not raw:
             return []
         try:

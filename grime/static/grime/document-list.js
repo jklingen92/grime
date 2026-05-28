@@ -201,10 +201,10 @@ document.getElementById("delete-doc-form").addEventListener("submit", async e =>
 // Label tag-input widget
 // ---------------------------------------------------------------------------
 (function () {
-  const hidden = document.getElementById("id_labels");
-  const wrap = document.getElementById("labels-input-wrap");
-  const textInput = document.getElementById("labels-text-input");
-  const chipsEl = document.getElementById("labels-chips");
+  const hidden = document.getElementById("id_tags");
+  const wrap = document.getElementById("tags-input-wrap");
+  const textInput = document.getElementById("tags-text-input");
+  const chipsEl = document.getElementById("tags-chips");
   if (!hidden || !wrap || !textInput || !chipsEl) return;
 
   let tags = [];

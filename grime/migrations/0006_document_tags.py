@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name="document",
-            name="labels",
+            name="tags",
             field=models.JSONField(blank=True, default=list),
         ),
     ]
