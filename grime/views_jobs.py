@@ -195,6 +195,9 @@ def poll_job(request, job_pk):
 def cancel_job(request, job_pk):
     job = get_object_or_404(AsyncJob, pk=job_pk)
     if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
+        if job.task_id:
+            from celery import current_app
+            current_app.control.revoke(job.task_id)
         job.status = AsyncJob.STATUS_FAILED
         job.error = "Cancelled by user"
         job.completed_at = timezone.now()

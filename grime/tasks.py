@@ -20,8 +20,8 @@ def run_job(self, job_pk: int) -> None:
 
     logger.info("run_job received: job_pk=%d task_id=%s", job_pk, self.request.id)
     job = AsyncJob.objects.get(pk=job_pk)
-    if job.status == AsyncJob.STATUS_COMPLETE:
-        logger.info("Job %d already complete, skipping (broker re-queue?)", job_pk)
+    if job.status not in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
+        logger.info("Job %d status=%s, skipping stale broker message", job_pk, job.status)
         return
 
     job.status = AsyncJob.STATUS_RUNNING
