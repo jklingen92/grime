@@ -63,7 +63,7 @@ def create_job(request):
         pf = handler.params_form_class(request.POST)
         if not pf.is_valid():
             return JsonResponse({"error": pf.errors.as_text()}, status=400)
-        params = pf.cleaned_data
+        params = dict(pf.cleaned_data)
 
     page_pk_raw = request.POST.get("page_pk")
     if page_pk_raw:

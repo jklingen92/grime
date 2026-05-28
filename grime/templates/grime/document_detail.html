@@ -29,6 +29,6 @@
 {% if image_url is None and not document.pages.exists %}
 <p id="gd-no-pages">This document has no pages yet.</p>
 {% else %}
-{% include "admin/grime/_document_viewer.html" %}
+{% with skip_bootstrap=True %}{% include "admin/grime/_document_viewer.html" %}{% endwith %}
 {% endif %}
 {% endblock %}

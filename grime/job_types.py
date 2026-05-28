@@ -46,8 +46,12 @@ class OCRParamsForm(forms.Form):
     engine = forms.ChoiceField(
         choices=[("auto", "Auto"), ("textract", "Textract"), ("tesseract", "Tesseract")],
         initial="auto",
+        required=False,
         widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
     )
+
+    def clean_engine(self):
+        return self.cleaned_data.get("engine") or "auto"
 
 
 class OCRJobType(JobType):
@@ -116,8 +120,12 @@ class NERParamsForm(forms.Form):
         label="NER model",
         choices=[(k, MODEL_LABELS.get(k, k.capitalize())) for k in MODEL_REGISTRY],
         initial=DEFAULT_MODEL,
+        required=False,
         widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
     )
+
+    def clean_model(self):
+        return self.cleaned_data.get("model") or DEFAULT_MODEL
 
 
 class NERJobType(JobType):

@@ -164,7 +164,6 @@ export function createJobsModule(core) {
       });
 
       submitBtn.disabled = true;
-      var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
       try {
         var res = await fetch(C.jobCreateUrl, {
           method: 'POST',
@@ -173,7 +172,22 @@ export function createJobsModule(core) {
         });
         var json = await res.json();
         if (res.ok) {
-          modal.hide();
+          // Dismiss using Bootstrap's own handler — works even if Bootstrap was loaded
+          // more than once in the page (admin embed + standalone base template).
+          var dismissBtn = modalEl.querySelector('[data-bs-dismiss="modal"]');
+          if (dismissBtn) {
+            dismissBtn.click();
+          } else {
+            // Fallback: manual cleanup
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.removeAttribute('aria-modal');
+            document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+          }
           _showSpinner(jobType);
           _startPolling(json.job_id, jobType);
         } else {
