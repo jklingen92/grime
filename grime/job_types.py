@@ -85,6 +85,7 @@ class OCRJobType(JobType):
 
         words_created = 0
         for page in pages:
+            job.check_cancelled()
             page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
             logger.info("[OCR job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             Word.objects.filter(page=page).delete()
@@ -179,6 +180,7 @@ class NERJobType(JobType):
 
         entities_found = 0
         for page in pages:
+            job.check_cancelled()
             page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
             logger.info("[NER job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             NERPass.objects.filter(page=page, schema_name=schema_name).delete()

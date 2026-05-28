@@ -2,6 +2,8 @@
 Job management views.
 
 All async-job endpoints live here, keeping viewer.py focused on the page viewer.
+Jobs are persisted as AsyncJob rows; one `python manage.py run_worker --slot=N`
+process per WorkerSlot polls and runs them. See grime/management/commands/run_worker.py.
 """
 
 import datetime
@@ -20,26 +22,6 @@ from grime.job_types import JOB_TYPES
 from grime.models import AsyncJob, WorkerSlot
 
 logger = logging.getLogger(__name__)
-
-
-def dispatch_job(job: AsyncJob) -> None:
-    """Dispatch job to its worker slot's Celery queue. Marks job FAILED on broker error."""
-    from grime.tasks import run_job
-
-    try:
-        result = run_job.apply_async(args=[job.pk], queue=job.worker_slot.queue_name)
-        job.task_id = result.id
-        job.save(update_fields=["task_id"])
-        logger.info(
-            "Dispatched job %d (%s) to queue %s, task_id=%s, params=%s",
-            job.pk, job.job_type, job.worker_slot.queue_name, result.id, job.params,
-        )
-    except Exception as exc:
-        logger.warning("Broker unavailable for job %d: %s", job.pk, exc)
-        job.status = AsyncJob.STATUS_FAILED
-        job.error = f"Broker unavailable: {exc}"
-        job.completed_at = timezone.now()
-        job.save(update_fields=["status", "error", "completed_at"])
 
 
 @staff_member_required
@@ -87,7 +69,10 @@ def create_job(request):
         force=cd["force"],
         params=params,
     )
-    dispatch_job(job)
+    logger.info(
+        "Created job %d (%s) for slot %d, params=%s",
+        job.pk, job.job_type, worker_slot.slot_number, params,
+    )
     return JsonResponse({"job_id": job.pk, "status": job.status})
 
 
@@ -193,11 +178,10 @@ def poll_job(request, job_pk):
 @staff_member_required
 @require_POST
 def cancel_job(request, job_pk):
+    """Mark a PENDING/RUNNING job as FAILED. A RUNNING worker will see the
+    status change on its next check_cancelled() call and bail out."""
     job = get_object_or_404(AsyncJob, pk=job_pk)
     if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
-        if job.task_id:
-            from celery import current_app
-            current_app.control.revoke(job.task_id)
         job.status = AsyncJob.STATUS_FAILED
         job.error = "Cancelled by user"
         job.completed_at = timezone.now()
