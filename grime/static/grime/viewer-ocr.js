@@ -250,12 +250,18 @@ export function createOcrModule(core) {
 
   /* ── edit popup ────────────────────────────────────────────── */
   // Open the correction popup for the current selection (single or multi-word).
+  // word/el are optional — when omitted and exactly one word is selected, they are derived from the set.
   function openEditPopup(word, el) {
     if (!HAS_REPAIR) return;
     var popup = document.getElementById('ocr-popup');
     var mergeBar = document.getElementById('ocr-merge-bar'); if (mergeBar) mergeBar.style.display = 'none';
-    state.currentWord = word; state.currentEl = el;
     var count = state.ocrSelectedIds.size;
+    if (count === 1 && !word) {
+      var singleId = Array.from(state.ocrSelectedIds)[0];
+      word = core.wordById[singleId];
+      el = document.querySelector("[data-word-id='" + singleId + "']");
+    }
+    state.currentWord = word; state.currentEl = el;
     var titleEl = document.getElementById('ocr-popup-title');
     if (titleEl) titleEl.textContent = count === 1 ? '1 word selected' : count + ' words selected';
     var originalEl = document.getElementById('ocr-popup-original');
@@ -601,7 +607,9 @@ export function createOcrModule(core) {
             if (e.shiftKey) {
               if (state.ocrSelectedIds.has(wid)) state.ocrSelectedIds.delete(wid); else state.ocrSelectedIds.add(wid);
               wordEl.classList.toggle('selected', state.ocrSelectedIds.has(wid));
-              updateOcrMergeBar(); updateTextPanels();
+              updateTextPanels();
+              if (state.ocrSelectedIds.size > 0) { state.suppressClickClose = true; openEditPopup(); }
+              else closeEditPopup();
             } else {
               state.ocrSelectedIds.clear();
               state.ocrSelectedIds.add(wid);
