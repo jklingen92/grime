@@ -266,6 +266,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "next_url_json": _safe_json(None),
         "page_list_json": _safe_json(None),
         "ocr_record_pk": page.pk,
+        "confirmed_word_count": Word.objects.filter(page=page, corrected_ocr_by__isnull=False).count(),
         "annotation_source_type_id": page_ct.pk,
         "annotation_source_id": page.pk,
         "doc_annotation_count": Annotation.objects.filter(
@@ -399,6 +400,8 @@ def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     word_id = word.pk
     page = word.page
     word.delete()
+    if not page.words.exists():
+        page.ocr_passes.all().delete()
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "deleted_id": word_id, "updated": updated})
 
@@ -782,6 +785,8 @@ def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     found_ids = list(qs.values_list("pk", flat=True))
     deleted, _ = qs.delete()
     page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page and not page.words.exists():
+        page.ocr_passes.all().delete()
     updated = _run_post_ocr(page, request) if page else []
     return JsonResponse(
         {

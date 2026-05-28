@@ -65,8 +65,25 @@ export function createJobsModule(core) {
     (document.getElementById('dp-job-type')     || {}).value = jobType;
     (document.getElementById('dp-job-document') || {}).value = C.documentPk || '';
     (document.getElementById('dp-job-page')     || {}).value = C.pagePk || '';
+
     var forceEl = document.getElementById('dp-job-force');
-    if (forceEl) forceEl.checked = false;
+    var warnEl  = document.getElementById('dp-job-force-warning');
+
+    if (jobType === 'ocr') {
+      if (forceEl) forceEl.checked = true;
+      if (warnEl) {
+        var n = C.confirmedWordCount || 0;
+        if (n > 0) {
+          warnEl.textContent = 'This will delete ' + n + ' manually confirmed word' + (n === 1 ? '' : 's');
+          warnEl.classList.remove('d-none');
+        } else {
+          warnEl.classList.add('d-none');
+        }
+      }
+    } else {
+      if (forceEl) forceEl.checked = false;
+      if (warnEl) warnEl.classList.add('d-none');
+    }
 
     var titleEl = document.getElementById('dpPageJobModalLabel');
     if (titleEl) {
