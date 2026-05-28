@@ -104,14 +104,18 @@
                 <div class="d-flex gap-2 justify-content-end">
                   <a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a>
                   <button class="btn btn-sm btn-outline-primary"
-                          data-edit-doc="{{ doc.pk }}"
-                          data-edit-title="{{ doc.title|escapejs }}"
+                          data-bs-toggle="modal"
+                          data-bs-target="#editDocModal"
+                          data-doc-pk="{{ doc.pk }}"
+                          data-doc-title="{{ doc.title|escapejs }}"
                           title="Edit document">
                     <i class="fa-solid fa-pencil"></i>
                   </button>
                   <button class="btn btn-sm btn-outline-danger"
-                          data-delete-doc="{{ doc.pk }}"
-                          data-delete-title="{{ doc.title|escapejs }}"
+                          data-bs-toggle="modal"
+                          data-bs-target="#deleteDocModal"
+                          data-doc-pk="{{ doc.pk }}"
+                          data-doc-title="{{ doc.title|escapejs }}"
                           title="Delete document">
                     <i class="fa-solid fa-trash"></i>
                   </button>

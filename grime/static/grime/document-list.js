@@ -126,13 +126,11 @@ pollJobs();
 // ---------------------------------------------------------------------------
 let editDocPk = null;
 
-document.addEventListener("click", e => {
-  const btn = e.target.closest("[data-edit-doc]");
-  if (!btn) return;
-  editDocPk = btn.dataset.editDoc;
-  document.getElementById("edit-doc-title").value = btn.dataset.editTitle;
+document.getElementById("editDocModal").addEventListener("show.bs.modal", e => {
+  const btn = e.relatedTarget;
+  editDocPk = btn.dataset.docPk;
+  document.getElementById("edit-doc-title").value = btn.dataset.docTitle;
   document.getElementById("edit-doc-error").classList.add("d-none");
-  bootstrap.Modal.getOrCreateInstance(document.getElementById("editDocModal")).show();
 });
 
 document.getElementById("editDocModal").addEventListener("shown.bs.modal", () => {
@@ -159,8 +157,7 @@ document.getElementById("save-doc-btn").addEventListener("click", async () => {
       const row = document.querySelector(`[data-doc-row="${editDocPk}"]`);
       if (row) {
         row.querySelector(".doc-title-cell").textContent = json.title;
-        row.querySelector("[data-edit-doc]").dataset.editTitle = json.title;
-        row.querySelector("[data-delete-doc]").dataset.deleteTitle = json.title;
+        row.querySelectorAll("[data-doc-pk]").forEach(el => el.dataset.docTitle = json.title);
       }
       bootstrap.Modal.getInstance(document.getElementById("editDocModal")).hide();
     } else {
@@ -178,13 +175,11 @@ document.getElementById("save-doc-btn").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 let deleteDocPk = null;
 
-document.addEventListener("click", e => {
-  const btn = e.target.closest("[data-delete-doc]");
-  if (!btn) return;
-  deleteDocPk = btn.dataset.deleteDoc;
-  document.getElementById("delete-doc-name").textContent = btn.dataset.deleteTitle;
+document.getElementById("deleteDocModal").addEventListener("show.bs.modal", e => {
+  const btn = e.relatedTarget;
+  deleteDocPk = btn.dataset.docPk;
+  document.getElementById("delete-doc-name").textContent = btn.dataset.docTitle;
   document.getElementById("delete-doc-error").classList.add("d-none");
-  bootstrap.Modal.getOrCreateInstance(document.getElementById("deleteDocModal")).show();
 });
 
 document.getElementById("confirm-delete-btn").addEventListener("click", async () => {
