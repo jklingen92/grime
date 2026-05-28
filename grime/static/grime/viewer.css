@@ -313,6 +313,10 @@
     padding: 10px 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.18); z-index: 9999; min-width: 220px; display: none;
     transform: translateX(-100%);
   }
+  #ocr-popup .ocr-popup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #ocr-popup .ocr-popup-header span { font-size: 0.85em; font-weight: 600; color: #444; }
+  #ocr-popup .ocr-popup-close-btn { background: none; border: none; cursor: pointer; padding: 0 2px; font-size: 0.9em; color: #888; line-height: 1; }
+  #ocr-popup .ocr-popup-close-btn:hover { color: #333; }
   #ocr-popup .ocr-popup-original { font-size: 0.85em; color: #666; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ocr-popup input[type=text] { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 4px 6px; font-size: 0.95em; }
   #ocr-popup .ocr-popup-actions { display: flex; gap: 6px; align-items: center; }

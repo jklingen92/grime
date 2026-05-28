@@ -254,13 +254,17 @@
 <!-- NER repair popup -->
 <!-- OCR edit popup -->
 <div id="ocr-popup">
+  <div class="ocr-popup-header">
+    <span id="ocr-popup-title">1 word selected</span>
+    <button id="ocr-popup-close" class="ocr-popup-close-btn" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
+  </div>
   <div class="ocr-popup-original" id="ocr-popup-original"></div>
-  <input type="text" id="ocr-popup-input" placeholder="Corrected text… (Enter to save)">
+  <input type="text" id="ocr-popup-input" placeholder="Corrected text…">
   <div class="ocr-popup-actions">
     <button id="ocr-popup-confirm" class="btn btn-sm btn-primary"><i class="fa-solid fa-check me-1"></i>Confirm</button>
     <button id="ocr-popup-ditto"   class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-copy me-1"></i>Ditto</button>
+    <button id="ocr-popup-restore" class="btn btn-sm btn-outline-secondary" style="display:none"><i class="fa-solid fa-rotate-left me-1"></i>Restore</button>
     <button id="ocr-popup-delete"  class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash me-1"></i>Delete</button>
-    <button id="ocr-popup-cancel"  class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark me-1"></i>Cancel</button>
     <span class="ocr-popup-hint">Enter · Esc</span>
   </div>
 </div>
