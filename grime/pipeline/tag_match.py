@@ -1,7 +1,7 @@
 """
-Semantic kernel matching for tagged document regions.
+Semantic kernel matching for annotated document regions.
 
-Given a set of Tag examples with the same label, builds a consensus "kernel"
+Given a set of Annotation examples with the same label, builds a consensus "kernel"
 from their Word subcomponents and slides it across candidate pages to find
 similar regions.
 
@@ -14,10 +14,10 @@ order to produce inferred subcomponent field values.
 Usage::
 
     from grime.pipeline.tag_match import build_kernel, search_page
-    from grime.models import Word, Tag
+    from grime.models import Word, Annotation
 
-    tags = list(Tag.objects.filter(label="member entry"))
-    kernel = build_kernel(tags)
+    annotations = list(Annotation.objects.filter(label="member entry"))
+    kernel = build_kernel(annotations)
     page_words = list(Word.objects.filter(page=page).values(
         "id","left","top","width","height","text","corrected_text",
         "ner_label","corrected_label","line_num","word_num",
@@ -530,7 +530,7 @@ def build_kernel(
     padding: float = 0.05,
 ) -> list[dict]:
     """
-    Build a consensus kernel from one or more Tag instances sharing the same label.
+    Build a consensus kernel from one or more Annotation instances sharing the same label.
     """
     return _build_kernel(tags, threshold_frac=threshold_frac, padding=padding)
 

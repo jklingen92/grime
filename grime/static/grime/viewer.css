@@ -34,14 +34,14 @@
   }
 
   /* ── side panels ──────────────────────────────────────────── */
-  #dp-tag-panel, #dp-text-panel, #dp-ner-panel, #dp-image-panel {
+  #dp-annotation-panel, #dp-text-panel, #dp-ner-panel, #dp-image-panel {
     flex: 0 0 auto; width: 260px; display: none; flex-direction: column; gap: 6px; max-height: 80vh; min-width: 120px;
   }
-  #dp-tag-panel.visible   { display: flex; }
+  #dp-annotation-panel.visible   { display: flex; }
   #dp-text-panel.visible  { display: flex; }
   #dp-ner-panel.visible   { display: flex; }
   #dp-image-panel.visible { display: flex; }
-  #dp-tag-panel h3, #dp-text-panel h3, #dp-ner-panel h3, #dp-image-panel h3 { margin: 0; font-size: 0.9em; color: #444; }
+  #dp-annotation-panel h3, #dp-text-panel h3, #dp-ner-panel h3, #dp-image-panel h3 { margin: 0; font-size: 0.9em; color: #444; }
 
   /* image panel */
   #dp-image-instructions { font-size: 0.78em; color: #666; line-height: 1.4; }
@@ -59,24 +59,24 @@
   .dp-image-sharpen-note { font-size: 0.75em; color: #888; font-style: italic; }
 
   /* tag list view */
-  #dp-tag-list {
+  #dp-annotation-list {
     flex: 1; overflow-y: auto;
     border: 1px solid #eee; border-radius: 3px; background: #fafafa;
   }
-  .dp-tag-item {
+  .dp-annotation-item {
     padding: 6px 10px; font-size: 0.82em; cursor: pointer;
     border-bottom: 1px solid #eee; line-height: 1.4; color: #222;
   }
-  .dp-tag-item:last-child { border-bottom: none; }
-  .dp-tag-item:hover { background: #f0eefa; }
-  .dp-tag-item-sub { font-size: 0.78em; color: #666; padding: 0 0 2px 6px; }
-  #dp-tag-empty { padding: 10px; font-size: 0.82em; color: #999; font-style: italic; }
+  .dp-annotation-item:last-child { border-bottom: none; }
+  .dp-annotation-item:hover { background: #f0eefa; }
+  .dp-annotation-item-sub { font-size: 0.78em; color: #666; padding: 0 0 2px 6px; }
+  #dp-annotation-empty { padding: 10px; font-size: 0.82em; color: #999; font-style: italic; }
 
   /* tag label view */
-  #dp-tag-label-view { flex: 1; display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
-  #dp-tag-label-view h3 { margin-bottom: 8px; }
-  #dp-tag-label-input { margin-bottom: 8px; }
-  #dp-tag-subcomp-list { flex: 1; overflow-y: auto; margin-bottom: 6px; font-size: 0.82em; }
+  #dp-annotation-label-view { flex: 1; display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
+  #dp-annotation-label-view h3 { margin-bottom: 8px; }
+  #dp-annotation-label-input { margin-bottom: 8px; }
+  #dp-annotation-subcomp-list { flex: 1; overflow-y: auto; margin-bottom: 6px; font-size: 0.82em; }
   .dp-subcomp-row {
     display: flex; align-items: baseline; gap: 4px; padding: 3px 0;
     border-bottom: 1px solid #f0f0f0; line-height: 1.3; border-radius: 2px;
@@ -88,18 +88,18 @@
   .dp-subcomp-label { font-weight: bold; color: #555; white-space: nowrap; }
   .dp-subcomp-text  { color: #222; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .dp-subcomp-rm    { cursor: pointer; color: #a00; margin-left: auto; padding: 0 2px; flex-shrink: 0; }
-  #dp-tag-sub-input-row { margin-bottom: 8px; }
-  #dp-tag-sub-input {
+  #dp-annotation-sub-input-row { margin-bottom: 8px; }
+  #dp-annotation-sub-input {
     border-color: var(--grime-accent);
   }
-  #dp-tag-sub-input:focus { border-color: var(--grime-accent); box-shadow: 0 0 0 0.25rem rgba(120, 66, 220, 0.25); }
-  #dp-tag-sub-hint { font-size: 0.75em; color: #888; margin-top: 2px; }
-  #dp-tag-actions { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
-  #dp-tag-actions .btn { font-size: 0.82em; }
-  #dp-tag-delete-btn { margin-left: auto; }
+  #dp-annotation-sub-input:focus { border-color: var(--grime-accent); box-shadow: 0 0 0 0.25rem rgba(120, 66, 220, 0.25); }
+  #dp-annotation-sub-hint { font-size: 0.75em; color: #888; margin-top: 2px; }
+  #dp-annotation-actions { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
+  #dp-annotation-actions .btn { font-size: 0.82em; }
+  #dp-annotation-delete-btn { margin-left: auto; }
 
   /* label panel instructions */
-  #dp-tag-instructions {
+  #dp-annotation-instructions {
     font-size: 0.78em; color: #666; margin-bottom: 8px;
     border: 1px solid #eee; border-radius: 3px; background: #fafafa; padding: 7px 9px;
     display: flex; flex-direction: column; gap: 3px;
@@ -239,46 +239,46 @@
   #dp-select-rect { border: 2px dashed #0070d2; background: rgba(0,112,210,0.06); }
 
   /* ── tag draw / region overlays ──────────────────────────── */
-  #dp-tag-draw-rect {
+  #dp-annotation-draw-rect {
     position: absolute; display: none; pointer-events: none; box-sizing: border-box; z-index: 22;
     border: 2px dashed #e67e00; background: rgba(230,126,0,0.06);
   }
-  #dp-tag-active-rect {
+  #dp-annotation-active-rect {
     position: absolute; display: none; pointer-events: none; box-sizing: border-box; z-index: 20;
     border: 2px solid #7842dc; background: transparent;
   }
-  .dp-tag-corner {
+  .dp-annotation-corner {
     position: absolute; width: 10px; height: 10px; box-sizing: border-box;
     background: #fff; border: 2px solid #7842dc; border-radius: 2px;
     pointer-events: auto; z-index: 26;
   }
-  .dp-tag-corner.tl { top: -5px; left: -5px; cursor: nw-resize; }
-  .dp-tag-corner.tr { top: -5px; right: -5px; cursor: ne-resize; }
-  .dp-tag-corner.bl { bottom: -5px; left: -5px; cursor: sw-resize; }
-  .dp-tag-corner.br { bottom: -5px; right: -5px; cursor: se-resize; }
-  #dp-tag-sub-rect {
+  .dp-annotation-corner.tl { top: -5px; left: -5px; cursor: nw-resize; }
+  .dp-annotation-corner.tr { top: -5px; right: -5px; cursor: ne-resize; }
+  .dp-annotation-corner.bl { bottom: -5px; left: -5px; cursor: sw-resize; }
+  .dp-annotation-corner.br { bottom: -5px; right: -5px; cursor: se-resize; }
+  #dp-annotation-sub-rect {
     position: absolute; display: none; pointer-events: none; box-sizing: border-box; z-index: 23;
     border: 2px dashed rgba(0,140,255,0.8); background: rgba(0,140,255,0.05);
   }
   .dp-veil { position: absolute; background: rgba(0,0,0,0.42); pointer-events: none; z-index: 18; }
-  .dp-tag-overlay {
+  .dp-annotation-overlay {
     pointer-events: auto; cursor: pointer;
     position: absolute; box-sizing: border-box; z-index: 14;
     background: rgba(120,60,220,0.07); border: 1.5px solid rgba(120,60,220,0.55);
     transition: background 0.1s;
   }
-  .dp-tag-overlay:hover { background: rgba(120,60,220,0.15); }
-  .dp-tag-overlay.autogenerated {
+  .dp-annotation-overlay:hover { background: rgba(120,60,220,0.15); }
+  .dp-annotation-overlay.autogenerated {
     background: rgba(220,60,120,0.07); border-color: rgba(220,60,120,0.55);
   }
-  .dp-tag-overlay.autogenerated:hover { background: rgba(220,60,120,0.15); }
-  .dp-tag-overlay-label {
+  .dp-annotation-overlay.autogenerated:hover { background: rgba(220,60,120,0.15); }
+  .dp-annotation-overlay-label {
     position: absolute; top: 0; left: 0; font-size: 9px; font-weight: bold;
     background: rgba(120,60,220,0.85); color: #fff; padding: 0 3px 1px;
     border-radius: 0 0 2px 0; pointer-events: none; white-space: nowrap;
     max-width: 120px; overflow: hidden; text-overflow: ellipsis;
   }
-  .dp-tag-overlay.autogenerated .dp-tag-overlay-label { background: rgba(220,60,120,0.85); }
+  .dp-annotation-overlay.autogenerated .dp-annotation-overlay-label { background: rgba(220,60,120,0.85); }
 
   /* ── NER entity overlays (tagging tab) ───────────────────── */
   .dp-ner-overlay {

@@ -1,23 +1,23 @@
-import { initCore }          from './viewer-core.js';
-import { createOcrModule }   from './viewer-ocr.js';
-import { createNerModule }   from './viewer-ner.js';
-import { createTagModule }   from './viewer-tag.js';
-import { createImageModule } from './viewer-image.js';
+import { initCore }             from './viewer-core.js';
+import { createOcrModule }      from './viewer-ocr.js';
+import { createNerModule }      from './viewer-ner.js';
+import { createAnnotationModule } from './viewer-annotation.js';
+import { createImageModule }    from './viewer-image.js';
 
-var core = initCore(window.VIEWER_CONFIG);
-var ocr  = createOcrModule(core);
-var ner  = createNerModule(core);
-var tag  = createTagModule(core);
-var img  = createImageModule(core);
+var core       = initCore(window.VIEWER_CONFIG);
+var ocr        = createOcrModule(core);
+var ner        = createNerModule(core);
+var annotation = createAnnotationModule(core);
+var img        = createImageModule(core);
 
 core.registerModule('ocr',   ocr);
 core.registerModule('ner',   ner);
-core.registerModule('label', tag);
+core.registerModule('label', annotation);
 core.registerModule('image', img);
 
 ocr.setupUI();
 ner.setupUI();
-tag.setupUI();
+annotation.setupUI();
 img.setupUI();
 core.bindMouseHandlers();
 
@@ -31,9 +31,9 @@ document.addEventListener('click', function(e) {
 });
 
 core.initPageSelect();
-tag.buildList();
-tag.renderTagOverlays();
-tag.populateLabelDatalist();
+annotation.buildList();
+annotation.renderAnnotationOverlays();
+annotation.populateLabelDatalist();
 core.dpShowTab(core.state.activeTab);
 
 var img = document.getElementById('dp-img');

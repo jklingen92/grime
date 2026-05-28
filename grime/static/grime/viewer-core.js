@@ -1,6 +1,6 @@
 export function initCore(C) {
   var OCR_WORDS = C.ocrWords;
-  var TAGS      = C.tags;
+  var ANNOTATIONS = C.annotations;
   var wordById  = {};
   OCR_WORDS.forEach(function(w) { if (w.id != null) wordById[w.id] = w; });
 
@@ -11,15 +11,15 @@ export function initCore(C) {
       return (t === 'ocr' || t === 'ner' || t === 'label' || t === 'image') ? t : 'ocr';
     })(),
     zoomLevel:          1.0,
-    tagPhase:           'draw',
-    tagDrawStart:       null,
-    tagPendingBbox:     null,
-    tagEditingId:       null,
-    tagPendingLabel:    '',
-    tagPendingSubcomps: [],
-    tagSubSelectedIds:  new Set(),
-    tagSubDrawStart:    null,
-    tagResizing:        null,
+    annotationPhase:           'draw',
+    annotationDrawStart:       null,
+    annotationPendingBbox:     null,
+    annotationEditingId:       null,
+    annotationPendingLabel:    '',
+    annotationPendingSubcomps: [],
+    annotationSubSelectedIds:  new Set(),
+    annotationSubDrawStart:    null,
+    annotationResizing:        null,
 
     nerSelectedIds:     new Set(),
     nerHighlightKey:    null,
@@ -127,7 +127,7 @@ export function initCore(C) {
     if (!img) return;
     img.style.width = Math.round(img.naturalWidth * state.zoomLevel) + 'px';
     renderOverlays();
-    if (state.tagPhase === 'labeling' && state.tagPendingBbox) {
+    if (state.annotationPhase === 'labeling' && state.annotationPendingBbox) {
       var tagMod = _modules['label'];
       if (tagMod && tagMod.updateVeils) tagMod.updateVeils();
     }
@@ -158,7 +158,7 @@ export function initCore(C) {
   function renderOverlays() {
     var viewer = document.getElementById('dp-viewer'), img = document.getElementById('dp-img');
     if (!viewer || !img || !img.naturalWidth) return;
-    viewer.querySelectorAll('.dp-word-ghost, .ocr-word, .dp-tag-overlay, .dp-ner-overlay')
+    viewer.querySelectorAll('.dp-word-ghost, .ocr-word, .dp-annotation-overlay, .dp-ner-overlay')
       .forEach(function(el) { el.remove(); });
     var scale = getScale();
     var mod = _modules[state.activeTab];
@@ -179,7 +179,7 @@ export function initCore(C) {
     var sep     = document.getElementById('dp-sep-ocr');
     var nerSep  = document.getElementById('dp-sep-ner');
     var nerBtn  = document.getElementById('dp-rerun-ner');
-    var tagP    = document.getElementById('dp-tag-panel');
+    var annotationP = document.getElementById('dp-annotation-panel');
     var nerP    = document.getElementById('dp-ner-panel');
     var txtP    = document.getElementById('dp-text-panel');
     var imgP    = document.getElementById('dp-image-panel');
@@ -188,7 +188,7 @@ export function initCore(C) {
     if (nerBtn) nerBtn.style.display = (name === 'ner') ? '' : 'none';
     if (txtP)   txtP.classList.toggle('visible', name === 'ocr');
     if (nerP)   nerP.classList.toggle('visible', name === 'ner');
-    if (tagP)   tagP.classList.toggle('visible', name === 'label');
+    if (annotationP) annotationP.classList.toggle('visible', name === 'label');
     if (imgP)   imgP.classList.toggle('visible', name === 'image');
     var entering = _modules[name];
     if (entering && entering.activate) entering.activate();
@@ -202,7 +202,7 @@ export function initCore(C) {
     var el = document.getElementById('dp-tab-badge');
     if (!el) return;
     if (state.activeTab === 'label') {
-      el.textContent = TAGS.length ? TAGS.length + ' label' + (TAGS.length === 1 ? '' : 's') : 'No labels';
+      el.textContent = ANNOTATIONS.length ? ANNOTATIONS.length + ' label' + (ANNOTATIONS.length === 1 ? '' : 's') : 'No labels';
     } else if (state.activeTab === 'ner') {
       var n = OCR_WORDS.filter(function(w) {
         var lbl = w.corrected_label || w.ner_label;
@@ -217,7 +217,7 @@ export function initCore(C) {
   /* ── side-panel divider ────────────────────────────────────── */
   // Apply state.sidePanelWidth to all three side panels.
   function applySidePanelWidth() {
-    ['dp-text-panel', 'dp-ner-panel', 'dp-tag-panel', 'dp-image-panel'].forEach(function(id) {
+    ['dp-text-panel', 'dp-ner-panel', 'dp-annotation-panel', 'dp-image-panel'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.style.width = state.sidePanelWidth + 'px';
     });
@@ -229,7 +229,7 @@ export function initCore(C) {
   var divider = document.getElementById('dp-divider');
   if (divider) {
     divider.addEventListener('mousedown', function(e) {
-      var panelId = state.activeTab === 'label' ? 'dp-tag-panel'
+      var panelId = state.activeTab === 'label' ? 'dp-annotation-panel'
                   : state.activeTab === 'ner'   ? 'dp-ner-panel'
                   : state.activeTab === 'image' ? 'dp-image-panel'
                   : 'dp-text-panel';
@@ -349,8 +349,8 @@ export function initCore(C) {
     state, C,
     get OCR_WORDS() { return OCR_WORDS; },
     set OCR_WORDS(v) { OCR_WORDS = v; },
-    get TAGS() { return TAGS; },
-    set TAGS(v) { TAGS = v; },
+    get ANNOTATIONS() { return ANNOTATIONS; },
+    set ANNOTATIONS(v) { ANNOTATIONS = v; },
     wordById,
     postJson, positionAtViewerEdge, updateSelectBar, applyOcrWordDiff, withBtn, updateRubberBand,
     getScale, getRefWidth, viewerOffset, navigate, dpFit,

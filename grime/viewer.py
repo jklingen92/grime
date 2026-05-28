@@ -17,9 +17,9 @@ Endpoints implemented here:
     POST words/bulk-delete/   — delete multiple Words at once
     POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
     POST words/rerun-ocr/     — re-OCR the union bbox of a Word selection
-    POST tags/create/         — create a Tag on this page
-    POST tags/update/         — edit an existing Tag
-    POST tags/delete/         — delete a Tag
+    POST annotations/create/  — create an Annotation on this page
+    POST annotations/update/  — edit an existing Annotation
+    POST annotations/delete/  — delete an Annotation
     POST image/save/          — bake brightness/contrast/levels into corrected_image
     POST image/reset/         — clear corrected_image and revert to original
     POST image/autocontrast/  — analyse histogram and return suggested black/white levels
@@ -46,7 +46,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
 from grime.forms import DocumentUploadForm
-from grime.models import Document, DocumentPage, Tag, Word, WorkerSlot
+from grime.models import Annotation, Document, DocumentPage, Word, WorkerSlot
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -105,19 +105,19 @@ def get_viewer_urls() -> list:
             name="grime_documentpage_viewer_words_rerun_ner",
         ),
         path(
-            "<int:page_pk>/viewer/tags/create/",
-            tag_create,
-            name="grime_documentpage_viewer_tag_create",
+            "<int:page_pk>/viewer/annotations/create/",
+            annotation_create,
+            name="grime_documentpage_viewer_annotation_create",
         ),
         path(
-            "<int:page_pk>/viewer/tags/update/",
-            tag_update,
-            name="grime_documentpage_viewer_tag_update",
+            "<int:page_pk>/viewer/annotations/update/",
+            annotation_update,
+            name="grime_documentpage_viewer_annotation_update",
         ),
         path(
-            "<int:page_pk>/viewer/tags/delete/",
-            tag_delete,
-            name="grime_documentpage_viewer_tag_delete",
+            "<int:page_pk>/viewer/annotations/delete/",
+            annotation_delete,
+            name="grime_documentpage_viewer_annotation_delete",
         ),
         path(
             "<int:page_pk>/viewer/image/save/",
@@ -186,16 +186,16 @@ def _word_to_dict(word: Word | dict) -> dict:
     }
 
 
-def _tag_to_dict(tag: Tag) -> dict:
+def _annotation_to_dict(annotation: Annotation) -> dict:
     return {
-        "id": tag.pk,
-        "label": tag.label,
-        "bbox_left": tag.bbox_left,
-        "bbox_top": tag.bbox_top,
-        "bbox_width": tag.bbox_width,
-        "bbox_height": tag.bbox_height,
-        "subcomponents": tag.subcomponents,
-        "created_by_id": tag.created_by_id,
+        "id": annotation.pk,
+        "label": annotation.label,
+        "bbox_left": annotation.bbox_left,
+        "bbox_top": annotation.bbox_top,
+        "bbox_width": annotation.bbox_width,
+        "bbox_height": annotation.bbox_height,
+        "subcomponents": annotation.subcomponents,
+        "created_by_id": annotation.created_by_id,
     }
 
 
@@ -231,8 +231,8 @@ def build_viewer_context(page: DocumentPage) -> dict:
         )
     )
     page_ct = ContentType.objects.get_for_model(DocumentPage)
-    tags = list(
-        Tag.objects.filter(source_type=page_ct, source_id=page.pk).values(
+    annotations = list(
+        Annotation.objects.filter(source_type=page_ct, source_id=page.pk).values(
             "id",
             "label",
             "bbox_left",
@@ -260,15 +260,15 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "image_alt": str(page),
         "ner_models_json": _safe_json(ner_models),
         "ocr_words_json": _safe_json([_word_to_dict(w) for w in words]),
-        "tags_json": _safe_json(tags),
+        "annotations_json": _safe_json(annotations),
         "citations_json": _safe_json([]),
         "prev_url_json": _safe_json(None),
         "next_url_json": _safe_json(None),
         "page_list_json": _safe_json(None),
         "ocr_record_pk": page.pk,
-        "tag_source_type_id": page_ct.pk,
-        "tag_source_id": page.pk,
-        "doc_tag_count": Tag.objects.filter(
+        "annotation_source_type_id": page_ct.pk,
+        "annotation_source_id": page.pk,
+        "doc_annotation_count": Annotation.objects.filter(
             source_type=page_ct,
             source_id__in=page.document.pages.values_list("pk", flat=True),
         ).count(),
@@ -276,9 +276,9 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "use_preprocessed_bbox": False,
         # Wired endpoints — the JS gates feature availability on whether each
         # URL is truthy.
-        "tag_create_url": _url("grime_documentpage_viewer_tag_create"),
-        "tag_update_url": _url("grime_documentpage_viewer_tag_update"),
-        "tag_delete_url": _url("grime_documentpage_viewer_tag_delete"),
+        "annotation_create_url": _url("grime_documentpage_viewer_annotation_create"),
+        "annotation_update_url": _url("grime_documentpage_viewer_annotation_update"),
+        "annotation_delete_url": _url("grime_documentpage_viewer_annotation_delete"),
         "export_pdf_url": _url("grime_documentpage_viewer_export_pdf"),
         "image_save_url": _url("grime_documentpage_viewer_image_save"),
         "image_reset_url": _url("grime_documentpage_viewer_image_reset"),
@@ -302,7 +302,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_resolve_dittos_url": "",
         "ocr_create_person_url": "",
         "rerun_ocr_url": "",
-        "review_tags_url": "",
+        "review_annotations_url": "",
         "prev_url": "",
         "next_url": "",
         "nav_prefix": "",
@@ -416,12 +416,12 @@ def word_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
 
 
 # ---------------------------------------------------------------------------
-# Tag endpoints
+# Annotation endpoints
 # ---------------------------------------------------------------------------
 
 
-def _parse_tag_payload(request: HttpRequest) -> tuple[dict, JsonResponse | None]:
-    """Parse the bbox + label + subcomponents fields the JS sends with every tag write."""
+def _parse_annotation_payload(request: HttpRequest) -> tuple[dict, JsonResponse | None]:
+    """Parse the bbox + label + subcomponents fields the JS sends with every annotation write."""
     try:
         label = (request.POST.get("label") or "").strip()
         if not label:
@@ -444,60 +444,60 @@ def _parse_tag_payload(request: HttpRequest) -> tuple[dict, JsonResponse | None]
 
 
 @require_POST
-def tag_create(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Create a Tag on this page.
+def annotation_create(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Create an Annotation on this page.
 
     The viewer sends source_type_id / source_id in the body for legacy
-    reasons; we ignore them and always pin the tag to this page (the URL
+    reasons; we ignore them and always pin the annotation to this page (the URL
     is the source of truth).
     """
     page = DocumentPage.objects.filter(pk=page_pk).first()
     if page is None:
         return JsonResponse({"error": "Page not found"}, status=404)
-    fields, err = _parse_tag_payload(request)
+    fields, err = _parse_annotation_payload(request)
     if err is not None:
         return err
     page_ct = ContentType.objects.get_for_model(DocumentPage)
-    tag = Tag.objects.create(
+    annotation = Annotation.objects.create(
         source_type=page_ct,
         source_id=page.pk,
         created_by=request.user,
         **fields,
     )
-    return JsonResponse({"ok": True, "tag": _tag_to_dict(tag)})
+    return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
 
 
 @require_POST
-def tag_update(request: HttpRequest, page_pk: int) -> JsonResponse:
+def annotation_update(request: HttpRequest, page_pk: int) -> JsonResponse:
     try:
-        tag_id = int(request.POST["tag_id"])
+        annotation_id = int(request.POST["annotation_id"])
     except (KeyError, ValueError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     page_ct = ContentType.objects.get_for_model(DocumentPage)
-    tag = Tag.objects.filter(pk=tag_id, source_type=page_ct, source_id=page_pk).first()
-    if tag is None:
-        return JsonResponse({"error": "Tag not found on this page"}, status=404)
-    fields, err = _parse_tag_payload(request)
+    annotation = Annotation.objects.filter(pk=annotation_id, source_type=page_ct, source_id=page_pk).first()
+    if annotation is None:
+        return JsonResponse({"error": "Annotation not found on this page"}, status=404)
+    fields, err = _parse_annotation_payload(request)
     if err is not None:
         return err
     for k, v in fields.items():
-        setattr(tag, k, v)
-    tag.save(update_fields=list(fields.keys()))
-    return JsonResponse({"ok": True, "tag": _tag_to_dict(tag)})
+        setattr(annotation, k, v)
+    annotation.save(update_fields=list(fields.keys()))
+    return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
 
 
 @require_POST
-def tag_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
+def annotation_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     try:
-        tag_id = int(request.POST["tag_id"])
+        annotation_id = int(request.POST["annotation_id"])
     except (KeyError, ValueError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     page_ct = ContentType.objects.get_for_model(DocumentPage)
-    deleted, _ = Tag.objects.filter(
-        pk=tag_id, source_type=page_ct, source_id=page_pk
+    deleted, _ = Annotation.objects.filter(
+        pk=annotation_id, source_type=page_ct, source_id=page_pk
     ).delete()
     if not deleted:
-        return JsonResponse({"error": "Tag not found on this page"}, status=404)
+        return JsonResponse({"error": "Annotation not found on this page"}, status=404)
     return JsonResponse({"ok": True})
 
 
@@ -957,6 +957,7 @@ def document_list_view(request):
         if form.is_valid():
             uploaded = form.cleaned_data["pdf_file"]
             title = form.cleaned_data.get("title") or None
+            tags = form.cleaned_data.get("tags") or []
             stem = Path(uploaded.name).stem
 
             tmp_dir = tempfile.mkdtemp()
@@ -976,10 +977,13 @@ def document_list_view(request):
                 os.rmdir(tmp_dir)
 
             if doc is not None:
+                if tags:
+                    doc.tags = tags
+                    doc.save(update_fields=["tags"])
                 return redirect("grime:document", doc_pk=doc.pk)
 
     doc_list = [
-        {"doc": doc}
+        {"doc": doc, "doc_tags_json": json.dumps(doc.tags)}
         for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
     ]
     worker_slots = list(WorkerSlot.objects.all())
@@ -1013,8 +1017,17 @@ def rename_document_view(request, doc_pk: int):
     if not title:
         return JsonResponse({"error": "Title cannot be empty."}, status=400)
     doc.title = title
-    doc.save(update_fields=["title"])
-    return JsonResponse({"ok": True, "title": doc.title})
+    update_fields = ["title"]
+    raw_tags = request.POST.get("tags")
+    if raw_tags is not None:
+        try:
+            parsed = json.loads(raw_tags)
+            doc.tags = [str(t).strip() for t in parsed if str(t).strip()] if isinstance(parsed, list) else []
+        except (json.JSONDecodeError, TypeError):
+            doc.tags = []
+        update_fields.append("tags")
+    doc.save(update_fields=update_fields)
+    return JsonResponse({"ok": True, "title": doc.title, "tags": doc.tags})
 
 
 @staff_member_required
