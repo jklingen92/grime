@@ -63,14 +63,10 @@ def create_job(request):
         pf = handler.params_form_class(request.POST)
         if not pf.is_valid():
             return JsonResponse({"error": pf.errors.as_text()}, status=400)
-        params = dict(pf.cleaned_data)
+        params = pf.cleaned_data
 
-    page_pk_raw = request.POST.get("page_pk")
-    if page_pk_raw:
-        try:
-            params["page_pk"] = int(page_pk_raw)
-        except (ValueError, TypeError):
-            return JsonResponse({"error": "Invalid page_pk value"}, status=400)
+    if cd.get("page_pk"):
+        params["page_pk"] = cd["page_pk"]
 
     from grime.models import Document
 
