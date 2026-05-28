@@ -2,3 +2,66 @@
 /* Brand tokens and shared component styles are in base.css              */
 
 .worker-card { min-height: 90px; }
+
+/* ---- label tag-input widget (upload form) ---- */
+.tag-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  cursor: text;
+}
+.tag-input-wrap:focus-within {
+  border-color: #86b7fe;
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, .25);
+}
+.tag-chips {
+  display: contents;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--grime-primary, #2c6f57);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tag-chip-remove {
+  all: unset;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 14px;
+  opacity: .75;
+}
+.tag-chip-remove:hover { opacity: 1; }
+.tag-text-input {
+  border: none;
+  outline: none;
+  flex: 1 1 120px;
+  min-width: 80px;
+  font-size: 14px;
+  background: transparent;
+  padding: 2px 0;
+}
+
+/* ---- label chips in the document list table ---- */
+.doc-label-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--grime-primary, #2c6f57);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}

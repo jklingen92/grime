@@ -196,3 +196,68 @@ document.getElementById("delete-doc-form").addEventListener("submit", async e =>
     errBox.classList.remove("d-none");
   }
 });
+
+// ---------------------------------------------------------------------------
+// Label tag-input widget
+// ---------------------------------------------------------------------------
+(function () {
+  const hidden = document.getElementById("id_labels");
+  const wrap = document.getElementById("labels-input-wrap");
+  const textInput = document.getElementById("labels-text-input");
+  const chipsEl = document.getElementById("labels-chips");
+  if (!hidden || !wrap || !textInput || !chipsEl) return;
+
+  let tags = [];
+
+  function sync() {
+    hidden.value = JSON.stringify(tags);
+  }
+
+  function renderChips() {
+    chipsEl.innerHTML = "";
+    tags.forEach((tag, i) => {
+      const chip = document.createElement("span");
+      chip.className = "tag-chip";
+      chip.textContent = tag;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "tag-chip-remove";
+      remove.setAttribute("aria-label", `Remove ${tag}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        tags.splice(i, 1);
+        renderChips();
+        sync();
+      });
+      chip.appendChild(remove);
+      chipsEl.appendChild(chip);
+    });
+  }
+
+  function addTag(raw) {
+    const value = raw.trim();
+    if (value && !tags.includes(value)) {
+      tags.push(value);
+      renderChips();
+      sync();
+    }
+    textInput.value = "";
+  }
+
+  textInput.addEventListener("keydown", e => {
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      addTag(textInput.value);
+    } else if (e.key === "Backspace" && textInput.value === "" && tags.length) {
+      tags.pop();
+      renderChips();
+      sync();
+    }
+  });
+
+  textInput.addEventListener("blur", () => {
+    if (textInput.value.trim()) addTag(textInput.value);
+  });
+
+  wrap.addEventListener("click", () => textInput.focus());
+})();
