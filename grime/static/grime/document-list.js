@@ -137,6 +137,10 @@ document.getElementById("editDocModal").addEventListener("shown.bs.modal", () =>
   document.getElementById("edit-doc-title").focus();
 });
 
+document.getElementById("edit-doc-title").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("save-doc-btn").click();
+});
+
 document.getElementById("save-doc-btn").addEventListener("click", async () => {
   const errBox = document.getElementById("edit-doc-error");
   errBox.classList.add("d-none");
@@ -174,6 +178,10 @@ document.getElementById("save-doc-btn").addEventListener("click", async () => {
 // Delete Document modal
 // ---------------------------------------------------------------------------
 let deleteDocPk = null;
+
+document.getElementById("deleteDocModal").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("confirm-delete-btn").click();
+});
 
 document.getElementById("deleteDocModal").addEventListener("show.bs.modal", e => {
   const btn = e.relatedTarget;
