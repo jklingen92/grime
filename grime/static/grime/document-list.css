@@ -24,13 +24,6 @@
 .tag-chips {
   display: contents;
 }
-.tag-chip-remove {
-  all: unset;
-  cursor: pointer;
-  opacity: .75;
-  line-height: 1;
-}
-.tag-chip-remove:hover { opacity: 1; }
 .tag-text-input {
   border: none;
   outline: none;

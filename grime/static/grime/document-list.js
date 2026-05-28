@@ -217,20 +217,22 @@ document.getElementById("delete-doc-form").addEventListener("submit", async e =>
     chipsEl.innerHTML = "";
     tags.forEach((tag, i) => {
       const chip = document.createElement("span");
-      chip.className = "badge rounded-pill d-inline-flex align-items-center gap-1";
+      chip.className = "badge d-inline-flex align-items-center gap-1";
       chip.style.backgroundColor = "var(--grime-primary)";
-      chip.textContent = tag;
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.className = "tag-chip-remove";
+      remove.className = "btn btn-sm p-0 border-0 bg-transparent text-white lh-1";
       remove.setAttribute("aria-label", `Remove ${tag}`);
-      remove.textContent = "×";
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-xmark";
+      remove.appendChild(icon);
       remove.addEventListener("click", () => {
         tags.splice(i, 1);
         renderChips();
         sync();
       });
       chip.appendChild(remove);
+      chip.appendChild(document.createTextNode(tag));
       chipsEl.appendChild(chip);
     });
   }
