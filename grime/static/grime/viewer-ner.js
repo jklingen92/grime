@@ -52,7 +52,7 @@ export function createNerModule(core) {
         if (a.line_num !== b.line_num) return (a.line_num||0) - (b.line_num||0);
         return (a.word_num||0) - (b.word_num||0);
       });
-      var text = words.map(function(w) { return w.text; }).join(' ');
+      var text = words.map(function(w) { return (w.corrected_text || w.ocr_text); }).join(' ');
       if (text.length > 40) text = text.substring(0, 37) + '…';
       lbl.textContent = '“' + text + '”';
     }
@@ -139,7 +139,7 @@ export function createNerModule(core) {
       else { cur.words.push(w); }
     });
     return ents.map(function(e) {
-      var text = e.words.map(function(w) { return w.text; }).join(' ');
+      var text = e.words.map(function(w) { return (w.corrected_text || w.ocr_text); }).join(' ');
       return { type: e.type, text: text, wordIds: e.words.map(function(w) { return w.id; }) };
     });
   }
@@ -211,7 +211,7 @@ export function createNerModule(core) {
       if (!inRegion) return;
       var suggLabel = NER_ENTITY_LABEL[entityType] || entityType.toLowerCase();
       if (!state.tagPendingSubcomps.find(function(s) { return s.word_id === w.id; })) {
-        state.tagPendingSubcomps.push({ word_id: w.id, label: suggLabel, text: w.text || '' });
+        state.tagPendingSubcomps.push({ word_id: w.id, label: suggLabel, text: (w.corrected_text || w.ocr_text) || '' });
       }
     });
   }
@@ -282,7 +282,7 @@ export function createNerModule(core) {
         div.style.top       = Math.round(top    * scale) + 'px';
         div.style.width     = Math.round((right - left)  * scale) + 'px';
         div.style.height    = Math.round((bottom - top)  * scale) + 'px';
-        div.title = entity.type + ': ' + lineWords.map(function(w) { return w.text; }).join(' ');
+        div.title = entity.type + ': ' + lineWords.map(function(w) { return (w.corrected_text || w.ocr_text); }).join(' ');
         viewer.appendChild(div);
       });
     });
@@ -300,7 +300,7 @@ export function createNerModule(core) {
       div.style.top    = Math.round(w.top    * scale) + 'px';
       div.style.width  = Math.round(w.width  * scale) + 'px';
       div.style.height = Math.round(w.height * scale) + 'px';
-      div.title = w.text;
+      div.title = (w.corrected_text || w.ocr_text);
       viewer.appendChild(div);
     });
   }

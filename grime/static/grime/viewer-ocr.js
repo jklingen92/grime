@@ -35,14 +35,15 @@ export function createOcrModule(core) {
     lines.forEach(function(line) {
       var lineDiv = document.createElement('div');
       lineDiv.className = 'dp-text-line';
-      line.words.filter(function(w) { return (w.text || '').trim(); })
+      line.words.filter(function(w) { return (w.corrected_text || w.ocr_text || '').trim(); })
         .forEach(function(w) {
+          var display = w.corrected_text || w.ocr_text;
           var wordSpan = document.createElement('span');
           wordSpan.className = 'dp-text-word';
           if (state.ocrSelectedIds.has(w.id)) wordSpan.classList.add('selected');
-          if (_searchQuery && (w.text || '').toLowerCase().indexOf(_searchQuery) >= 0)
+          if (_searchQuery && (display || '').toLowerCase().indexOf(_searchQuery) >= 0)
             wordSpan.classList.add('search-match');
-          wordSpan.textContent = w.text;
+          wordSpan.textContent = display;
           wordSpan.dataset.wordId = w.id;
           (function(wid) {
             wordSpan.addEventListener('click', function(e) {
@@ -71,7 +72,7 @@ export function createOcrModule(core) {
     var matchIds = new Set();
     if (_searchQuery) {
       core.OCR_WORDS.forEach(function(w) {
-        var t = (w.text || '').toLowerCase();
+        var t = (w.corrected_text || w.ocr_text || '').toLowerCase();
         if (t.indexOf(_searchQuery) >= 0 && w.id != null) matchIds.add(w.id);
       });
     }
@@ -267,15 +268,20 @@ export function createOcrModule(core) {
     var originalEl = document.getElementById('ocr-popup-original');
     var input = document.getElementById('ocr-popup-input');
     if (count === 1 && word) {
-      if (originalEl) { originalEl.textContent = 'Original: ' + word.text; originalEl.style.display = ''; }
+      if (originalEl) { originalEl.textContent = 'Original: ' + word.ocr_text; originalEl.style.display = ''; }
       if (input) { input.value = word.corrected_text || ''; input.placeholder = 'Corrected text…'; }
     } else {
       if (originalEl) originalEl.style.display = 'none';
       if (input) { input.value = ''; input.placeholder = 'Replace all with…'; }
     }
-    var confirmBtn = document.getElementById('ocr-popup-confirm'); if (confirmBtn) confirmBtn.style.display = '';
-    var delBtn    = document.getElementById('ocr-popup-delete');  if (delBtn)    delBtn.style.display    = '';
-    var dittoBtn  = document.getElementById('ocr-popup-ditto');   if (dittoBtn)  dittoBtn.style.display   = '';
+    var confirmBtn  = document.getElementById('ocr-popup-confirm');  if (confirmBtn)  confirmBtn.style.display  = '';
+    var delBtn      = document.getElementById('ocr-popup-delete');   if (delBtn)      delBtn.style.display      = '';
+    var dittoBtn    = document.getElementById('ocr-popup-ditto');    if (dittoBtn)    dittoBtn.style.display    = '';
+    var restoreBtn  = document.getElementById('ocr-popup-restore');
+    if (restoreBtn) {
+      var anyCorrection = Array.from(state.ocrSelectedIds).some(function(id) { return !!(core.wordById[id] && core.wordById[id].corrected_text); });
+      restoreBtn.style.display = anyCorrection ? '' : 'none';
+    }
     core.positionAtViewerEdge(popup);
     if (input) { input.focus(); if (count === 1) input.select(); }
   }
@@ -299,7 +305,7 @@ export function createOcrModule(core) {
         word.corrected_text = data.corrected_text || null;
         if (el) {
           el.className = wordClass(word) + (state.ocrSelectedIds.has(word.id) ? ' selected' : '');
-          el.title = (word.corrected_text ? '✓ ' + word.corrected_text : word.text) + ' (' + Math.round(word.conf) + '%)';
+          el.title = (word.corrected_text ? '✓ ' + word.corrected_text : word.ocr_text) + ' (' + Math.round(word.conf) + '%)';
         }
         updateTextPanels();
       });
@@ -334,7 +340,19 @@ export function createOcrModule(core) {
     ids.forEach(function(id) {
       var w = core.wordById[id];
       var wordEl = document.querySelector("[data-word-id='" + id + "']");
-      if (w) postCorrection(w, wordEl, w.corrected_text || w.text);
+      if (w) postCorrection(w, wordEl, w.corrected_text || w.ocr_text);
+    });
+  }
+
+  // Clear corrected_text for all selected words that have one (restores OCR original).
+  function restoreWord() {
+    var ids = Array.from(state.ocrSelectedIds).filter(function(id) { return !!(core.wordById[id] && core.wordById[id].corrected_text); });
+    if (!ids.length) return;
+    closeEditPopup();
+    ids.forEach(function(id) {
+      var w = core.wordById[id];
+      var wordEl = document.querySelector("[data-word-id='" + id + "']");
+      if (w) postCorrection(w, wordEl, '');
     });
   }
 
@@ -365,10 +383,10 @@ export function createOcrModule(core) {
   /* ── ditto ─────────────────────────────────────────────────── */
   // Apply a server ditto response to the marked word and its resolved siblings.
   function _applyDittoResult(word, el, data) {
-    word.text = '"'; word.corrected_text = null; word.is_ditto = false;
+    word.ocr_text = '"'; word.corrected_text = null; word.is_ditto = false;
     if (el) {
       el.className = wordClass(word) + (state.ocrSelectedIds.has(word.id) ? ' selected' : '');
-      el.title = word.text + ' (' + Math.round(word.conf) + '%)';
+      el.title = word.ocr_text + ' (' + Math.round(word.conf) + '%)';
     }
     data.updated.forEach(function(u) {
       var w = core.wordById[u.id];
@@ -408,13 +426,13 @@ export function createOcrModule(core) {
       if (!C.bulkDittoUrl) return;
       var changes = ids.map(function(id) {
         var w = core.wordById[id];
-        return { wordId: id, prevText: w ? (w.corrected_text || w.text || '') : '' };
+        return { wordId: id, prevText: w ? (w.corrected_text || w.ocr_text || '') : '' };
       });
       closeEditPopup();
       core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(ids.join(','))).then(function(data) {
         if (!data.ok) return;
         core.recordUndo({ type: 'ocr-bulk-ditto', changes: changes });
-        data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.text = '"'; w.corrected_text = null; w.is_ditto = false; } });
+        data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.ocr_text = '"'; w.corrected_text = null; w.is_ditto = false; } });
         data.updated.forEach(function(u) { var w = core.wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = true; } });
         core.renderOverlays(); updateTextPanels();
       });
@@ -423,7 +441,7 @@ export function createOcrModule(core) {
       var id = ids[0], word = core.wordById[id];
       if (!word) return;
       var el = document.querySelector("[data-word-id='" + id + "']");
-      var prevText = word.corrected_text || word.text;
+      var prevText = word.corrected_text || word.ocr_text;
       closeEditPopup();
       core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(id)).then(function(data) {
         if (!data.ok) return;
@@ -529,7 +547,7 @@ export function createOcrModule(core) {
       div.style.top    = Math.round(w.top    * scale) + 'px';
       div.style.width  = Math.round(w.width  * scale) + 'px';
       div.style.height = Math.round(w.height * scale) + 'px';
-      div.title = (w.corrected_text ? '✓ ' + w.corrected_text : w.text) + (w.is_ditto ? '' : ' (' + Math.round(w.conf) + '%)');
+      div.title = (w.corrected_text ? '✓ ' + w.corrected_text : w.ocr_text) + (w.is_ditto ? '' : ' (' + Math.round(w.conf) + '%)');
       viewer.appendChild(div);
     });
   }
@@ -741,6 +759,8 @@ export function createOcrModule(core) {
     if (ocpDitto) ocpDitto.addEventListener('click', function(e) { e.preventDefault(); markWordAsDitto(); });
     var ocpDelete = document.getElementById('ocr-popup-delete');
     if (ocpDelete) ocpDelete.addEventListener('click', function(e) { e.preventDefault(); deleteWord(); });
+    var ocpRestore = document.getElementById('ocr-popup-restore');
+    if (ocpRestore) ocpRestore.addEventListener('click', function(e) { e.preventDefault(); restoreWord(); });
     var ocpClose = document.getElementById('ocr-popup-close');
     if (ocpClose) ocpClose.addEventListener('click', function(e) { e.preventDefault(); closeEditPopup(); if (state.drawMode) setDrawMode(false); });
     var ocpInput = document.getElementById('ocr-popup-input');
