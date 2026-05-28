@@ -109,7 +109,7 @@
             {% with doc=entry.doc %}
             <tr data-doc-row="{{ doc.pk }}">
               <td><a href="{% url 'grime:document' doc_pk=doc.pk %}"><i class="fa-regular fa-file-pdf me-1"></i><span class="doc-title-cell">{{ doc.title }}</span></a></td>
-              <td>
+              <td class="doc-tags-cell">
                 {% if doc.tags %}
                   <div class="d-flex flex-wrap gap-1">
                     {% for tag in doc.tags %}<span class="badge" style="background-color:var(--grime-primary)">{{ tag }}</span>{% endfor %}
@@ -127,6 +127,7 @@
                           data-bs-target="#editDocModal"
                           data-doc-pk="{{ doc.pk }}"
                           data-doc-title="{{ doc.title|escapejs }}"
+                          data-doc-tags="{{ entry.doc_tags_json|escapejs }}"
                           title="Edit document">
                     <i class="fa-solid fa-pencil"></i>
                   </button>
@@ -209,6 +210,14 @@
           <div class="mb-3">
             <label for="edit-doc-title" class="form-label fw-semibold">Title</label>
             <input type="text" id="edit-doc-title" class="form-control" required autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Tags</label>
+            <div class="tag-input-wrap" id="edit-tags-wrap">
+              <div class="tag-chips" id="edit-tags-chips"></div>
+              <input type="text" class="tag-text-input" id="edit-tags-text" placeholder="Type a tag, press Space to add…" autocomplete="off">
+            </div>
+            <div class="form-text">Press Space or Enter to add a tag.</div>
           </div>
         </div>
         <div class="modal-footer py-2">

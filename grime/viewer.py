@@ -983,7 +983,7 @@ def document_list_view(request):
                 return redirect("grime:document", doc_pk=doc.pk)
 
     doc_list = [
-        {"doc": doc}
+        {"doc": doc, "doc_tags_json": json.dumps(doc.tags)}
         for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
     ]
     worker_slots = list(WorkerSlot.objects.all())
@@ -1017,8 +1017,17 @@ def rename_document_view(request, doc_pk: int):
     if not title:
         return JsonResponse({"error": "Title cannot be empty."}, status=400)
     doc.title = title
-    doc.save(update_fields=["title"])
-    return JsonResponse({"ok": True, "title": doc.title})
+    update_fields = ["title"]
+    raw_tags = request.POST.get("tags")
+    if raw_tags is not None:
+        try:
+            parsed = json.loads(raw_tags)
+            doc.tags = [str(t).strip() for t in parsed if str(t).strip()] if isinstance(parsed, list) else []
+        except (json.JSONDecodeError, TypeError):
+            doc.tags = []
+        update_fields.append("tags")
+    doc.save(update_fields=update_fields)
+    return JsonResponse({"ok": True, "title": doc.title, "tags": doc.tags})
 
 
 @staff_member_required
