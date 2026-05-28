@@ -96,19 +96,34 @@ CELERY_TIMEZONE = TIME_ZONE
 # We track job state in AsyncJob, so Celery's result backend is unused.
 # Disabling it prevents connection errors when Redis is only used as a broker.
 CELERY_TASK_IGNORE_RESULT = True
+# Don't let Celery replace the root logger's handlers — that wipes out the
+# grime/celery handlers configured below and leaves workers silent.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
-# Logging — ensure grime's loggers reach the console in both the Django dev
-# server and Celery workers (which hijack the root logger on startup).
+# Logging — keep grime's INFO logs visible in both the Django dev server and
+# the Celery worker processes.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
     },
     "loggers": {
         "grime": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

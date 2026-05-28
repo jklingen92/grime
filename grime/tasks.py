@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 def run_job(self, job_pk: int) -> None:
     from grime.models import AsyncJob
 
+    logger.info("run_job received: job_pk=%d task_id=%s", job_pk, self.request.id)
     job = AsyncJob.objects.get(pk=job_pk)
     if job.status == AsyncJob.STATUS_COMPLETE:
         logger.info("Job %d already complete, skipping (broker re-queue?)", job_pk)
@@ -28,7 +29,10 @@ def run_job(self, job_pk: int) -> None:
     job.started_at = timezone.now()
     job.save()
 
-    logger.info("Job %d starting: type=%s doc='%s'", job_pk, job.job_type, job.document)
+    logger.info(
+        "Job %d starting: type=%s doc='%s' force=%s params=%s",
+        job_pk, job.job_type, job.document, job.force, job.params,
+    )
     try:
         job.handler.run(job)
         job.status = AsyncJob.STATUS_COMPLETE

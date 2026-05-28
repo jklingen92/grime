@@ -30,6 +30,10 @@ def dispatch_job(job: AsyncJob) -> None:
         result = run_job.apply_async(args=[job.pk], queue=job.worker_slot.queue_name)
         job.task_id = result.id
         job.save(update_fields=["task_id"])
+        logger.info(
+            "Dispatched job %d (%s) to queue %s, task_id=%s, params=%s",
+            job.pk, job.job_type, job.worker_slot.queue_name, result.id, job.params,
+        )
     except Exception as exc:
         logger.warning("Broker unavailable for job %d: %s", job.pk, exc)
         job.status = AsyncJob.STATUS_FAILED
