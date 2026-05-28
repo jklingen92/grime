@@ -217,7 +217,7 @@ export function createOcrModule(core) {
       el.classList.toggle('selected', state.ocrSelectedIds.has(parseInt(el.dataset.wordId)));
     });
     updateTextPanels();
-    if (state.ocrSelectedIds.size > 0) openEditPopup(null, null);
+    if (state.ocrSelectedIds.size > 0) { state.suppressClickClose = true; openEditPopup(null, null); }
   }
 
   /* ── undo / redo ───────────────────────────────────────────── */
@@ -644,7 +644,9 @@ export function createOcrModule(core) {
   }
 
   // Close the popup or clear selection when clicking outside the viewer / popup.
+  // Shift-clicks never dismiss: they are building a selection, not ending one.
   function onGlobalClick(e) {
+    if (e.shiftKey) return;
     var popup = document.getElementById('ocr-popup');
     if (popup && popup.style.display !== 'none' && !popup.contains(e.target) && !popup._pendingRegion) closeEditPopup();
     if (!e.target.closest('#dp-viewer') && !e.target.closest('#ocr-merge-bar') && !e.target.closest('#dp-text-panel')) clearSelection();
