@@ -310,59 +310,50 @@ export function createOcrModule(core) {
       return;
     }
     var text = input.value.trim();
-    if (state.ocrSelectedIds.size > 1) {
-      if (!text) { closeEditPopup(); return; }
-      var ids = Array.from(state.ocrSelectedIds);
-      closeEditPopup();
-      ids.forEach(function(id) {
-        var w = core.wordById[id];
-        var wordEl = document.querySelector("[data-word-id='" + id + "']");
-        if (w) postCorrection(w, wordEl, text);
-      });
-      return;
-    }
-    if (!state.currentWord) return;
-    postCorrection(state.currentWord, state.currentEl, text);
+    var ids = Array.from(state.ocrSelectedIds);
+    if (!ids.length) return;
     closeEditPopup();
+    ids.forEach(function(id) {
+      var w = core.wordById[id];
+      var wordEl = document.querySelector("[data-word-id='" + id + "']");
+      if (w) postCorrection(w, wordEl, text);
+    });
   }
 
-  // Confirm the word's existing text as its corrected_text without editing.
+  // Confirm the existing text of all selected words as their corrected_text.
   function confirmEdit() {
-    if (state.ocrSelectedIds.size > 1) {
-      var ids = Array.from(state.ocrSelectedIds);
-      closeEditPopup();
-      ids.forEach(function(id) {
-        var w = core.wordById[id];
-        var wordEl = document.querySelector("[data-word-id='" + id + "']");
-        if (w) postCorrection(w, wordEl, w.corrected_text || w.text);
-      });
-      return;
-    }
-    if (!state.currentWord) return;
-    postCorrection(state.currentWord, state.currentEl, state.currentWord.text);
+    var ids = Array.from(state.ocrSelectedIds);
+    if (!ids.length) return;
     closeEditPopup();
+    ids.forEach(function(id) {
+      var w = core.wordById[id];
+      var wordEl = document.querySelector("[data-word-id='" + id + "']");
+      if (w) postCorrection(w, wordEl, w.corrected_text || w.text);
+    });
   }
 
-  // Delete the selected word(s), recording an undo entry for single-word deletes.
+  // Delete the selected word(s). Single-word deletes are undoable; bulk deletes prompt for confirmation.
   function deleteWord() {
-    if (state.ocrSelectedIds.size > 1) {
-      if (!C.bulkDeleteUrl) return;
-      var pks = Array.from(state.ocrSelectedIds);
-      if (!confirm('Delete ' + pks.length + ' words?')) return;
+    var ids = Array.from(state.ocrSelectedIds);
+    if (!ids.length) return;
+    if (ids.length === 1) {
+      var id = ids[0], w = core.wordById[id];
+      if (!w) return;
+      var snap = Object.assign({}, w);
       closeEditPopup();
-      core.postJson(C.bulkDeleteUrl, 'word_pks=' + encodeURIComponent(pks.join(','))).then(function(data) {
+      _deleteWordById(id, function() { core.recordUndo({ type: 'ocr-delete', wordData: snap }); });
+    } else {
+      if (!C.bulkDeleteUrl) return;
+      if (!confirm('Delete ' + ids.length + ' words?')) return;
+      closeEditPopup();
+      core.postJson(C.bulkDeleteUrl, 'word_pks=' + encodeURIComponent(ids.join(','))).then(function(data) {
         if (!data.ok) return;
         var del = new Set(data.deleted_ids);
         core.OCR_WORDS = core.OCR_WORDS.filter(function(w) { return !del.has(w.id); });
         data.deleted_ids.forEach(function(id) { delete core.wordById[id]; });
         core.renderOverlays(); updateTextPanels();
       });
-      return;
     }
-    if (!state.currentWord) return;
-    var snap = Object.assign({}, state.currentWord), id = state.currentWord.id;
-    closeEditPopup();
-    _deleteWordById(id, function() { core.recordUndo({ type: 'ocr-delete', wordData: snap }); });
   }
 
   /* ── ditto ─────────────────────────────────────────────────── */
@@ -386,27 +377,10 @@ export function createOcrModule(core) {
 
   // Mark the selected word(s) as ditto mark(s).
   function markWordAsDitto() {
-    if (state.ocrSelectedIds.size > 1) {
-      if (!C.bulkDittoUrl) return;
-      var changes = Array.from(state.ocrSelectedIds).map(function(id) {
-        var w = core.wordById[id];
-        return { wordId: id, prevText: w ? (w.corrected_text || w.text || '') : '' };
-      });
-      var pks = Array.from(state.ocrSelectedIds);
-      closeEditPopup();
-      core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(pks.join(','))).then(function(data) {
-        if (!data.ok) return;
-        core.recordUndo({ type: 'ocr-bulk-ditto', changes: changes });
-        data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.text = '"'; w.corrected_text = null; w.is_ditto = false; } });
-        data.updated.forEach(function(u) { var w = core.wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = true; } });
-        core.renderOverlays(); updateTextPanels();
-      });
-      return;
-    }
-    if (!C.markAsDittoUrl) return;
     var popup = document.getElementById('ocr-popup');
     var pending = popup._pendingRegion;
     if (pending) {
+      if (!C.markAsDittoUrl) return;
       popup._pendingRegion = null; closeEditPopup(); setDrawMode(false);
       var addBody = 'left=' + pending.left + '&top=' + pending.top + '&width=' + pending.width + '&height=' + pending.height + '&corrected_text=';
       core.postJson(C.addWordUrl, addBody).then(function(data) {
@@ -422,19 +396,39 @@ export function createOcrModule(core) {
       });
       return;
     }
-    if (!state.currentWord) return;
-    var word = state.currentWord, el = state.currentEl;
-    var prevText = word.corrected_text || word.text;
-    closeEditPopup();
-    core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(word.id)).then(function(data) {
-      if (!data.ok) return;
-      var siblingSnaps = data.updated.map(function(u) {
-        var sw = core.wordById[u.id];
-        return { id: u.id, corrected_text: sw ? sw.corrected_text : null, is_ditto: sw ? sw.is_ditto : false };
+    var ids = Array.from(state.ocrSelectedIds);
+    if (!ids.length) return;
+    if (ids.length > 1) {
+      if (!C.bulkDittoUrl) return;
+      var changes = ids.map(function(id) {
+        var w = core.wordById[id];
+        return { wordId: id, prevText: w ? (w.corrected_text || w.text || '') : '' };
       });
-      core.recordUndo({ type: 'ocr-ditto', wordId: word.id, prevText: prevText, siblings: siblingSnaps });
-      _applyDittoResult(word, el, data);
-    });
+      closeEditPopup();
+      core.postJson(C.bulkDittoUrl, 'word_pks=' + encodeURIComponent(ids.join(','))).then(function(data) {
+        if (!data.ok) return;
+        core.recordUndo({ type: 'ocr-bulk-ditto', changes: changes });
+        data.marked_pks.forEach(function(id) { var w = core.wordById[id]; if (w) { w.text = '"'; w.corrected_text = null; w.is_ditto = false; } });
+        data.updated.forEach(function(u) { var w = core.wordById[u.id]; if (w) { w.corrected_text = u.corrected_text; w.is_ditto = true; } });
+        core.renderOverlays(); updateTextPanels();
+      });
+    } else {
+      if (!C.markAsDittoUrl) return;
+      var id = ids[0], word = core.wordById[id];
+      if (!word) return;
+      var el = document.querySelector("[data-word-id='" + id + "']");
+      var prevText = word.corrected_text || word.text;
+      closeEditPopup();
+      core.postJson(C.markAsDittoUrl, 'word_pk=' + encodeURIComponent(id)).then(function(data) {
+        if (!data.ok) return;
+        var siblingSnaps = data.updated.map(function(u) {
+          var sw = core.wordById[u.id];
+          return { id: u.id, corrected_text: sw ? sw.corrected_text : null, is_ditto: sw ? sw.is_ditto : false };
+        });
+        core.recordUndo({ type: 'ocr-ditto', wordId: id, prevText: prevText, siblings: siblingSnaps });
+        _applyDittoResult(word, el, data);
+      });
+    }
   }
 
   /* ── bulk operations ───────────────────────────────────────── */
