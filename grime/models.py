@@ -19,12 +19,15 @@ logs of run parameters; they're not parents of Word.
 """
 
 from functools import cached_property
+import logging
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class JobCancelled(Exception):
@@ -401,15 +404,24 @@ class AsyncJob(models.Model):
     def check_cancelled(self) -> None:
         """Raise JobCancelled if this job's status has flipped away from RUNNING.
 
-        Workers call this between pages so cancel / external state changes
-        terminate the run promptly without overwriting the new status.
+        Uses a conditional UPDATE (heartbeat) so the check is immune to any
+        read-side transaction isolation quirks — the WHERE clause is evaluated
+        against the database's current committed state when the write lock is
+        acquired.
         """
-        status = (
-            AsyncJob.objects.filter(pk=self.pk)
-            .values_list("status", flat=True)
-            .first()
-        )
-        if status != self.STATUS_RUNNING:
+        still_running = AsyncJob.objects.filter(
+            pk=self.pk, status=self.STATUS_RUNNING,
+        ).update(updated_at=timezone.now())
+        if not still_running:
+            status = (
+                AsyncJob.objects.filter(pk=self.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
+            logger.info(
+                "Job %d check_cancelled: status is %r, raising JobCancelled",
+                self.pk, status,
+            )
             raise JobCancelled(f"Job {self.pk} status changed to {status!r}")
 
     def rerun(self) -> None:

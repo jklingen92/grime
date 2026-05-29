@@ -112,17 +112,24 @@ class Command(BaseCommand):
 
         # run() returned normally, but cancel may have fired during the last
         # page (after its check_cancelled() but before the loop ended).
-        # Re-read status; if it's no longer RUNNING, honour it.
-        job.refresh_from_db(fields=["status"])
-        if job.status != AsyncJob.STATUS_RUNNING:
-            logger.info("Job %d finished but status already changed to %r — not marking complete", job.pk, job.status)
+        # Re-read status with a conditional update; if it's no longer RUNNING,
+        # honour it and do not mark complete.
+        still_running = AsyncJob.objects.filter(
+            pk=job.pk, status=AsyncJob.STATUS_RUNNING,
+        ).update(
+            status=AsyncJob.STATUS_COMPLETE,
+            completed_at=timezone.now(),
+        )
+        if not still_running:
+            job.refresh_from_db(fields=["status"])
+            logger.info(
+                "Job %d finished but status is %r — not marking complete",
+                job.pk, job.status,
+            )
             try:
                 job.handler.clean(job)
             except Exception:
                 logger.exception("Job %d clean() failed after late cancel", job.pk)
             return
 
-        job.status = AsyncJob.STATUS_COMPLETE
-        job.completed_at = timezone.now()
-        job.save()
         logger.info("Job %d complete", job.pk)
