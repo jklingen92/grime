@@ -37,7 +37,7 @@ export default function ViewerApp() {
   const dispatch = useViewerDispatch();
 
   const wrapRef = useRef(null);
-  const [coord, setCoord] = useState(null);
+  const coordElRef = useRef(null);
   const [ocrPopup, setOcrPopup] = useState(null); // { mode, word?, pendingRegion? }
   const [jobModal, setJobModal] = useState({ visible: false, jobType: '' });
   const [activeJobs, setActiveJobs] = useState({}); // { ocr: jobPk, ner: jobPk }
@@ -474,7 +474,21 @@ export default function ViewerApp() {
         <div id="dp-outer">
           <ViewerCanvas
             wrapRef={wrapRef}
-            onCoordChange={setCoord}
+            onCoordChange={(c) => {
+              const el = coordElRef.current;
+              if (!el) return;
+              if (!c) {
+                el.style.display = 'none';
+                return;
+              }
+              el.textContent = c.x + ', ' + c.y;
+              el.style.display = 'block';
+              if (wrapRef.current) {
+                const wr = wrapRef.current.getBoundingClientRect();
+                el.style.left = wr.right - el.offsetWidth - 8 + 'px';
+                el.style.top = wr.bottom - el.offsetHeight - 8 + 'px';
+              }
+            }}
             onOpenOcrPopupForSelection={openOcrPopupForSelection}
             onOpenOcrPopupForDraw={openOcrPopupForDraw}
             onOpenAnnotationLabeling={onOpenAnnotationLabeling}
@@ -482,9 +496,7 @@ export default function ViewerApp() {
           <SidePanel />
         </div>
       </div>
-      <div id="dp-coord" style={{ display: coord ? 'block' : 'none' }}>
-        {coord ? coord.x + ', ' + coord.y : ''}
-      </div>
+      <div id="dp-coord" ref={coordElRef} />
 
       <OcrEditPopup
         popup={ocrPopup}

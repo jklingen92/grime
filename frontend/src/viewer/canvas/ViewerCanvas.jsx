@@ -609,6 +609,7 @@ export default function ViewerCanvas({
         <img
           id="dp-img"
           ref={imgRef}
+          src={config.imageHasCorrected ? config.imageUrl : config.originalImageUrl}
           alt={config.imageAlt || ''}
           onLoad={() => setImgNaturalReady(true)}
         />

@@ -1,6 +1,6 @@
 // Floating action bar for NER selections: apply / clear / delete bulk labels.
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
 import { nerEntityType } from '../state/selectors.js';
 
@@ -30,7 +30,9 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
 
   const [type, setType] = useState(dominantType);
   // Keep the dropdown synced when the selection changes.
-  useMemo(() => setType(dominantType), [dominantType]);
+  useEffect(() => {
+    setType(dominantType);
+  }, [dominantType]);
 
   const labelText = useMemo(() => {
     const ids = Array.from(state.nerSelectedIds);
