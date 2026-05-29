@@ -992,8 +992,18 @@ def document_list_view(request):
                     doc.save(update_fields=["tags"])
                 return redirect("grime:document", doc_pk=doc.pk)
 
+    entity_counts = {
+        row["page__document_id"]: row["n"]
+        for row in Word.objects.filter(ner_label__startswith="B-")
+        .values("page__document_id")
+        .annotate(n=Count("pk"))
+    }
     doc_list = [
-        {"doc": doc, "doc_tags_json": json.dumps(doc.tags)}
+        {
+            "doc": doc,
+            "doc_tags_json": json.dumps(doc.tags),
+            "entity_count": entity_counts.get(doc.pk, 0),
+        }
         for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
     ]
     worker_slots = list(WorkerSlot.objects.all())

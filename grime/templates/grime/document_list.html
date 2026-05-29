@@ -72,6 +72,7 @@
               <th>Title</th>
               <th>Labels</th>
               <th>Pages</th>
+              <th class="text-center">Entities</th>
               <th></th>
             </tr>
           </thead>
@@ -90,12 +91,14 @@
                 {% endif %}
               </td>
               <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-center">
+                <a href="{% url 'grime:entity_list' %}?doc={{ doc.pk }}" class="btn btn-sm btn-outline-secondary" title="View entities for this document">
+                  <i class="fa-solid fa-tags me-1"></i>{{ entry.entity_count }} entities
+                </a>
+              </td>
               <td>
                 <div class="d-flex gap-2 justify-content-end">
                   <a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a>
-                  <a href="{% url 'grime:entity_list' %}?doc={{ doc.pk }}" class="btn btn-sm btn-outline-secondary" title="View entities for this document">
-                    <i class="fa-solid fa-tags"></i>
-                  </a>
                   <button class="btn btn-sm btn-outline-primary"
                           data-bs-toggle="modal"
                           data-bs-target="#editDocModal"
