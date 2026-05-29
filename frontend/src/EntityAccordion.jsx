@@ -8,7 +8,7 @@ function PageGroup({ page }) {
           p.&nbsp;{page.pageNumber ?? '?'}
         </a>
       </div>
-      <div className="d-flex flex-wrap gap-2">
+      <div className="d-flex flex-column gap-2">
         {page.occurrences.map((occ, i) => (
           <EntityThumbnail
             key={i}
