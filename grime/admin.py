@@ -1,14 +1,15 @@
 """
 Admin registrations for the grime document management app.
 
-The DocumentPage change form embeds an inline document viewer that overlays
-Word bboxes and Annotation rectangles on the page image and lets users edit them.
-Endpoint routing and JSON request handling live in ``grime.viewer``.
+The viewer is mounted as a React island on the user-facing document detail
+page (``grime/templates/grime/document_detail.html``); the admin "View on
+site" link on Document points there via ``Document.get_absolute_url``.
+Endpoint routing and JSON request handling for the viewer live in
+``grime.viewer``.
 """
 
 from django.contrib import admin
 
-from grime import viewer
 from grime.models import Annotation, AsyncJob, Document, DocumentPage, NERPass, OCRPass, Word, WorkerSlot
 
 
@@ -87,7 +88,6 @@ class DocumentPageAdmin(admin.ModelAdmin):
     search_fields = ("document__title", "title", "document_id")
     raw_id_fields = ("document",)
     inlines = [WordInline]
-    change_form_template = "admin/grime/documentpage/change_form.html"
     fieldsets = (
         (None, {"fields": ("document", "page_number", "title", "file", "image")}),
         (
@@ -106,18 +106,6 @@ class DocumentPageAdmin(admin.ModelAdmin):
     def latest_ocr_method(self, obj):
         latest = obj.ocr_passes.first()
         return latest.method if latest else "—"
-
-    def get_urls(self):
-        return super().get_urls()
-
-    def change_view(self, request, object_id, form_url="", extra_context=None):
-        extra_context = dict(extra_context or {})
-        page = DocumentPage.objects.filter(pk=object_id).first()
-        if page is not None:
-            extra_context.update(viewer.build_viewer_context(page))
-        return super().change_view(
-            request, object_id, form_url, extra_context=extra_context
-        )
 
 
 # @admin.register(Word)
