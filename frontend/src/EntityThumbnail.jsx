@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 
-const PAD = 24;
-const CANVAS_HEIGHT = 80;
+const PAD = 80;
+const CANVAS_HEIGHT = 200;
 
 export default function EntityThumbnail({ imageUrl, left, top, width, height }) {
   const canvasRef = useRef(null);
@@ -49,7 +49,7 @@ export default function EntityThumbnail({ imageUrl, left, top, width, height }) 
   return (
     <canvas
       ref={canvasRef}
-      style={{ borderRadius: 8, display: 'block', background: '#eee', height: CANVAS_HEIGHT }}
+      style={{ borderRadius: 8, display: 'block', background: '#eee', height: CANVAS_HEIGHT, maxWidth: '100%' }}
     />
   );
 }
