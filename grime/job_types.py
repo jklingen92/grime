@@ -103,7 +103,11 @@ class OCRJobType(JobType):
     def clean(self, job: "AsyncJob") -> None:
         from grime.models import OCRPass, Word
 
-        page_ids = job.document.pages.values_list("pk", flat=True)
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            page_ids = [int(page_pk)]
+        else:
+            page_ids = list(job.document.pages.values_list("pk", flat=True))
         Word.objects.filter(page_id__in=page_ids).delete()
         OCRPass.objects.filter(page_id__in=page_ids).delete()
 
@@ -217,9 +221,11 @@ class NERJobType(JobType):
     def clean(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
 
-        # Wipe all NER passes for this document regardless of model, so a
-        # forced re-run always starts from a clean slate.
-        page_ids = job.document.pages.values_list("pk", flat=True)
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            page_ids = [int(page_pk)]
+        else:
+            page_ids = list(job.document.pages.values_list("pk", flat=True))
         NERPass.objects.filter(page_id__in=page_ids).delete()
         Word.objects.filter(page_id__in=page_ids).update(ner_label=None)
 
