@@ -49,7 +49,7 @@ export default function EntityThumbnail({ imageUrl, left, top, width, height }) 
   return (
     <canvas
       ref={canvasRef}
-      style={{ borderRadius: 8, display: 'block', background: '#eee', height: CANVAS_HEIGHT, maxWidth: '100%' }}
+      style={{ borderRadius: 8, display: 'block', background: '#eee', height: CANVAS_HEIGHT, maxWidth: '100%', border: '1px solid #dee2e6' }}
     />
   );
 }
