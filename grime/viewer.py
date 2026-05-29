@@ -46,7 +46,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 
 from grime.forms import DocumentUploadForm
-from grime.models import Annotation, Document, DocumentPage, Word, WorkerSlot
+from grime.models import Annotation, Document, DocumentPage, Entity, Word, WorkerSlot
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
 
@@ -1099,3 +1099,239 @@ def export_page_pdf(request, page_pk: int):
     return response
 
 
+# ---------------------------------------------------------------------------
+# Entity pages
+# ---------------------------------------------------------------------------
+
+_ENTITY_TYPE_LABELS = {"PER": "Person", "LOC": "Location", "ORG": "Organization"}
+_VALID_ENTITY_TYPES = set(_ENTITY_TYPE_LABELS)
+
+
+def _build_entity_spans(words) -> list[dict]:
+    """Group BIO-labelled words into entity spans.
+
+    Mirrors nerBuildEntities() in viewer-ner.js. Returns a list of:
+        {'type': 'PER', 'text': 'John Smith',
+         'bbox': {'left':…, 'top':…, 'width':…, 'height':…}}
+    """
+    spans = []
+    current = None
+    for w in words:
+        label = w.label if hasattr(w, "label") else (w.get("corrected_label") or w.get("ner_label"))
+        if not label:
+            current = None
+            continue
+        entity_type = label[2:]   # strip B- / I-
+        prefix = label[0]
+        if prefix == "B" or current is None or current["type"] != entity_type:
+            current = {"type": entity_type, "words": [w]}
+            spans.append(current)
+        else:
+            current["words"].append(w)
+
+    result = []
+    for s in spans:
+        ws = s["words"]
+        text = " ".join(
+            (w.corrected_text or w.ocr_text) if hasattr(w, "ocr_text")
+            else (w.get("corrected_text") or w.get("ocr_text", ""))
+            for w in ws
+        )
+        left   = min(w.left if hasattr(w, "left") else w["left"] for w in ws)
+        top    = min(w.top  if hasattr(w, "top")  else w["top"]  for w in ws)
+        right  = max((w.left + w.width)  if hasattr(w, "left") else (w["left"] + w["width"])  for w in ws)
+        bottom = max((w.top  + w.height) if hasattr(w, "top")  else (w["top"]  + w["height"]) for w in ws)
+        result.append({
+            "type": s["type"],
+            "text": text,
+            "bbox": {"left": left, "top": top, "width": right - left, "height": bottom - top},
+        })
+    return result
+
+
+@staff_member_required
+def entity_list_view(request):
+    """List all unique NER entities across all documents."""
+    from collections import defaultdict
+
+    pages = (
+        DocumentPage.objects
+        .filter(words__ner_label__isnull=False)
+        .distinct()
+        .select_related("document")
+        .prefetch_related("words")
+    )
+
+    # Accumulate {(type, text_norm): {display_text, doc_pks, count}}
+    agg: dict = defaultdict(lambda: {"display_text": "", "doc_pks": set(), "count": 0})
+    for page in pages:
+        ordered = sorted(page.words.all(), key=lambda w: (w.line_num, w.word_num))
+        for span in _build_entity_spans(ordered):
+            key = (span["type"], span["text"].strip().lower())
+            entry = agg[key]
+            if not entry["display_text"]:
+                entry["display_text"] = span["text"]
+            entry["doc_pks"].add(page.document_id)
+            entry["count"] += 1
+
+    # Merge Entity records (notes + dismissed)
+    entity_records = {
+        (e.entity_type, e.text): e
+        for e in Entity.objects.all()
+    }
+
+    entities = []
+    for (etype, enorm), data in agg.items():
+        rec = entity_records.get((etype, enorm))
+        entities.append({
+            "type": etype,
+            "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
+            "text": enorm,
+            "display_text": data["display_text"],
+            "doc_count": len(data["doc_pks"]),
+            "occurrence_count": data["count"],
+            "notes": rec.notes if rec else "",
+            "dismissed": rec.dismissed if rec else False,
+        })
+
+    entities.sort(key=lambda e: (e["type"], e["display_text"].lower()))
+
+    return render(request, "grime/entity_list.html", {
+        "entities": entities,
+        "entity_detail_url": reverse("grime:entity_detail"),
+        "entity_dismiss_url": reverse("grime:entity_dismiss"),
+        "csrf_token": request.META.get("CSRF_COOKIE", ""),
+    })
+
+
+@staff_member_required
+def entity_detail_view(request):
+    """Detail page for a single entity — all occurrences grouped by document."""
+    from collections import defaultdict
+
+    etype = request.GET.get("type", "").strip().upper()
+    raw_text = request.GET.get("text", "").strip()
+    if etype not in _VALID_ENTITY_TYPES or not raw_text:
+        from django.http import Http404
+        raise Http404
+
+    enorm = raw_text.lower()
+    entity = Entity.objects.filter(entity_type=etype, text=enorm).first()
+
+    # Collect all occurrences across all pages
+    pages = (
+        DocumentPage.objects
+        .filter(words__ner_label__isnull=False)
+        .distinct()
+        .select_related("document")
+        .prefetch_related("words")
+    )
+
+    # doc_pk → {doc, pages: {page_pk → {page, occurrences: []}}}
+    doc_map: dict = {}
+    for page in pages:
+        ordered = sorted(page.words.all(), key=lambda w: (w.line_num, w.word_num))
+        occurrences = [
+            s for s in _build_entity_spans(ordered)
+            if s["type"] == etype and s["text"].strip().lower() == enorm
+        ]
+        if not occurrences:
+            continue
+        doc = page.document
+        if doc.pk not in doc_map:
+            doc_map[doc.pk] = {"document": doc, "page_map": {}}
+        page_entry = doc_map[doc.pk]["page_map"]
+        if page.pk not in page_entry:
+            page_entry[page.pk] = {"page": page, "occurrences": []}
+        image = page.display_image
+        for occ in occurrences:
+            page_entry[page.pk]["occurrences"].append({
+                "imageUrl": image.url if image else "",
+                "pageUrl": reverse("grime:document_page", args=[doc.pk, page.pk]),
+                **occ["bbox"],
+            })
+
+    # Build sorted docs list
+    docs_data = []
+    for doc_entry in doc_map.values():
+        pages_data = []
+        total_occurrences = 0
+        for page_entry in sorted(
+            doc_entry["page_map"].values(),
+            key=lambda p: p["page"].page_number or 0,
+        ):
+            pg = page_entry["page"]
+            occs = page_entry["occurrences"]
+            total_occurrences += len(occs)
+            pages_data.append({
+                "pageNumber": pg.page_number,
+                "pageUrl": reverse("grime:document_page", args=[doc_entry["document"].pk, pg.pk]),
+                "occurrences": occs,
+            })
+        docs_data.append({
+            "title": doc_entry["document"].title,
+            "docUrl": doc_entry["document"].get_absolute_url(),
+            "occurrenceCount": total_occurrences,
+            "pages": pages_data,
+        })
+    docs_data.sort(key=lambda d: -d["occurrenceCount"])
+
+    # Canonical display text: first occurrence found
+    display_text = raw_text
+    if docs_data and docs_data[0]["pages"]:
+        pass  # raw_text from URL is fine; user-provided casing
+
+    props = {
+        "entityType": etype,
+        "entityText": enorm,
+        "displayText": raw_text,
+        "typeLabel": _ENTITY_TYPE_LABELS.get(etype, etype),
+        "notes": entity.notes if entity else "",
+        "dismissed": entity.dismissed if entity else False,
+        "docCount": len(doc_map),
+        "noteUpdateUrl": reverse("grime:entity_note_update"),
+        "dismissUrl": reverse("grime:entity_dismiss"),
+        "csrfToken": request.META.get("CSRF_COOKIE", ""),
+        "docs": docs_data,
+    }
+
+    return render(request, "grime/entity_detail.html", {
+        "entity_type": etype,
+        "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
+        "display_text": raw_text,
+        "entity_props_json": _safe_json(props),
+    })
+
+
+@staff_member_required
+@require_POST
+def entity_note_update_view(request):
+    """Save notes for an entity. Creates the Entity record if needed."""
+    etype = (request.POST.get("type") or "").strip().upper()
+    raw_text = (request.POST.get("text") or "").strip()
+    notes = request.POST.get("notes") or ""
+    if etype not in _VALID_ENTITY_TYPES or not raw_text:
+        return JsonResponse({"error": "Invalid type or text"}, status=400)
+    enorm = raw_text.lower()
+    Entity.objects.update_or_create(
+        entity_type=etype, text=enorm,
+        defaults={"notes": notes},
+    )
+    return JsonResponse({"ok": True})
+
+
+@staff_member_required
+@require_POST
+def entity_dismiss_view(request):
+    """Toggle the dismissed flag for an entity."""
+    etype = (request.POST.get("type") or "").strip().upper()
+    raw_text = (request.POST.get("text") or "").strip()
+    dismissed = request.POST.get("dismissed", "true").lower() not in ("false", "0", "")
+    if etype not in _VALID_ENTITY_TYPES or not raw_text:
+        return JsonResponse({"error": "Invalid type or text"}, status=400)
+    enorm = raw_text.lower()
+    entity, _ = Entity.objects.update_or_create(
+        entity_type=etype, text=enorm,
+        defaults={"dismissed": dismissed},
+    )
+    return JsonResponse({"ok": True, "dismissed": entity.dismissed})

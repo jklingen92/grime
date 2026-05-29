@@ -7,6 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         'workers-panel': 'frontend/src/workers-panel.jsx',
+        'entity-detail': 'frontend/src/entity-detail.jsx',
       },
       output: {
         entryFileNames: '[name].js',
