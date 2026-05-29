@@ -56,11 +56,14 @@
       <tbody>
         {% for entity in entities %}
           {% if entity.show_type_header %}
-          <tr class="entity-type-heading">
-            <td colspan="{% if document %}4{% else %}5{% endif %}">{{ entity.type_label }}</td>
+          <tr class="entity-type-heading" data-section-header="{{ entity.type }}" style="cursor:pointer" onclick="toggleSection('{{ entity.type }}', this)">
+            <td colspan="{% if document %}4{% else %}5{% endif %}">
+              <span class="entity-section-caret me-1">&#9660;</span>{{ entity.type_label }}
+            </td>
           </tr>
           {% endif %}
-          <tr data-dismissed="{{ entity.dismissed|yesno:'true,false' }}"
+          <tr data-section-type="{{ entity.type }}"
+              data-dismissed="{{ entity.dismissed|yesno:'true,false' }}"
               {% if entity.dismissed %}style="display:none"{% endif %}>
             <td>
               <a href="{{ entity_detail_url }}?type={{ entity.type }}&text={{ entity.display_text|urlencode }}">
@@ -93,6 +96,24 @@
 
 {% block extra_js %}
 <script>
+  var _collapsedSections = {};
+
+  function toggleSection(type, headerRow) {
+    _collapsedSections[type] = !_collapsedSections[type];
+    var collapsed = _collapsedSections[type];
+    var caret = headerRow.querySelector('.entity-section-caret');
+    if (caret) caret.innerHTML = collapsed ? '&#9654;' : '&#9660;';
+    var showDismissed = document.getElementById('show-dismissed-toggle').checked;
+    document.querySelectorAll('#entity-table tr[data-section-type="' + type + '"]').forEach(function(row) {
+      if (collapsed) {
+        row.style.display = 'none';
+      } else {
+        var isDismissed = row.dataset.dismissed === 'true';
+        row.style.display = (isDismissed && !showDismissed) ? 'none' : '';
+      }
+    });
+  }
+
 (function() {
   var CSRF   = "{{ csrf_token }}";
   var DISMISS_URL = "{{ entity_dismiss_url }}";
@@ -100,7 +121,11 @@
   document.getElementById('show-dismissed-toggle').addEventListener('change', function() {
     var show = this.checked;
     document.querySelectorAll('#entity-table tr[data-dismissed="true"]').forEach(function(row) {
-      row.style.display = show ? '' : 'none';
+      if (!row.hasAttribute('data-section-header')) {
+        var type = row.dataset.sectionType;
+        if (type && _collapsedSections[type]) return;
+        row.style.display = show ? '' : 'none';
+      }
     });
   });
 

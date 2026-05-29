@@ -26,9 +26,10 @@
 {% block main_attrs %}style="padding:12px 16px;max-width:1100px"{% endblock %}
 
 {% block content %}
-<div id="entity-detail-root" data-props="{{ entity_props_json }}"></div>
+<div id="entity-detail-root"></div>
 {% endblock %}
 
 {% block extra_js %}
+<script>window.__ENTITY_PROPS__ = {{ entity_props_json }};</script>
 <script type="module" src="{% static 'grime/entity-detail.js' %}"></script>
 {% endblock %}
