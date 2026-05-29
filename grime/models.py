@@ -403,6 +403,7 @@ class AsyncJob(models.Model):
 
     def check_cancelled(self) -> None:
         """Raise JobCancelled if this job's status has flipped away from RUNNING."""
+        print(f"[check_cancelled] job {self.pk} — entering", flush=True)
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(

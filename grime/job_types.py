@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django import forms
+from django.utils import timezone
 
 from grime.pipeline.ner import DEFAULT_MODEL, MODEL_LABELS, MODEL_REGISTRY
 
@@ -79,13 +80,15 @@ class OCRJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save(update_fields=["pages_total", "pages_done", "updated_at"])
+        from grime.models import AsyncJob as _AsyncJob
+        _AsyncJob.objects.filter(pk=job.pk).update(
+            pages_total=len(pages), pages_done=0, updated_at=timezone.now()
+        )
 
         logger.info("[OCR job %d] engine=%s, processing %d page(s)", job.pk, engine or "auto", len(pages))
 
         words_created = 0
         for page in pages:
-            job.check_cancelled()
             page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
             logger.info("[OCR job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             Word.objects.filter(page=page).delete()
@@ -95,7 +98,11 @@ class OCRJobType(JobType):
             words_created += words
             logger.info("[OCR job %d] %s done — %d word(s) extracted", job.pk, page_label, words)
             job.pages_done += 1
-            job.save(update_fields=["pages_done", "updated_at"])
+            _AsyncJob.objects.filter(pk=job.pk).update(
+                pages_done=job.pages_done, updated_at=timezone.now()
+            )
+            print(f"[OCR job {job.pk}] check_cancelled after {page_label}", flush=True)
+            job.check_cancelled()
 
         logger.info("[OCR job %d] Complete — %d word(s) across %d page(s)", job.pk, words_created, job.pages_done)
         job.result = {"words_created": words_created}
@@ -169,7 +176,10 @@ class NERJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save(update_fields=["pages_total", "pages_done", "updated_at"])
+        from grime.models import AsyncJob as _AsyncJob
+        _AsyncJob.objects.filter(pk=job.pk).update(
+            pages_total=len(pages), pages_done=0, updated_at=timezone.now()
+        )
 
         if model_key not in _pipelines:
             logger.info(
@@ -184,7 +194,6 @@ class NERJobType(JobType):
 
         entities_found = 0
         for page in pages:
-            job.check_cancelled()
             page_label = f"p.{page.page_number}" if page.page_number is not None else f"page pk={page.pk}"
             logger.info("[NER job %d] Processing %s (%d/%d)", job.pk, page_label, job.pages_done + 1, job.pages_total)
             NERPass.objects.filter(page=page, schema_name=schema_name).delete()
@@ -213,7 +222,11 @@ class NERJobType(JobType):
             logger.info("[NER job %d] %s done — %d entity word(s) labelled", job.pk, page_label, len(labelled))
 
             job.pages_done += 1
-            job.save(update_fields=["pages_done", "updated_at"])
+            _AsyncJob.objects.filter(pk=job.pk).update(
+                pages_done=job.pages_done, updated_at=timezone.now()
+            )
+            print(f"[NER job {job.pk}] check_cancelled after {page_label}", flush=True)
+            job.check_cancelled()
 
         logger.info("[NER job %d] Complete — %d entity word(s) across %d page(s)", job.pk, entities_found, job.pages_done)
         job.result = {"entities_found": entities_found}
