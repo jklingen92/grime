@@ -402,24 +402,25 @@ class AsyncJob(models.Model):
         self.handler.clean(self)
 
     def check_cancelled(self) -> None:
-        """Raise JobCancelled if this job's status has flipped away from RUNNING.
-
-        Uses a conditional UPDATE (heartbeat) so the check is immune to any
-        read-side transaction isolation quirks — the WHERE clause is evaluated
-        against the database's current committed state when the write lock is
-        acquired.
-        """
-        still_running = AsyncJob.objects.filter(
-            pk=self.pk, status=self.STATUS_RUNNING,
-        ).update(updated_at=timezone.now())
-        if not still_running:
-            status = (
-                AsyncJob.objects.filter(pk=self.pk)
-                .values_list("status", flat=True)
-                .first()
+        """Raise JobCancelled if this job's status has flipped away from RUNNING."""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE grime_asyncjob SET updated_at = %s"
+                " WHERE id = %s AND status = %s",
+                [timezone.now(), self.pk, self.STATUS_RUNNING],
             )
+            still_running = cursor.rowcount
+        logger.info("Job %d check_cancelled: still_running=%d", self.pk, still_running)
+        if not still_running:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status FROM grime_asyncjob WHERE id = %s", [self.pk]
+                )
+                row = cursor.fetchone()
+            status = row[0] if row else None
             logger.info(
-                "Job %d check_cancelled: status is %r, raising JobCancelled",
+                "Job %d cancelled — DB status is %r, raising JobCancelled",
                 self.pk, status,
             )
             raise JobCancelled(f"Job {self.pk} status changed to {status!r}")

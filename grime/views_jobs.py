@@ -175,11 +175,15 @@ def cancel_job(request, job_pk):
     """Mark a PENDING/RUNNING job as FAILED. A RUNNING worker will see the
     status change on its next check_cancelled() call and bail out."""
     job = get_object_or_404(AsyncJob, pk=job_pk)
-    if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
+    prior_status = job.status
+    if prior_status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
         job.status = AsyncJob.STATUS_FAILED
         job.error = "Cancelled by user"
         job.completed_at = timezone.now()
         job.save(update_fields=["status", "error", "completed_at"])
+        logger.info("cancel_job: job %d FAILED (was %r)", job_pk, prior_status)
+    else:
+        logger.info("cancel_job: job %d already %r, not cancelled", job_pk, prior_status)
     return redirect(request.META.get("HTTP_REFERER") or reverse("grime:jobs_list"))
 
 
