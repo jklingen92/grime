@@ -224,5 +224,5 @@ __marimo__/
 # VSCode
 .vscode
 
-# Maintainer tools
-celery-broker.db
+# Node
+node_modules
