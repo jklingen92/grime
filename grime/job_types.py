@@ -79,7 +79,7 @@ class OCRJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save()
+        job.save(update_fields=["pages_total", "pages_done", "updated_at"])
 
         logger.info("[OCR job %d] engine=%s, processing %d page(s)", job.pk, engine or "auto", len(pages))
 
@@ -95,7 +95,7 @@ class OCRJobType(JobType):
             words_created += words
             logger.info("[OCR job %d] %s done — %d word(s) extracted", job.pk, page_label, words)
             job.pages_done += 1
-            job.save()
+            job.save(update_fields=["pages_done", "updated_at"])
 
         logger.info("[OCR job %d] Complete — %d word(s) across %d page(s)", job.pk, words_created, job.pages_done)
         job.result = {"words_created": words_created}
@@ -165,7 +165,7 @@ class NERJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save()
+        job.save(update_fields=["pages_total", "pages_done", "updated_at"])
 
         if model_key not in _pipelines:
             logger.info(
@@ -209,7 +209,7 @@ class NERJobType(JobType):
             logger.info("[NER job %d] %s done — %d entity word(s) labelled", job.pk, page_label, len(labelled))
 
             job.pages_done += 1
-            job.save()
+            job.save(update_fields=["pages_done", "updated_at"])
 
         logger.info("[NER job %d] Complete — %d entity word(s) across %d page(s)", job.pk, entities_found, job.pages_done)
         job.result = {"entities_found": entities_found}

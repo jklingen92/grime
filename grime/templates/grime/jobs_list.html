@@ -20,7 +20,7 @@
 
 {% block content %}
 {% if jobs %}
-<div class="card">
+<div class="card" id="jobs-table-wrap">
   <div class="table-responsive">
     <table class="table table-hover table-sm align-middle mb-0">
       <thead>
@@ -103,6 +103,26 @@
   </div>
 </div>
 {% else %}
-<p class="text-muted">No jobs yet.</p>
+<p class="text-muted" id="jobs-table-wrap">No jobs yet.</p>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Live-refresh the jobs table every 3s by swapping in the fresh server-rendered fragment.
+  // Pauses while the tab is hidden.
+  async function refreshJobsTable() {
+    if (document.hidden) return;
+    try {
+      const res = await fetch(window.location.href, { headers: { "X-Requested-With": "fetch" } });
+      if (!res.ok) return;
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const fresh = doc.getElementById("jobs-table-wrap");
+      const current = document.getElementById("jobs-table-wrap");
+      if (fresh && current) current.replaceWith(fresh);
+    } catch {}
+  }
+  setInterval(refreshJobsTable, 3000);
+</script>
 {% endblock %}

@@ -96,7 +96,11 @@ class Command(BaseCommand):
         try:
             job.handler.run(job)
         except JobCancelled as exc:
-            logger.info("Job %d cancelled mid-run: %s", job.pk, exc)
+            logger.info("Job %d cancelled mid-run: %s — running clean()", job.pk, exc)
+            try:
+                job.handler.clean(job)
+            except Exception:
+                logger.exception("Job %d clean() failed after cancel", job.pk)
             return
         except Exception as exc:
             logger.exception("Job %d (%s) failed: %s", job.pk, job.job_type, exc)

@@ -10,7 +10,6 @@ import datetime
 import logging
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -94,23 +93,18 @@ def jobs_status(request):
     """
     Return current worker slot state, pending count, and recent jobs.
 
-    Auto-expires stale jobs:
-      - PENDING > 2 min   → broker likely unreachable
-      - RUNNING, updated_at > 15 min → worker likely died
+    Auto-expires RUNNING jobs whose updated_at is > 15 min old — the worker
+    process likely died mid-page. PENDING jobs are never auto-expired: with
+    no broker, PENDING just means the slot's worker is busy on something else.
     """
     now = timezone.now()
-    pending_cutoff = now - datetime.timedelta(minutes=2)
     running_cutoff = now - datetime.timedelta(minutes=15)
 
-    stale = AsyncJob.objects.filter(
-        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-    ).filter(
-        Q(status=AsyncJob.STATUS_PENDING, created_at__lt=pending_cutoff)
-        | Q(status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff)
-    )
-    stale.update(
+    AsyncJob.objects.filter(
+        status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff,
+    ).update(
         status=AsyncJob.STATUS_FAILED,
-        error="Job timed out (worker or broker unavailable)",
+        error="Worker stopped responding mid-job",
         completed_at=now,
     )
 
