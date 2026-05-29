@@ -1,0 +1,35 @@
+{% extends "grime/base.html" %}
+{% load static %}
+
+{% block title %}{{ display_text }} — Entities{% endblock %}
+
+{% block extra_css %}
+<style>
+  #ed-header { background: #417690; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+  #ed-header a { color: #c8dce8; text-decoration: none; font-size: 0.85em; }
+  #ed-header a:hover { text-decoration: underline; }
+  #ed-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block header %}
+<div id="ed-header">
+  <a href="{% url 'grime:document_list' %}">Documents</a>
+  <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
+  <a href="{% url 'grime:entity_list' %}">Entities</a>
+  <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
+  <h1>{{ display_text }}</h1>
+  <span class="badge rounded-pill ms-1" style="background:#417690;border:1px solid rgba(255,255,255,.4);font-size:.7em">{{ type_label }}</span>
+</div>
+{% endblock %}
+
+{% block main_attrs %}style="padding:12px 16px;max-width:1100px"{% endblock %}
+
+{% block content %}
+<div id="entity-detail-root"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>window.__ENTITY_PROPS__ = {{ entity_props_json }};</script>
+<script type="module" src="{% static 'grime/entity-detail.js' %}"></script>
+{% endblock %}

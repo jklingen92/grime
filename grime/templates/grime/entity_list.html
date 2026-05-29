@@ -1,0 +1,158 @@
+{% extends "grime/base.html" %}
+{% load static %}
+
+{% block title %}{% if document %}{{ document.title }} — {% endif %}Entities{% endblock %}
+
+{% block extra_css %}
+<style>
+  #el-header { background: #417690; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+  #el-header a { color: #c8dce8; text-decoration: none; font-size: 0.85em; }
+  #el-header a:hover { text-decoration: underline; }
+  #el-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
+  .entity-type-heading td { background: #f4f6f8; padding: 6px 12px !important; font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; }
+  tr[data-dismissed="true"] { opacity: 0.45; }
+  .entity-dismiss-btn { cursor: pointer; background: none; border: none; padding: 0 4px; color: #aaa; }
+  .entity-dismiss-btn:hover { color: #dc3545; }
+  tr[data-dismissed="true"] .entity-dismiss-btn { color: #28a745; }
+  tr[data-dismissed="true"] .entity-dismiss-btn:hover { color: #155724; }
+</style>
+{% endblock %}
+
+{% block header %}
+<div id="el-header">
+  <a href="{% url 'grime:document_list' %}">Documents</a>
+  {% if document %}
+  <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
+  <a href="{% url 'grime:document' doc_pk=document.pk %}">{{ document.title }}</a>
+  {% endif %}
+  <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
+  <h1>Entities</h1>
+</div>
+{% endblock %}
+
+{% block main_attrs %}style="padding:12px 16px;max-width:1100px"{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 mt-2">
+  <span class="text-muted small">{{ entities|length }} entities</span>
+  <div class="form-check form-switch mb-0 ms-auto">
+    <input class="form-check-input" type="checkbox" id="show-dismissed-toggle">
+    <label class="form-check-label small" for="show-dismissed-toggle">Show dismissed</label>
+  </div>
+</div>
+
+{% if entities %}
+<div class="table-responsive">
+  <table class="table table-hover table-sm align-middle mb-0" id="entity-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Note</th>
+          {% if not document %}<th class="text-center">Docs</th>{% endif %}
+          <th class="text-center">Occurrences</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entity in entities %}
+          {% if entity.show_type_header %}
+          <tr class="entity-type-heading" data-section-header="{{ entity.type }}" style="cursor:pointer" onclick="toggleSection('{{ entity.type }}', this)">
+            <td colspan="{% if document %}4{% else %}5{% endif %}">
+              <span class="entity-section-caret me-1">&#9660;</span>{{ entity.type_label }}
+            </td>
+          </tr>
+          {% endif %}
+          <tr data-section-type="{{ entity.type }}"
+              data-dismissed="{{ entity.dismissed|yesno:'true,false' }}"
+              {% if entity.dismissed %}style="display:none"{% endif %}>
+            <td>
+              <a href="{{ entity_detail_url }}?type={{ entity.type }}&text={{ entity.display_text|urlencode }}">
+                {{ entity.display_text }}
+              </a>
+            </td>
+            <td class="text-muted small" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ entity.notes|default:"" }}
+            </td>
+            {% if not document %}<td class="text-center">{{ entity.doc_count }}</td>{% endif %}
+            <td class="text-center">{{ entity.occurrence_count }}</td>
+            <td class="text-end pe-2">
+              <button class="entity-dismiss-btn"
+                      title="{{ entity.dismissed|yesno:'Restore entity,Dismiss as false positive' }}"
+                      data-type="{{ entity.type }}"
+                      data-text="{{ entity.display_text|escapejs }}"
+                      data-dismissed="{{ entity.dismissed|yesno:'true,false' }}">
+                <i class="fa-solid {{ entity.dismissed|yesno:'fa-rotate-left,fa-ban' }}"></i>
+              </button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+<p class="text-muted">No entities found. Run NER on {% if document %}this document{% else %}a document{% endif %} to populate this list.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  var _collapsedSections = {};
+
+  function toggleSection(type, headerRow) {
+    _collapsedSections[type] = !_collapsedSections[type];
+    var collapsed = _collapsedSections[type];
+    var caret = headerRow.querySelector('.entity-section-caret');
+    if (caret) caret.innerHTML = collapsed ? '&#9654;' : '&#9660;';
+    var showDismissed = document.getElementById('show-dismissed-toggle').checked;
+    document.querySelectorAll('#entity-table tr[data-section-type="' + type + '"]').forEach(function(row) {
+      if (collapsed) {
+        row.style.display = 'none';
+      } else {
+        var isDismissed = row.dataset.dismissed === 'true';
+        row.style.display = (isDismissed && !showDismissed) ? 'none' : '';
+      }
+    });
+  }
+
+(function() {
+  var CSRF   = "{{ csrf_token }}";
+  var DISMISS_URL = "{{ entity_dismiss_url }}";
+
+  document.getElementById('show-dismissed-toggle').addEventListener('change', function() {
+    var show = this.checked;
+    document.querySelectorAll('#entity-table tr[data-dismissed="true"]').forEach(function(row) {
+      if (!row.hasAttribute('data-section-header')) {
+        var type = row.dataset.sectionType;
+        if (type && _collapsedSections[type]) return;
+        row.style.display = show ? '' : 'none';
+      }
+    });
+  });
+
+  document.querySelectorAll('.entity-dismiss-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = btn.closest('tr');
+      var isDismissed = row.dataset.dismissed === 'true';
+      var newDismissed = !isDismissed;
+      fetch(DISMISS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+        body: 'type=' + encodeURIComponent(btn.dataset.type)
+            + '&text=' + encodeURIComponent(btn.dataset.text)
+            + '&dismissed=' + newDismissed,
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.ok) return;
+        row.dataset.dismissed = newDismissed ? 'true' : 'false';
+        btn.dataset.dismissed  = newDismissed ? 'true' : 'false';
+        btn.title = newDismissed ? 'Restore entity' : 'Dismiss as false positive';
+        var icon = btn.querySelector('i');
+        icon.className = newDismissed ? 'fa-solid fa-rotate-left' : 'fa-solid fa-ban';
+        var showDismissed = document.getElementById('show-dismissed-toggle').checked;
+        if (newDismissed && !showDismissed) row.style.display = 'none';
+        row.style.opacity = newDismissed ? '0.45' : '';
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

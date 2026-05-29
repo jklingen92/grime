@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         'workers-panel': 'frontend/src/workers-panel.jsx',
         'viewer-page': 'frontend/src/viewer-page.jsx',
+        'entity-detail': 'frontend/src/entity-detail.jsx',
       },
       output: {
         entryFileNames: '[name].js',

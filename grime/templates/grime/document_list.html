@@ -65,14 +65,14 @@
   <div id="gl-docs">
     <h2 class="h6 fw-semibold mb-3" style="color:var(--grime-primary)">All documents ({{ doc_list|length }})</h2>
     {% if doc_list %}
-    <div class="card">
-      <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle mb-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
           <thead>
             <tr>
               <th>Title</th>
               <th>Labels</th>
               <th>Pages</th>
+              <th class="text-center">Entities</th>
               <th></th>
             </tr>
           </thead>
@@ -91,6 +91,11 @@
                 {% endif %}
               </td>
               <td>{% if doc.page_count %}{{ doc.page_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-center">
+                <a href="{% url 'grime:entity_list' %}?doc={{ doc.pk }}" class="btn btn-sm btn-outline-secondary" title="View entities for this document">
+                  <i class="fa-solid fa-tags me-1"></i>{{ entry.entity_count }} entities
+                </a>
+              </td>
               <td>
                 <div class="d-flex gap-2 justify-content-end">
                   <a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a>
@@ -99,7 +104,7 @@
                           data-bs-target="#editDocModal"
                           data-doc-pk="{{ doc.pk }}"
                           data-doc-title="{{ doc.title|escapejs }}"
-                          data-doc-tags="{{ entry.doc_tags_json|escapejs }}"
+                          data-doc-tags="{{ entry.doc_tags_json }}"
                           title="Edit document">
                     <i class="fa-solid fa-pencil"></i>
                   </button>
@@ -117,8 +122,7 @@
             {% endwith %}
             {% endfor %}
           </tbody>
-        </table>
-      </div>
+      </table>
     </div>
     {% else %}
     <p class="text-muted">No documents yet. Upload a PDF above to get started.</p>
