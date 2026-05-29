@@ -8,11 +8,8 @@
 {% endblock %}
 
 {% block header %}
-<header id="gl-header" class="py-2 px-3 mb-4 d-flex align-items-center gap-3">
+<header id="gl-header" class="py-2 px-3 mb-4">
   <h1 class="h6 mb-0 text-white fw-semibold">Documents</h1>
-  <a href="{% url 'grime:entity_list' %}" class="ms-auto text-white text-decoration-none small opacity-75 hover-opacity-100">
-    <i class="fa-solid fa-tags me-1"></i>Entities
-  </a>
 </header>
 {% endblock %}
 
@@ -97,6 +94,9 @@
               <td>
                 <div class="d-flex gap-2 justify-content-end">
                   <a href="{% url 'grime:document_export_pdf' doc_pk=doc.pk %}" class="btn btn-sm btn-outline-secondary" title="Download as searchable PDF">Download PDF</a>
+                  <a href="{% url 'grime:entity_list' %}?doc={{ doc.pk }}" class="btn btn-sm btn-outline-secondary" title="View entities for this document">
+                    <i class="fa-solid fa-tags"></i>
+                  </a>
                   <button class="btn btn-sm btn-outline-primary"
                           data-bs-toggle="modal"
                           data-bs-target="#editDocModal"

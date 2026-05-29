@@ -1,7 +1,7 @@
 {% extends "grime/base.html" %}
 {% load static %}
 
-{% block title %}Entities{% endblock %}
+{% block title %}{% if document %}{{ document.title }} — {% endif %}Entities{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -9,7 +9,7 @@
   #el-header a { color: #c8dce8; text-decoration: none; font-size: 0.85em; }
   #el-header a:hover { text-decoration: underline; }
   #el-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
-  .entity-type-heading { background: #f4f6f8; padding: 6px 12px; font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; border-bottom: 1px solid #dee2e6; }
+  .entity-type-heading td { background: #f4f6f8; padding: 6px 12px !important; font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; }
   tr[data-dismissed="true"] { opacity: 0.45; }
   .entity-dismiss-btn { cursor: pointer; background: none; border: none; padding: 0 4px; color: #aaa; }
   .entity-dismiss-btn:hover { color: #dc3545; }
@@ -21,6 +21,10 @@
 {% block header %}
 <div id="el-header">
   <a href="{% url 'grime:document_list' %}">Documents</a>
+  {% if document %}
+  <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
+  <a href="{% url 'grime:document' doc_pk=document.pk %}">{{ document.title }}</a>
+  {% endif %}
   <i class="fa-solid fa-chevron-right fa-xs mx-1"></i>
   <h1>Entities</h1>
 </div>
@@ -45,20 +49,17 @@
         <tr>
           <th>Name</th>
           <th>Note</th>
-          <th class="text-center">Docs</th>
+          {% if not document %}<th class="text-center">Docs</th>{% endif %}
           <th class="text-center">Occurrences</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {% with current_type="" %}
         {% for entity in entities %}
-          {% if entity.type != current_type %}
-            {% with current_type=entity.type %}
-            <tr class="entity-type-heading-row">
-              <td colspan="5" class="entity-type-heading">{{ entity.type_label }}</td>
-            </tr>
-            {% endwith %}
+          {% if entity.show_type_header %}
+          <tr class="entity-type-heading">
+            <td colspan="{% if document %}4{% else %}5{% endif %}">{{ entity.type_label }}</td>
+          </tr>
           {% endif %}
           <tr data-dismissed="{{ entity.dismissed|yesno:'true,false' }}"
               {% if entity.dismissed %}style="display:none"{% endif %}>
@@ -70,7 +71,7 @@
             <td class="text-muted small" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
               {{ entity.notes|default:"" }}
             </td>
-            <td class="text-center">{{ entity.doc_count }}</td>
+            {% if not document %}<td class="text-center">{{ entity.doc_count }}</td>{% endif %}
             <td class="text-center">{{ entity.occurrence_count }}</td>
             <td class="text-end pe-2">
               <button class="entity-dismiss-btn"
@@ -83,13 +84,12 @@
             </td>
           </tr>
         {% endfor %}
-        {% endwith %}
       </tbody>
     </table>
   </div>
 </div>
 {% else %}
-<p class="text-muted">No entities found. Run NER on a document to populate this list.</p>
+<p class="text-muted">No entities found. Run NER on {% if document %}this document{% else %}a document{% endif %} to populate this list.</p>
 {% endif %}
 {% endblock %}
 
@@ -108,7 +108,7 @@
 
   document.querySelectorAll('.entity-dismiss-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      var row      = btn.closest('tr');
+      var row = btn.closest('tr');
       var isDismissed = row.dataset.dismissed === 'true';
       var newDismissed = !isDismissed;
       fetch(DISMISS_URL, {

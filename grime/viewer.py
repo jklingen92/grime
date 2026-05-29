@@ -1151,8 +1151,13 @@ def _build_entity_spans(words) -> list[dict]:
 
 @staff_member_required
 def entity_list_view(request):
-    """List all unique NER entities across all documents."""
+    """List unique NER entities, optionally filtered to a single document via ?doc=<pk>."""
     from collections import defaultdict
+
+    doc_pk = request.GET.get("doc")
+    document = None
+    if doc_pk:
+        document = get_object_or_404(Document, pk=doc_pk)
 
     pages = (
         DocumentPage.objects
@@ -1161,6 +1166,8 @@ def entity_list_view(request):
         .select_related("document")
         .prefetch_related("words")
     )
+    if document:
+        pages = pages.filter(document=document)
 
     # Accumulate {(type, text_norm): {display_text, doc_pks, count}}
     agg: dict = defaultdict(lambda: {"display_text": "", "doc_pks": set(), "count": 0})
@@ -1196,8 +1203,15 @@ def entity_list_view(request):
 
     entities.sort(key=lambda e: (e["type"], e["display_text"].lower()))
 
+    # Flag the first entity of each type so the template can render a section header.
+    last_type = None
+    for e in entities:
+        e["show_type_header"] = e["type"] != last_type
+        last_type = e["type"]
+
     return render(request, "grime/entity_list.html", {
         "entities": entities,
+        "document": document,
         "entity_detail_url": reverse("grime:entity_detail"),
         "entity_dismiss_url": reverse("grime:entity_dismiss"),
         "csrf_token": request.META.get("CSRF_COOKIE", ""),
