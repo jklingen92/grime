@@ -17,6 +17,11 @@ urlpatterns = [
         name="document_page",
     ),
     path("pages/", include(viewer.get_viewer_urls())),
+    # Entity pages
+    path("entities/", viewer.entity_list_view, name="entity_list"),
+    path("entities/detail/", viewer.entity_detail_view, name="entity_detail"),
+    path("entities/note/", viewer.entity_note_update_view, name="entity_note_update"),
+    path("entities/dismiss/", viewer.entity_dismiss_view, name="entity_dismiss"),
     # Job management
     path("jobs/", views_jobs.jobs_list_view, name="jobs_list"),
     path("jobs/create/", views_jobs.create_job, name="job_create"),
