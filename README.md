@@ -9,8 +9,9 @@ pages with tagged regions.
 ### Prerequisites
 
 1. **Python 3.11+**
-2. **uv** — Install from https://docs.astral.sh/uv/getting-started/installation/
-3. **honcho** — installed automatically as part of the dev dependencies
+2. **Node.js 18+** and **npm** — for the React frontend build
+3. **uv** — Install from https://docs.astral.sh/uv/getting-started/installation/
+4. **honcho** — installed automatically as part of the dev dependencies
 
 ### Installation
 
@@ -19,8 +20,12 @@ pages with tagged regions.
 git clone https://github.com/jklingen92/grime.git
 cd grime
 
-# Install dependencies (creates .venv)
+# Install Python dependencies (creates .venv)
 uv sync
+
+# Install JavaScript dependencies and build the frontend
+npm install
+npm run build
 
 # Copy and configure environment variables
 cp .env.example .env  # edit SECRET_KEY and any AWS/broker settings
@@ -34,8 +39,7 @@ python manage.py createsuperuser
 
 ### Running locally
 
-Grime requires two processes: the Django web server and a Celery worker for
-background OCR/NER jobs. Use honcho to start both at once:
+Use honcho to start all processes at once:
 
 ```bash
 honcho start
@@ -43,31 +47,41 @@ honcho start
 
 This reads the `Procfile` and starts:
 - **web** — `python manage.py runserver` on http://127.0.0.1:8000
-- **worker** — `celery -A demo.celery worker -l info`
+- **worker1/2/3** — `python manage.py run_worker --slot=N` (DB-polling background workers)
+- **js** — `npm run dev` (Vite watch build for the React frontend)
 
-Visit http://127.0.0.1:8000/admin and log in with your superuser credentials.
+Visit http://127.0.0.1:8000 and log in with your superuser credentials.
 
-You can also start the processes separately if needed:
+You can also start processes individually:
 
 ```bash
 python manage.py runserver
-celery -A demo.celery worker -l info
+python manage.py run_worker --slot=1
+npm run dev   # rebuilds frontend/src/ on change
 ```
 
 ### Background jobs
 
-OCR and NER can be triggered per-document from the document list page
-(http://127.0.0.1:8000/). Each document has **OCR** and **NER** split-buttons:
+OCR and NER jobs are queued from the document list or viewer and processed by
+the `run_worker` management command. Job progress is shown live in the Workers
+panel, polled every 3 seconds.
 
-- **OCR all** / **New pages only** — runs Tesseract (or Textract if configured) on every page or only pages without an existing OCR pass
-- **NER all** / **New pages only** — runs the HF NER pipeline; the main button is disabled until all pages have been OCR'd
+## Frontend
 
-Job progress is shown inline with a live progress bar, polled every 3 seconds.
-Completed and failed jobs display a dismissible badge.
+Interactive UI components use React, built with Vite. Source lives in
+`frontend/src/`; built output is committed to `grime/static/grime/` so no
+build step is required to run the project after cloning (the built files are
+already present).
 
-The Celery broker uses a local SQLite file (`celery-broker.db`) by default —
-no Redis or other external service is required. To use Redis in production,
-set `CELERY_BROKER_URL=redis://...` in your `.env`.
+To rebuild after editing React source:
+
+```bash
+npm run build        # one-shot build
+npm run dev          # watch mode — rebuilds on every save
+```
+
+The `js` process in the `Procfile` runs watch mode automatically when you
+use `honcho start`.
 
 
 ## Management commands
