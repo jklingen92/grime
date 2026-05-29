@@ -119,6 +119,7 @@ class Command(BaseCommand):
         ).update(
             status=AsyncJob.STATUS_COMPLETE,
             completed_at=timezone.now(),
+            result=job.result,
         )
         if not still_running:
             job.refresh_from_db(fields=["status"])
