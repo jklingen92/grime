@@ -1201,7 +1201,8 @@ def entity_list_view(request):
             "dismissed": rec.dismissed if rec else False,
         })
 
-    entities.sort(key=lambda e: (e["type"], e["display_text"].lower()))
+    _TYPE_ORDER = {"PER": 0, "ORG": 1, "LOC": 2}
+    entities.sort(key=lambda e: (_TYPE_ORDER.get(e["type"], 9), -e["occurrence_count"]))
 
     # Flag the first entity of each type so the template can render a section header.
     last_type = None
