@@ -15,36 +15,8 @@
 
 {% block content %}
 
-  <!-- Workers panel -->
-  <div class="mb-4">
-    <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="fw-semibold" style="color:var(--grime-primary)">Workers</span>
-      <span class="badge bg-secondary" id="pending-count-badge">0 pending</span>
-      <a href="{% url 'grime:jobs_list' %}" class="btn btn-sm btn-outline-secondary ms-1"><i class="fa-solid fa-list me-1"></i>All jobs</a>
-      <button class="btn btn-sm btn-grime ms-auto" data-bs-toggle="modal" data-bs-target="#addJobModal">
-        <i class="fa-solid fa-plus me-1"></i>Add Job
-      </button>
-    </div>
-    <div class="row g-3" id="workers-panel">
-      {% for slot in worker_slots %}
-      <div class="col-md-4">
-        <div class="card worker-card" data-slot="{{ slot.slot_number }}">
-          <div class="card-body py-2 px-3">
-            <small class="text-muted fw-semibold text-uppercase d-block mb-2" style="font-size:10px">{{ slot.name }}</small>
-            <div class="slot-content text-muted small" data-slot="{{ slot.slot_number }}">Idle</div>
-          </div>
-        </div>
-      </div>
-      {% empty %}
-      <div class="col-12">
-        <p class="text-muted small">
-          No worker slots configured. Set <code>GRIME_WORKER_SLOTS</code> in your environment and run
-          <code>python manage.py migrate</code> to seed the slots automatically.
-        </p>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
+  <!-- Workers panel (React island — see frontend/src/workers-panel.jsx) -->
+  <div class="mb-4" id="workers-panel-root"></div>
 
   <!-- Upload card -->
   <div class="card mb-4">
@@ -262,7 +234,10 @@ window.DOC_LIST_CONFIG = {
   cancelUrlTpl: "{% url 'grime:job_cancel' job_pk=0 %}".replace("/0/", "/{pk}/"),
   renameUrlTpl: "{% url 'grime:document_rename' doc_pk=0 %}".replace("/0/", "/{pk}/"),
   deleteUrlTpl: "{% url 'grime:document_delete' doc_pk=0 %}".replace("/0/", "/{pk}/"),
+  jobsListUrl:  "{% url 'grime:jobs_list' %}",
+  workerSlots:  [{% for slot in worker_slots %}{"slotNumber":{{ slot.slot_number }},"name":"{{ slot.name }}"}{% if not forloop.last %},{% endif %}{% endfor %}],
 };
 </script>
+<script type="module" src="{% static 'grime/workers-panel.js' %}"></script>
 <script src="{% static 'grime/document-list.js' %}"></script>
 {% endblock %}
