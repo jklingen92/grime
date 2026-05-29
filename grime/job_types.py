@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django import forms
+from django.utils import timezone
 
 from grime.pipeline.ner import DEFAULT_MODEL, MODEL_LABELS, MODEL_REGISTRY
 
@@ -46,8 +47,12 @@ class OCRParamsForm(forms.Form):
     engine = forms.ChoiceField(
         choices=[("auto", "Auto"), ("textract", "Textract"), ("tesseract", "Tesseract")],
         initial="auto",
+        required=False,
         widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
     )
+
+    def clean_engine(self):
+        return self.cleaned_data.get("engine") or "auto"
 
 
 class OCRJobType(JobType):
@@ -56,7 +61,7 @@ class OCRJobType(JobType):
     params_form_class = OCRParamsForm
 
     def run(self, job: "AsyncJob") -> None:
-        from grime.models import OCRPass, Word
+        from grime.models import AsyncJob, OCRPass, Word
         from grime.pipeline.ocr import run_page
 
         engine = job.params.get("engine") or None
@@ -64,6 +69,9 @@ class OCRJobType(JobType):
             engine = None
 
         pages = list(job.document.pages.order_by("page_number"))
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            pages = [p for p in pages if p.pk == int(page_pk)]
         if not job.force:
             ocrd_ids = set(
                 OCRPass.objects.filter(page__in=pages).values_list("page_id", flat=True)
@@ -72,7 +80,9 @@ class OCRJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save()
+        AsyncJob.objects.filter(pk=job.pk).update(
+            pages_total=len(pages), pages_done=0, updated_at=timezone.now()
+        )
 
         logger.info("[OCR job %d] engine=%s, processing %d page(s)", job.pk, engine or "auto", len(pages))
 
@@ -87,7 +97,11 @@ class OCRJobType(JobType):
             words_created += words
             logger.info("[OCR job %d] %s done — %d word(s) extracted", job.pk, page_label, words)
             job.pages_done += 1
-            job.save()
+            AsyncJob.objects.filter(pk=job.pk).update(
+                pages_done=job.pages_done, updated_at=timezone.now()
+            )
+            print(f"[OCR job {job.pk}] check_cancelled after {page_label}", flush=True)
+            job.check_cancelled()
 
         logger.info("[OCR job %d] Complete — %d word(s) across %d page(s)", job.pk, words_created, job.pages_done)
         job.result = {"words_created": words_created}
@@ -95,7 +109,11 @@ class OCRJobType(JobType):
     def clean(self, job: "AsyncJob") -> None:
         from grime.models import OCRPass, Word
 
-        page_ids = job.document.pages.values_list("pk", flat=True)
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            page_ids = [int(page_pk)]
+        else:
+            page_ids = list(job.document.pages.values_list("pk", flat=True))
         Word.objects.filter(page_id__in=page_ids).delete()
         OCRPass.objects.filter(page_id__in=page_ids).delete()
 
@@ -113,8 +131,12 @@ class NERParamsForm(forms.Form):
         label="NER model",
         choices=[(k, MODEL_LABELS.get(k, k.capitalize())) for k in MODEL_REGISTRY],
         initial=DEFAULT_MODEL,
+        required=False,
         widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
     )
+
+    def clean_model(self):
+        return self.cleaned_data.get("model") or DEFAULT_MODEL
 
 
 class NERJobType(JobType):
@@ -126,7 +148,7 @@ class NERJobType(JobType):
         return f"hf-ner-{model_key}"
 
     def run(self, job: "AsyncJob") -> None:
-        from grime.models import NERPass, Word
+        from grime.models import AsyncJob, NERPass, Word
         from grime.pipeline.ner import (
             DEFAULT_CONFIDENCE_THRESHOLD,
             MODEL_REGISTRY,
@@ -140,6 +162,9 @@ class NERJobType(JobType):
         model_id = MODEL_REGISTRY.get(model_key, model_key)
 
         pages = list(job.document.pages.order_by("page_number"))
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            pages = [p for p in pages if p.pk == int(page_pk)]
         if not job.force:
             nerd_ids = set(
                 NERPass.objects.filter(
@@ -150,7 +175,9 @@ class NERJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        job.save()
+        AsyncJob.objects.filter(pk=job.pk).update(
+            pages_total=len(pages), pages_done=0, updated_at=timezone.now()
+        )
 
         if model_key not in _pipelines:
             logger.info(
@@ -193,7 +220,11 @@ class NERJobType(JobType):
             logger.info("[NER job %d] %s done — %d entity word(s) labelled", job.pk, page_label, len(labelled))
 
             job.pages_done += 1
-            job.save()
+            AsyncJob.objects.filter(pk=job.pk).update(
+                pages_done=job.pages_done, updated_at=timezone.now()
+            )
+            print(f"[NER job {job.pk}] check_cancelled after {page_label}", flush=True)
+            job.check_cancelled()
 
         logger.info("[NER job %d] Complete — %d entity word(s) across %d page(s)", job.pk, entities_found, job.pages_done)
         job.result = {"entities_found": entities_found}
@@ -201,9 +232,11 @@ class NERJobType(JobType):
     def clean(self, job: "AsyncJob") -> None:
         from grime.models import NERPass, Word
 
-        # Wipe all NER passes for this document regardless of model, so a
-        # forced re-run always starts from a clean slate.
-        page_ids = job.document.pages.values_list("pk", flat=True)
+        page_pk = job.params.get("page_pk")
+        if page_pk:
+            page_ids = [int(page_pk)]
+        else:
+            page_ids = list(job.document.pages.values_list("pk", flat=True))
         NERPass.objects.filter(page_id__in=page_ids).delete()
         Word.objects.filter(page_id__in=page_ids).update(ner_label=None)
 

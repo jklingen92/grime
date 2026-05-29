@@ -2,13 +2,14 @@
 Job management views.
 
 All async-job endpoints live here, keeping viewer.py focused on the page viewer.
+Jobs are persisted as AsyncJob rows; one `python manage.py run_worker --slot=N`
+process per WorkerSlot polls and runs them. See grime/management/commands/run_worker.py.
 """
 
 import datetime
 import logging
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,22 +21,6 @@ from grime.job_types import JOB_TYPES
 from grime.models import AsyncJob, WorkerSlot
 
 logger = logging.getLogger(__name__)
-
-
-def dispatch_job(job: AsyncJob) -> None:
-    """Dispatch job to its worker slot's Celery queue. Marks job FAILED on broker error."""
-    from grime.tasks import run_job
-
-    try:
-        result = run_job.apply_async(args=[job.pk], queue=job.worker_slot.queue_name)
-        job.task_id = result.id
-        job.save(update_fields=["task_id"])
-    except Exception as exc:
-        logger.warning("Broker unavailable for job %d: %s", job.pk, exc)
-        job.status = AsyncJob.STATUS_FAILED
-        job.error = f"Broker unavailable: {exc}"
-        job.completed_at = timezone.now()
-        job.save(update_fields=["status", "error", "completed_at"])
 
 
 @staff_member_required
@@ -65,6 +50,9 @@ def create_job(request):
             return JsonResponse({"error": pf.errors.as_text()}, status=400)
         params = pf.cleaned_data
 
+    if cd.get("page_pk"):
+        params["page_pk"] = cd["page_pk"]
+
     from grime.models import Document
 
     try:
@@ -80,7 +68,10 @@ def create_job(request):
         force=cd["force"],
         params=params,
     )
-    dispatch_job(job)
+    logger.info(
+        "Created job %d (%s) for slot %d, params=%s",
+        job.pk, job.job_type, worker_slot.slot_number, params,
+    )
     return JsonResponse({"job_id": job.pk, "status": job.status})
 
 
@@ -102,27 +93,22 @@ def jobs_status(request):
     """
     Return current worker slot state, pending count, and recent jobs.
 
-    Auto-expires stale jobs:
-      - PENDING > 2 min   → broker likely unreachable
-      - RUNNING, updated_at > 15 min → worker likely died
+    Auto-expires RUNNING jobs whose updated_at is > 15 min old — the worker
+    process likely died mid-page. PENDING jobs are never auto-expired: with
+    no broker, PENDING just means the slot's worker is busy on something else.
     """
     now = timezone.now()
-    pending_cutoff = now - datetime.timedelta(minutes=2)
     running_cutoff = now - datetime.timedelta(minutes=15)
 
-    stale = AsyncJob.objects.filter(
-        status__in=[AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING],
-    ).filter(
-        Q(status=AsyncJob.STATUS_PENDING, created_at__lt=pending_cutoff)
-        | Q(status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff)
-    )
-    stale.update(
+    AsyncJob.objects.filter(
+        status=AsyncJob.STATUS_RUNNING, updated_at__lt=running_cutoff,
+    ).update(
         status=AsyncJob.STATUS_FAILED,
-        error="Job timed out (worker or broker unavailable)",
+        error="Worker stopped responding mid-job",
         completed_at=now,
     )
 
-    slots = WorkerSlot.objects.all()
+    slots = WorkerSlot.objects.order_by("slot_number")
     # Map first running job per slot (ordered by created_at asc)
     running = list(
         AsyncJob.objects.filter(status=AsyncJob.STATUS_RUNNING)
@@ -134,13 +120,24 @@ def jobs_status(request):
         if job.worker_slot_id and job.worker_slot_id not in running_by_slot:
             running_by_slot[job.worker_slot_id] = job
 
+    # Count pending jobs per slot
+    from django.db.models import Count
+    pending_by_slot = dict(
+        AsyncJob.objects.filter(status=AsyncJob.STATUS_PENDING)
+        .values("worker_slot_id")
+        .annotate(n=Count("id"))
+        .values_list("worker_slot_id", "n")
+    )
+
     slots_data = []
     for slot in slots:
         job = running_by_slot.get(slot.pk)
         slots_data.append({
+            "pk": slot.pk,
             "slot_number": slot.slot_number,
             "name": slot.name,
             "job": _job_to_dict(job) if job else None,
+            "pending_count": pending_by_slot.get(slot.pk, 0),
         })
 
     pending_count = AsyncJob.objects.filter(status=AsyncJob.STATUS_PENDING).count()
@@ -161,14 +158,32 @@ def jobs_status(request):
 
 
 @staff_member_required
+def poll_job(request, job_pk):
+    """Return current status of a single job for the viewer spinner."""
+    job = get_object_or_404(AsyncJob, pk=job_pk)
+    return JsonResponse({
+        "status": job.status,
+        "pages_done": job.pages_done,
+        "pages_total": job.pages_total,
+        "error": job.error,
+    })
+
+
+@staff_member_required
 @require_POST
 def cancel_job(request, job_pk):
+    """Mark a PENDING/RUNNING job as FAILED. A RUNNING worker will see the
+    status change on its next check_cancelled() call and bail out."""
     job = get_object_or_404(AsyncJob, pk=job_pk)
-    if job.status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
+    prior_status = job.status
+    if prior_status in (AsyncJob.STATUS_PENDING, AsyncJob.STATUS_RUNNING):
         job.status = AsyncJob.STATUS_FAILED
         job.error = "Cancelled by user"
         job.completed_at = timezone.now()
         job.save(update_fields=["status", "error", "completed_at"])
+        logger.info("cancel_job: job %d FAILED (was %r)", job_pk, prior_status)
+    else:
+        logger.info("cancel_job: job %d already %r, not cancelled", job_pk, prior_status)
     return redirect(request.META.get("HTTP_REFERER") or reverse("grime:jobs_list"))
 
 

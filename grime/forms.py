@@ -16,6 +16,7 @@ class CreateJobForm(forms.Form):
         label="Force (reprocess all pages)",
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
+    page_pk = forms.IntegerField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

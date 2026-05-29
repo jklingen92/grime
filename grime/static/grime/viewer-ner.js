@@ -380,52 +380,10 @@ export function createNerModule(core) {
       h.addEventListener('click', function() { h.parentElement.classList.toggle('collapsed'); });
     });
 
-    // Initialise selected model from config.
-    var defaultModel = C.nerModels && C.nerModels.find(function(m) { return m.default; });
-    state.nerModel = defaultModel ? defaultModel.key : 'general';
-
-    var rerunNerBtn   = document.getElementById('dp-rerun-ner');
-    var rerunNerCaret = document.getElementById('dp-rerun-ner-caret');
-    var rerunNerMenu  = document.getElementById('dp-rerun-ner-menu');
-
+    var rerunNerBtn = document.getElementById('dp-rerun-ner');
     if (rerunNerBtn) {
-      rerunNerBtn.textContent = nerBtnLabel();
-      rerunNerBtn.addEventListener('click', function(e) { e.preventDefault(); runNer(); });
-    }
-
-    // Populate model menu from VIEWER_CONFIG and wire up the caret.
-    if (rerunNerCaret && rerunNerMenu && C.nerModels && C.nerModels.length) {
-      C.nerModels.forEach(function(m) {
-        var a = document.createElement('a');
-        a.href = '#';
-        a.className = 'dropdown-item' + (m.default ? ' active' : '');
-        a.dataset.nerModel = m.key;
-        a.textContent = m.label;
-        rerunNerMenu.appendChild(a);
-      });
-
-      rerunNerCaret.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopPropagation();
-        rerunNerMenu.classList.toggle('open');
-      });
-
-      rerunNerMenu.addEventListener('click', function(e) {
-        var item = e.target.closest('[data-ner-model]');
-        if (!item) return;
-        e.preventDefault();
-        state.nerModel = item.dataset.nerModel;
-        rerunNerMenu.querySelectorAll('[data-ner-model]').forEach(function(i) {
-          i.classList.toggle('active', i === item);
-          i.setAttribute('aria-current', i === item ? 'true' : 'false');
-        });
-        rerunNerMenu.classList.remove('open');
-        runNer();
-      });
-
-      // Close menu when clicking outside.
-      document.addEventListener('click', function(e) {
-        if (!e.target.closest('#dp-ner-split')) rerunNerMenu.classList.remove('open');
-      });
+      rerunNerBtn.innerHTML = '<i class="fa-solid fa-tags me-1"></i>' + nerBtnLabel();
+      // data-bs-toggle on the button handles opening the job modal
     }
 
     core.registerUndoHandler('ner-correct', function(e, pushInverse) {

@@ -11,7 +11,7 @@ The schema is eight concrete tables:
                       label and word-level subcomponents
     OCRPass         — audit record for one OCR run on a DocumentPage
     NERPass         — audit record for one NER run on a DocumentPage
-    WorkerSlot      — a named Celery worker slot with its own queue
+    WorkerSlot      — a named worker slot with its own polling worker process
     AsyncJob        — a background job (OCR, NER, …) assigned to a WorkerSlot
 
 Words hang off DocumentPage directly. OCRPass and NERPass are lightweight audit
@@ -19,12 +19,19 @@ logs of run parameters; they're not parents of Word.
 """
 
 from functools import cached_property
+import logging
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
+
+
+class JobCancelled(Exception):
+    """Raised by AsyncJob.check_cancelled() when a worker should stop mid-run."""
 
 TEXT_SOURCE_CHOICES = [
     ("ocr", "OCR"),
@@ -394,6 +401,31 @@ class AsyncJob(models.Model):
     def clean_job(self) -> None:
         self.handler.clean(self)
 
+    def check_cancelled(self) -> None:
+        """Raise JobCancelled if this job's status has flipped away from RUNNING."""
+        print(f"[check_cancelled] job {self.pk} — entering", flush=True)
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE grime_asyncjob SET updated_at = %s"
+                " WHERE id = %s AND status = %s",
+                [timezone.now(), self.pk, self.STATUS_RUNNING],
+            )
+            still_running = cursor.rowcount
+        logger.info("Job %d check_cancelled: still_running=%d", self.pk, still_running)
+        if not still_running:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status FROM grime_asyncjob WHERE id = %s", [self.pk]
+                )
+                row = cursor.fetchone()
+            status = row[0] if row else None
+            logger.info(
+                "Job %d cancelled — DB status is %r, raising JobCancelled",
+                self.pk, status,
+            )
+            raise JobCancelled(f"Job {self.pk} status changed to {status!r}")
+
     def rerun(self) -> None:
         if self.status == self.STATUS_RUNNING:
             raise ValueError("Cannot rerun a job that is currently running")
@@ -409,8 +441,6 @@ class AsyncJob(models.Model):
         # clear cached handler so it isn't stale after field changes
         self.__dict__.pop("handler", None)
         self.save()
-        from grime.views_jobs import dispatch_job
-        dispatch_job(self)
 
 
 class Annotation(models.Model):

@@ -266,6 +266,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "next_url_json": _safe_json(None),
         "page_list_json": _safe_json(None),
         "ocr_record_pk": page.pk,
+        "confirmed_word_count": Word.objects.filter(page=page, corrected_ocr_by__isnull=False).count(),
         "annotation_source_type_id": page_ct.pk,
         "annotation_source_id": page.pk,
         "doc_annotation_count": Annotation.objects.filter(
@@ -291,7 +292,12 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
         "ocr_rerun_selection_url": "",
-        "ner_rerun_url": _url("grime_documentpage_viewer_words_rerun_ner"),
+        "ner_rerun_url": "",
+        "job_create_url": reverse("grime:job_create"),
+        "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace("/0/", "/{pk}/"),
+        "job_form_fields_url": reverse("grime:job_form_fields"),
+        "job_status_url": reverse("grime:jobs_status"),
+        "document_pk": page.document_id,
         # Not implemented — leave empty so the JS feature-gates them off.
         "ocr_merge_url": "",
         "ocr_reorder_url": "",
@@ -394,6 +400,8 @@ def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     word_id = word.pk
     page = word.page
     word.delete()
+    if not page.words.exists():
+        page.ocr_passes.all().delete()
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "deleted_id": word_id, "updated": updated})
 
@@ -777,6 +785,8 @@ def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
     found_ids = list(qs.values_list("pk", flat=True))
     deleted, _ = qs.delete()
     page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page and not page.words.exists():
+        page.ocr_passes.all().delete()
     updated = _run_post_ocr(page, request) if page else []
     return JsonResponse(
         {

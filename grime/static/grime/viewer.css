@@ -389,3 +389,10 @@
     0%   { transform: translateX(-200%); }
     100% { transform: translateX(450%); }
   }
+
+  /* ── job spinner (replaces Run OCR / Run NER buttons while running) ── */
+  .dp-job-spinner {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.82em; color: #555; padding: 0 4px;
+  }
+  .dp-job-spinner .spinner-border-sm { width: 0.75rem; height: 0.75rem; border-width: 2px; }
