@@ -45,7 +45,7 @@ function DocItem({ doc, index }) {
           >
             {doc.title}
           </a>
-          <span className="badge bg-secondary ms-auto me-2">{doc.occurrenceCount}</span>
+          <span className="badge bg-secondary ms-2">{doc.occurrenceCount}</span>
         </button>
       </h2>
       <div
