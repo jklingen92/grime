@@ -61,7 +61,7 @@ class OCRJobType(JobType):
     params_form_class = OCRParamsForm
 
     def run(self, job: "AsyncJob") -> None:
-        from grime.models import OCRPass, Word
+        from grime.models import AsyncJob, OCRPass, Word
         from grime.pipeline.ocr import run_page
 
         engine = job.params.get("engine") or None
@@ -80,8 +80,7 @@ class OCRJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        from grime.models import AsyncJob as _AsyncJob
-        _AsyncJob.objects.filter(pk=job.pk).update(
+        AsyncJob.objects.filter(pk=job.pk).update(
             pages_total=len(pages), pages_done=0, updated_at=timezone.now()
         )
 
@@ -98,7 +97,7 @@ class OCRJobType(JobType):
             words_created += words
             logger.info("[OCR job %d] %s done — %d word(s) extracted", job.pk, page_label, words)
             job.pages_done += 1
-            _AsyncJob.objects.filter(pk=job.pk).update(
+            AsyncJob.objects.filter(pk=job.pk).update(
                 pages_done=job.pages_done, updated_at=timezone.now()
             )
             print(f"[OCR job {job.pk}] check_cancelled after {page_label}", flush=True)
@@ -149,7 +148,7 @@ class NERJobType(JobType):
         return f"hf-ner-{model_key}"
 
     def run(self, job: "AsyncJob") -> None:
-        from grime.models import NERPass, Word
+        from grime.models import AsyncJob, NERPass, Word
         from grime.pipeline.ner import (
             DEFAULT_CONFIDENCE_THRESHOLD,
             MODEL_REGISTRY,
@@ -176,8 +175,7 @@ class NERJobType(JobType):
 
         job.pages_total = len(pages)
         job.pages_done = 0
-        from grime.models import AsyncJob as _AsyncJob
-        _AsyncJob.objects.filter(pk=job.pk).update(
+        AsyncJob.objects.filter(pk=job.pk).update(
             pages_total=len(pages), pages_done=0, updated_at=timezone.now()
         )
 
@@ -222,7 +220,7 @@ class NERJobType(JobType):
             logger.info("[NER job %d] %s done — %d entity word(s) labelled", job.pk, page_label, len(labelled))
 
             job.pages_done += 1
-            _AsyncJob.objects.filter(pk=job.pk).update(
+            AsyncJob.objects.filter(pk=job.pk).update(
                 pages_done=job.pages_done, updated_at=timezone.now()
             )
             print(f"[NER job {job.pk}] check_cancelled after {page_label}", flush=True)
