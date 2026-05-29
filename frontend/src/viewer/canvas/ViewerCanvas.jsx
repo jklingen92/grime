@@ -16,7 +16,7 @@ const DRAW_MIN = 4;
 const ANNOTATION_MIN = 10;
 
 export default function ViewerCanvas({
-  imageStyle,
+  wrapRef,
   onCoordChange,
   onOpenOcrPopupForSelection,
   onOpenOcrPopupForDraw,
@@ -26,7 +26,6 @@ export default function ViewerCanvas({
   const state = useViewerState();
   const dispatch = useViewerDispatch();
 
-  const wrapRef = useRef(null);
   const viewerRef = useRef(null);
   const imgRef = useRef(null);
   const drawRectRef = useRef(null);
@@ -612,7 +611,6 @@ export default function ViewerCanvas({
           ref={imgRef}
           alt={config.imageAlt || ''}
           onLoad={() => setImgNaturalReady(true)}
-          style={imageStyle}
         />
         <div id="dp-draw-rect" ref={drawRectRef} />
         <div id="dp-select-rect" ref={selectRectRef} />
