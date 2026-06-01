@@ -1,13 +1,11 @@
 """
-Views and template-context wiring for the embedded document viewer.
+Viewer AJAX endpoints and template-context wiring.
 
-The viewer lives on the DocumentPage admin change form and exchanges JSON
-with the browser via a small set of AJAX endpoints, all rooted under
-``/admin/grime/documentpage/<page_pk>/viewer/``.  Endpoint URLs are
-attached to ``DocumentPageAdmin.get_urls()`` so they share the admin's
-auth and CSRF treatment.
+All JSON endpoints are rooted under ``/pages/<page_pk>/viewer/`` and
+registered via ``get_viewer_urls()``, which is included from ``grime/urls.py``.
+Endpoints are staff-only via ``PageEndpointMixin``.
 
-Endpoints implemented here:
+Endpoints:
 
     POST words/correct/       — set Word.corrected_text
     POST words/add/           — create a new Word at a drawn bbox
@@ -16,39 +14,49 @@ Endpoints implemented here:
     POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
     POST words/bulk-delete/   — delete multiple Words at once
     POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
-    POST words/rerun-ocr/     — re-OCR the union bbox of a Word selection
+    POST words/rerun-ner/     — run HuggingFace NER on the page
     POST annotations/create/  — create an Annotation on this page
     POST annotations/update/  — edit an existing Annotation
     POST annotations/delete/  — delete an Annotation
     POST image/save/          — bake brightness/contrast/levels into corrected_image
     POST image/reset/         — clear corrected_image and revert to original
     POST image/autocontrast/  — analyse histogram and return suggested black/white levels
+    GET  export/pdf/          — download a single page as a searchable PDF
 
-Word ops are scoped to the page in the URL — the view rejects requests
-that try to touch a Word belonging to a different page.
+Word ops are scoped to the page in the URL — requests touching a Word
+belonging to a different page are rejected.
 """
-
 
 import io
 import json
-import os
-import tempfile
 from pathlib import Path
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Max
-from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.db.models import Max
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.views.decorators.http import require_POST
+from django.views import View
 
-from grime.forms import DocumentUploadForm
-from grime.models import Annotation, Document, DocumentPage, Entity, Word, WorkerSlot
+from grime.mixins import StaffRequiredMixin
+from grime.models import Annotation, DocumentPage, Word
 
 _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
+
+
+# ---------------------------------------------------------------------------
+# Mixins
+# ---------------------------------------------------------------------------
+
+
+class PageEndpointMixin(StaffRequiredMixin, View):
+    """Base for viewer AJAX endpoints scoped to a DocumentPage. POST-only."""
+    http_method_names = ['post']
+
+    def get_page(self):
+        return DocumentPage.objects.filter(pk=self.kwargs['page_pk']).first()
 
 
 # ---------------------------------------------------------------------------
@@ -57,86 +65,81 @@ _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-O
 
 
 def get_viewer_urls() -> list:
-    """URL patterns mounted under DocumentPageAdmin.get_urls().
-
-    Returned patterns are relative to ``/admin/grime/documentpage/`` — they
-    expect the page primary key to follow that prefix.
-    """
+    """URL patterns included under ``pages/`` in grime/urls.py."""
     return [
         path(
             "<int:page_pk>/viewer/words/correct/",
-            word_correct,
+            WordCorrectView.as_view(),
             name="grime_documentpage_viewer_word_correct",
         ),
         path(
             "<int:page_pk>/viewer/words/add/",
-            word_add,
+            WordAddView.as_view(),
             name="grime_documentpage_viewer_word_add",
         ),
         path(
             "<int:page_pk>/viewer/words/delete/",
-            word_delete,
+            WordDeleteView.as_view(),
             name="grime_documentpage_viewer_word_delete",
         ),
         path(
             "<int:page_pk>/viewer/words/ner-correct/",
-            word_ner_correct,
+            WordNerCorrectView.as_view(),
             name="grime_documentpage_viewer_word_ner_correct",
         ),
         path(
             "<int:page_pk>/viewer/words/mark-ditto/",
-            word_mark_ditto,
+            WordMarkDittoView.as_view(),
             name="grime_documentpage_viewer_word_mark_ditto",
         ),
         path(
             "<int:page_pk>/viewer/words/bulk-delete/",
-            words_bulk_delete,
+            WordsBulkDeleteView.as_view(),
             name="grime_documentpage_viewer_words_bulk_delete",
         ),
         path(
             "<int:page_pk>/viewer/words/bulk-ditto/",
-            words_bulk_ditto,
+            WordsBulkDittoView.as_view(),
             name="grime_documentpage_viewer_words_bulk_ditto",
         ),
-
         path(
             "<int:page_pk>/viewer/words/rerun-ner/",
-            words_rerun_ner,
+            WordsRerunNerView.as_view(),
             name="grime_documentpage_viewer_words_rerun_ner",
         ),
         path(
             "<int:page_pk>/viewer/annotations/create/",
-            annotation_create,
+            AnnotationCreateView.as_view(),
             name="grime_documentpage_viewer_annotation_create",
         ),
         path(
             "<int:page_pk>/viewer/annotations/update/",
-            annotation_update,
+            AnnotationUpdateView.as_view(),
             name="grime_documentpage_viewer_annotation_update",
         ),
         path(
             "<int:page_pk>/viewer/annotations/delete/",
-            annotation_delete,
+            AnnotationDeleteView.as_view(),
             name="grime_documentpage_viewer_annotation_delete",
         ),
         path(
             "<int:page_pk>/viewer/image/save/",
-            image_save,
+            ImageSaveView.as_view(),
             name="grime_documentpage_viewer_image_save",
         ),
         path(
             "<int:page_pk>/viewer/image/reset/",
-            image_reset,
+            ImageResetView.as_view(),
             name="grime_documentpage_viewer_image_reset",
         ),
         path(
             "<int:page_pk>/viewer/image/autocontrast/",
-            image_autocontrast,
+            ImageAutocontrastView.as_view(),
             name="grime_documentpage_viewer_image_autocontrast",
         ),
         path(
             "<int:page_pk>/viewer/export/pdf/",
-            export_page_pdf,
+            ExportPagePdfView.as_view(),
             name="grime_documentpage_viewer_export_pdf",
         ),
     ]
@@ -275,8 +278,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         ).count(),
         "autogen_unreviewed_count": 0,
         "use_preprocessed_bbox": False,
-        # Wired endpoints — the JS gates feature availability on whether each
-        # URL is truthy.
+        # Wired endpoints — the JS gates feature availability on whether each URL is truthy.
         "annotation_create_url": _url("grime_documentpage_viewer_annotation_create"),
         "annotation_update_url": _url("grime_documentpage_viewer_annotation_update"),
         "annotation_delete_url": _url("grime_documentpage_viewer_annotation_delete"),
@@ -291,11 +293,24 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
+        "ocr_rerun_selection_url": "",
+        "ner_rerun_url": "",
         "job_create_url": reverse("grime:job_create"),
         "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace("/0/", "/{pk}/"),
         "job_form_fields_url": reverse("grime:job_form_fields"),
         "job_status_url": reverse("grime:jobs_status"),
         "document_pk": page.document_id,
+        # Not implemented — leave empty so JS feature-gates them off.
+        "ocr_merge_url": "",
+        "ocr_reorder_url": "",
+        "ocr_join_line_url": "",
+        "ocr_confirm_all_url": "",
+        "ocr_recluster_url": "",
+        "ocr_clear_words_url": "",
+        "ocr_resolve_dittos_url": "",
+        "ocr_create_person_url": "",
+        "rerun_ocr_url": "",
+        "review_annotations_url": "",
         "prev_url": "",
         "next_url": "",
         "nav_prefix": "",
@@ -305,7 +320,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Word endpoints
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 
@@ -317,105 +332,18 @@ def _get_word_on_page(page_pk: int, word_pk_raw) -> Word | None:
     return Word.objects.filter(pk=word_pk, page_id=page_pk).first()
 
 
-@require_POST
-def word_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Update Word.corrected_text. Empty string clears the correction."""
-    word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
-    if word is None:
-        return JsonResponse({"error": "Word not found on this page"}, status=404)
-    corrected = (request.POST.get("corrected_text") or "").strip()
-    word.corrected_text = corrected or None
-    word.corrected_ocr_by = request.user if corrected else None
-    word.corrected_ocr_at = timezone.now() if corrected else None
-    word.save(update_fields=["corrected_text", "corrected_ocr_by", "corrected_ocr_at"])
-    updated = _run_post_ocr(word.page, request)
-    return JsonResponse(
-        {"ok": True, "corrected_text": word.corrected_text, "updated": updated}
-    )
+def _parse_word_pks(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    return [int(p) for p in raw.split(",") if p.strip()]
 
 
-@require_POST
-def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Create a Word at a manually drawn bbox.
-
-    The new Word is appended to line_num=0 with the next available word_num.
-    Caller can reorder afterwards.
-    """
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    try:
-        left = int(request.POST["left"])
-        top = int(request.POST["top"])
-        width = int(request.POST["width"])
-        height = int(request.POST["height"])
-    except (KeyError, ValueError):
-        return JsonResponse({"error": "Invalid coordinates"}, status=400)
-    if width <= 0 or height <= 0:
-        return JsonResponse({"error": "Region must have positive size"}, status=400)
-
-    max_word_num = Word.objects.filter(page=page, line_num=0).aggregate(
-        m=Max("word_num")
-    )["m"]
-    next_word_num = (max_word_num if max_word_num is not None else -1) + 1
-    corrected = (request.POST.get("corrected_text") or "").strip()
-    now = timezone.now() if corrected else None
-
-    word = Word.objects.create(
-        page=page,
-        line_num=0,
-        word_num=next_word_num,
-        left=left,
-        top=top,
-        width=width,
-        height=height,
-        conf=0,
-        ocr_text="",
-        corrected_text=corrected or None,
-        corrected_ocr_by=request.user if corrected else None,
-        corrected_ocr_at=now,
-    )
-    updated = _run_post_ocr(page, request)
-    return JsonResponse({"ok": True, "word": _word_to_dict(word), "updated": updated})
+def _run_post_ocr(page: DocumentPage, request) -> list[dict]:
+    from grime.pipeline.ocr import post_ocr
+    return post_ocr(page, user=request.user)
 
 
-@require_POST
-def word_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
-    word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
-    if word is None:
-        return JsonResponse({"error": "Word not found on this page"}, status=404)
-    word_id = word.pk
-    page = word.page
-    word.delete()
-    if not page.words.exists():
-        page.ocr_passes.all().delete()
-    updated = _run_post_ocr(page, request)
-    return JsonResponse({"ok": True, "deleted_id": word_id, "updated": updated})
-
-
-@require_POST
-def word_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Set Word.corrected_label.  'NONE' stores '' (explicitly cleared, overrides ner_label)."""
-    word = _get_word_on_page(page_pk, request.POST.get("word_id"))
-    if word is None:
-        return JsonResponse({"error": "Word not found on this page"}, status=404)
-    raw = (request.POST.get("label") or "").strip()
-    label = "" if raw == "NONE" else raw or None
-    if label not in _VALID_NER_LABELS:
-        return JsonResponse({"error": f"Invalid label {label!r}"}, status=400)
-    word.corrected_label = label
-    word.corrected_ner_by = request.user if label is not None else None
-    word.corrected_ner_at = timezone.now() if label is not None else None
-    word.save(update_fields=["corrected_label", "corrected_ner_by", "corrected_ner_at"])
-    return JsonResponse({"ok": True, "word_id": word.pk, "label": label})
-
-
-# ---------------------------------------------------------------------------
-# Annotation endpoints
-# ---------------------------------------------------------------------------
-
-
-def _parse_annotation_payload(request: HttpRequest) -> tuple[dict, JsonResponse | None]:
+def _parse_annotation_payload(request) -> tuple[dict, JsonResponse | None]:
     """Parse the bbox + label + subcomponents fields the JS sends with every annotation write."""
     try:
         label = (request.POST.get("label") or "").strip()
@@ -438,68 +366,295 @@ def _parse_annotation_payload(request: HttpRequest) -> tuple[dict, JsonResponse 
     }, None
 
 
-@require_POST
-def annotation_create(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Create an Annotation on this page.
+# ---------------------------------------------------------------------------
+# Word endpoints
+# ---------------------------------------------------------------------------
 
-    The viewer sends source_type_id / source_id in the body for legacy
-    reasons; we ignore them and always pin the annotation to this page (the URL
-    is the source of truth).
+
+class WordCorrectView(PageEndpointMixin):
+    """Update Word.corrected_text. Empty string clears the correction."""
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
+        if word is None:
+            return JsonResponse({"error": "Word not found on this page"}, status=404)
+        corrected = (request.POST.get("corrected_text") or "").strip()
+        word.corrected_text = corrected or None
+        word.corrected_ocr_by = request.user if corrected else None
+        word.corrected_ocr_at = timezone.now() if corrected else None
+        word.save(update_fields=["corrected_text", "corrected_ocr_by", "corrected_ocr_at"])
+        updated = _run_post_ocr(word.page, request)
+        return JsonResponse({"ok": True, "corrected_text": word.corrected_text, "updated": updated})
+
+
+class WordAddView(PageEndpointMixin):
+    """Create a Word at a manually drawn bbox, appended to line_num=0."""
+
+    def post(self, request, *args, **kwargs):
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+        try:
+            left = int(request.POST["left"])
+            top = int(request.POST["top"])
+            width = int(request.POST["width"])
+            height = int(request.POST["height"])
+        except (KeyError, ValueError):
+            return JsonResponse({"error": "Invalid coordinates"}, status=400)
+        if width <= 0 or height <= 0:
+            return JsonResponse({"error": "Region must have positive size"}, status=400)
+        max_word_num = Word.objects.filter(page=page, line_num=0).aggregate(m=Max("word_num"))["m"]
+        next_word_num = (max_word_num if max_word_num is not None else -1) + 1
+        corrected = (request.POST.get("corrected_text") or "").strip()
+        now = timezone.now() if corrected else None
+        word = Word.objects.create(
+            page=page,
+            line_num=0,
+            word_num=next_word_num,
+            left=left,
+            top=top,
+            width=width,
+            height=height,
+            conf=0,
+            ocr_text="",
+            corrected_text=corrected or None,
+            corrected_ocr_by=request.user if corrected else None,
+            corrected_ocr_at=now,
+        )
+        updated = _run_post_ocr(page, request)
+        return JsonResponse({"ok": True, "word": _word_to_dict(word), "updated": updated})
+
+
+class WordDeleteView(PageEndpointMixin):
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
+        if word is None:
+            return JsonResponse({"error": "Word not found on this page"}, status=404)
+        word_id = word.pk
+        page = word.page
+        word.delete()
+        if not page.words.exists():
+            page.ocr_passes.all().delete()
+        updated = _run_post_ocr(page, request)
+        return JsonResponse({"ok": True, "deleted_id": word_id, "updated": updated})
+
+
+class WordNerCorrectView(PageEndpointMixin):
+    """Set Word.corrected_label. 'NONE' stores '' (explicitly cleared, overrides ner_label)."""
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        word = _get_word_on_page(page_pk, request.POST.get("word_id"))
+        if word is None:
+            return JsonResponse({"error": "Word not found on this page"}, status=404)
+        raw = (request.POST.get("label") or "").strip()
+        label = "" if raw == "NONE" else raw or None
+        if label not in _VALID_NER_LABELS:
+            return JsonResponse({"error": f"Invalid label {label!r}"}, status=400)
+        word.corrected_label = label
+        word.corrected_ner_by = request.user if label is not None else None
+        word.corrected_ner_at = timezone.now() if label is not None else None
+        word.save(update_fields=["corrected_label", "corrected_ner_by", "corrected_ner_at"])
+        return JsonResponse({"ok": True, "word_id": word.pk, "label": label})
+
+
+class WordMarkDittoView(PageEndpointMixin):
+    """Replace one Word's ocr_text with a ditto mark and re-resolve dittos for the page."""
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
+        if word is None:
+            return JsonResponse({"error": "Word not found on this page"}, status=404)
+        word.ocr_text = '"'
+        word.corrected_text = None
+        word.is_ditto = False
+        word.corrected_ocr_by = None
+        word.corrected_ocr_at = None
+        word.save(update_fields=["ocr_text", "corrected_text", "is_ditto", "corrected_ocr_by", "corrected_ocr_at"])
+        updated = _run_post_ocr(word.page, request)
+        return JsonResponse({"ok": True, "word_pk": word.pk, "updated": updated})
+
+
+class WordsBulkDeleteView(PageEndpointMixin):
+    """Delete several Words at once. Only words belonging to this page are affected."""
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        try:
+            pks = _parse_word_pks(request.POST.get("word_pks"))
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        if not pks:
+            return JsonResponse({"error": "No word_pks provided"}, status=400)
+        qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
+        found_ids = list(qs.values_list("pk", flat=True))
+        deleted, _ = qs.delete()
+        page = DocumentPage.objects.filter(pk=page_pk).first()
+        if page and not page.words.exists():
+            page.ocr_passes.all().delete()
+        updated = _run_post_ocr(page, request) if page else []
+        return JsonResponse({"ok": True, "deleted_ids": found_ids, "deleted": deleted, "updated": updated})
+
+
+class WordsBulkDittoView(PageEndpointMixin):
+    """Mark several Words as dittos at once, then re-resolve the page."""
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        try:
+            pks = _parse_word_pks(request.POST.get("word_pks"))
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        if not pks:
+            return JsonResponse({"error": "No word_pks provided"}, status=400)
+        qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
+        marked_pks = list(qs.values_list("pk", flat=True))
+        if not marked_pks:
+            return JsonResponse({"error": "No words found on this page"}, status=404)
+        qs.update(
+            ocr_text='"',
+            corrected_text=None,
+            is_ditto=False,
+            corrected_ocr_by=None,
+            corrected_ocr_at=None,
+        )
+        page = DocumentPage.objects.get(pk=page_pk)
+        updated = _run_post_ocr(page, request)
+        return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
+
+
+class WordsRerunNerView(PageEndpointMixin):
+    """Run (or re-run) HuggingFace NER on a page and return updated word labels.
+
+    POST params:
+      ``model``  NER model key (optional; defaults to DEFAULT_MODEL).
     """
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    fields, err = _parse_annotation_payload(request)
-    if err is not None:
-        return err
-    page_ct = ContentType.objects.get_for_model(DocumentPage)
-    annotation = Annotation.objects.create(
-        source_type=page_ct,
-        source_id=page.pk,
-        created_by=request.user,
-        **fields,
-    )
-    return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
+
+    def post(self, request, *args, **kwargs):
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+
+        from grime.models import NERPass
+        from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
+
+        model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
+        if model_key not in _NER_MODEL_REGISTRY:
+            return JsonResponse(
+                {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"},
+                status=400,
+            )
+        schema_name = f"hf-ner-{model_key}"
+        try:
+            NERPass.objects.filter(page=page, schema_name=schema_name).delete()
+            words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
+            if not words:
+                return JsonResponse({"error": "Page has no words to run NER on"}, status=400)
+            Word.objects.filter(page=page).update(ner_label=None)
+            text = page.text or " ".join(
+                (w.corrected_text if w.corrected_text is not None else w.ocr_text) or ""
+                for w in words
+            )
+            if not text.strip():
+                return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
+            entities = extract_entities(text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD, model=model_key)
+            ner_pass = NERPass.objects.create(
+                page=page,
+                schema_name=schema_name,
+                method=f"hf-ner-{model_key}",
+                used_llm=False,
+                threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+                status=NERPass.STATUS_COMPLETE,
+            )
+            label_ocr_words(words, text, entities)
+            labelled = [w for w in words if w.ner_label]
+            if labelled:
+                for w in labelled:
+                    w.ner_pass = ner_pass
+                Word.objects.bulk_update(labelled, ["ner_pass"])
+        except Exception as exc:
+            return JsonResponse({"error": f"NER failed: {exc}"}, status=500)
+
+        words = list(
+            Word.objects.filter(page=page)
+            .order_by("line_num", "word_num")
+            .values("id", "ner_label", "corrected_label")
+        )
+        return JsonResponse({"ok": True, "words": words, "model": model_key})
 
 
-@require_POST
-def annotation_update(request: HttpRequest, page_pk: int) -> JsonResponse:
-    try:
-        annotation_id = int(request.POST["annotation_id"])
-    except (KeyError, ValueError) as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    page_ct = ContentType.objects.get_for_model(DocumentPage)
-    annotation = Annotation.objects.filter(pk=annotation_id, source_type=page_ct, source_id=page_pk).first()
-    if annotation is None:
-        return JsonResponse({"error": "Annotation not found on this page"}, status=404)
-    fields, err = _parse_annotation_payload(request)
-    if err is not None:
-        return err
-    for k, v in fields.items():
-        setattr(annotation, k, v)
-    annotation.save(update_fields=list(fields.keys()))
-    return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
+# ---------------------------------------------------------------------------
+# Annotation endpoints
+# ---------------------------------------------------------------------------
 
 
-@require_POST
-def annotation_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
-    try:
-        annotation_id = int(request.POST["annotation_id"])
-    except (KeyError, ValueError) as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    page_ct = ContentType.objects.get_for_model(DocumentPage)
-    deleted, _ = Annotation.objects.filter(
-        pk=annotation_id, source_type=page_ct, source_id=page_pk
-    ).delete()
-    if not deleted:
-        return JsonResponse({"error": "Annotation not found on this page"}, status=404)
-    return JsonResponse({"ok": True})
+class AnnotationCreateView(PageEndpointMixin):
+    """Create an Annotation pinned to this page (URL is the source of truth)."""
+
+    def post(self, request, *args, **kwargs):
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+        fields, err = _parse_annotation_payload(request)
+        if err is not None:
+            return err
+        page_ct = ContentType.objects.get_for_model(DocumentPage)
+        annotation = Annotation.objects.create(
+            source_type=page_ct,
+            source_id=page.pk,
+            created_by=request.user,
+            **fields,
+        )
+        return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
+
+
+class AnnotationUpdateView(PageEndpointMixin):
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        try:
+            annotation_id = int(request.POST["annotation_id"])
+        except (KeyError, ValueError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        page_ct = ContentType.objects.get_for_model(DocumentPage)
+        annotation = Annotation.objects.filter(
+            pk=annotation_id, source_type=page_ct, source_id=page_pk
+        ).first()
+        if annotation is None:
+            return JsonResponse({"error": "Annotation not found on this page"}, status=404)
+        fields, err = _parse_annotation_payload(request)
+        if err is not None:
+            return err
+        for k, v in fields.items():
+            setattr(annotation, k, v)
+        annotation.save(update_fields=list(fields.keys()))
+        return JsonResponse({"ok": True, "annotation": _annotation_to_dict(annotation)})
+
+
+class AnnotationDeleteView(PageEndpointMixin):
+
+    def post(self, request, *args, **kwargs):
+        page_pk = self.kwargs['page_pk']
+        try:
+            annotation_id = int(request.POST["annotation_id"])
+        except (KeyError, ValueError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        page_ct = ContentType.objects.get_for_model(DocumentPage)
+        deleted, _ = Annotation.objects.filter(
+            pk=annotation_id, source_type=page_ct, source_id=page_pk
+        ).delete()
+        if not deleted:
+            return JsonResponse({"error": "Annotation not found on this page"}, status=404)
+        return JsonResponse({"ok": True})
 
 
 # ---------------------------------------------------------------------------
 # Image adjustment endpoints
 # ---------------------------------------------------------------------------
-
 
 # Identity adjustments. Must match the DEFAULTS object in viewer-image.js after
 # the slider->params conversion done there (brightness/100, contrast/100, etc.).
@@ -602,447 +757,92 @@ def _apply_image_adjustments(im, params: dict):
     return im
 
 
-@require_POST
-def image_save(request: HttpRequest, page_pk: int) -> JsonResponse:
+class ImageSaveView(PageEndpointMixin):
     """Bake brightness/contrast/levels params into ``corrected_image``."""
-    from django.core.files.base import ContentFile
-    from PIL import Image
 
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    if not page.image:
-        return JsonResponse({"error": "Page has no source image"}, status=400)
+    def post(self, request, *args, **kwargs):
+        from django.core.files.base import ContentFile
+        from PIL import Image
 
-    try:
-        body = json.loads((request.body or b"{}").decode("utf-8") or "{}")
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    params = {**_DEFAULT_IMAGE_PARAMS, **(body or {})}
-
-    with Image.open(page.image.path) as im:
-        im.load()
-        adjusted = _apply_image_adjustments(im, params)
-        buf = io.BytesIO()
-        adjusted.save(buf, format="PNG")
-
-    fname = f"{Path(page.image.name).stem}-corrected.png"
-    if page.corrected_image:
-        page.corrected_image.delete(save=False)
-    page.corrected_image.save(fname, ContentFile(buf.getvalue()), save=False)
-    page.image_adjustments = params
-    page.corrected_image_by = request.user
-    page.corrected_image_at = timezone.now()
-    page.save(
-        update_fields=[
-            "corrected_image",
-            "image_adjustments",
-            "corrected_image_by",
-            "corrected_image_at",
-        ]
-    )
-    return JsonResponse(
-        {"ok": True, "image_url": page.corrected_image.url, "adjustments": params}
-    )
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+        if not page.image:
+            return JsonResponse({"error": "Page has no source image"}, status=400)
+        try:
+            body = json.loads((request.body or b"{}").decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        params = {**_DEFAULT_IMAGE_PARAMS, **(body or {})}
+        with Image.open(page.image.path) as im:
+            im.load()
+            adjusted = _apply_image_adjustments(im, params)
+            buf = io.BytesIO()
+            adjusted.save(buf, format="PNG")
+        fname = f"{Path(page.image.name).stem}-corrected.png"
+        if page.corrected_image:
+            page.corrected_image.delete(save=False)
+        page.corrected_image.save(fname, ContentFile(buf.getvalue()), save=False)
+        page.image_adjustments = params
+        page.corrected_image_by = request.user
+        page.corrected_image_at = timezone.now()
+        page.save(update_fields=["corrected_image", "image_adjustments", "corrected_image_by", "corrected_image_at"])
+        return JsonResponse({"ok": True, "image_url": page.corrected_image.url, "adjustments": params})
 
 
-@require_POST
-def image_reset(request: HttpRequest, page_pk: int) -> JsonResponse:
+class ImageResetView(PageEndpointMixin):
     """Drop ``corrected_image`` and revert to the original ``image``."""
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    if page.corrected_image:
-        page.corrected_image.delete(save=False)
-    page.corrected_image = None
-    page.image_adjustments = None
-    page.corrected_image_by = None
-    page.corrected_image_at = None
-    page.save(
-        update_fields=[
-            "corrected_image",
-            "image_adjustments",
-            "corrected_image_by",
-            "corrected_image_at",
-        ]
-    )
-    return JsonResponse(
-        {"ok": True, "image_url": page.image.url if page.image else None}
-    )
+
+    def post(self, request, *args, **kwargs):
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+        if page.corrected_image:
+            page.corrected_image.delete(save=False)
+        page.corrected_image = None
+        page.image_adjustments = None
+        page.corrected_image_by = None
+        page.corrected_image_at = None
+        page.save(update_fields=["corrected_image", "image_adjustments", "corrected_image_by", "corrected_image_at"])
+        return JsonResponse({"ok": True, "image_url": page.image.url if page.image else None})
 
 
-@require_POST
-def image_autocontrast(request: HttpRequest, page_pk: int) -> JsonResponse:
+class ImageAutocontrastView(PageEndpointMixin):
     """Analyse the source image histogram and return suggested black/white levels.
 
-    Uses a 1 % cutoff on each end of the luminance distribution, matching what
-    PIL.ImageOps.autocontrast(cutoff=1) would apply internally.  The returned
+    Uses a 1% cutoff on each end of the luminance distribution. The returned
     ``black`` / ``white`` values can be dropped straight into the JS slider state.
     """
-    from PIL import Image
 
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-    if not page.image:
-        return JsonResponse({"error": "Page has no source image"}, status=400)
+    def post(self, request, *args, **kwargs):
+        from PIL import Image
 
-    with Image.open(page.image.path) as im:
-        gray = im.convert("L")
-        hist = gray.histogram()  # 256 counts
-
-    total = sum(hist)
-    cutoff = total * 0.01
-
-    black = 0
-    cumsum = 0
-    for i, count in enumerate(hist):
-        cumsum += count
-        if cumsum >= cutoff:
-            black = i
-            break
-
-    white = 255
-    cumsum = 0
-    for i, count in enumerate(reversed(hist)):
-        cumsum += count
-        if cumsum >= cutoff:
-            white = 255 - i
-            break
-
-    white = max(black + 1, white)
-    return JsonResponse({"ok": True, "black": black, "white": white})
-
-
-# ---------------------------------------------------------------------------
-# Ditto / bulk / re-OCR endpoints
-# ---------------------------------------------------------------------------
-
-
-def _parse_word_pks(raw: str | None) -> list[int]:
-    if not raw:
-        return []
-    return [int(p) for p in raw.split(",") if p.strip()]
-
-
-def _run_post_ocr(page: DocumentPage, request: HttpRequest) -> list[dict]:
-    from grime.pipeline.ocr import post_ocr
-
-    return post_ocr(page, user=request.user)
-
-
-@require_POST
-def word_mark_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Replace one Word's ocr_text with a ditto mark and re-resolve dittos for the page.
-
-    Persists the ditto-resolved correction for any word whose effective text changed,
-    so the viewer can refresh those rows from the JSON response without a reload.
-    """
-    word = _get_word_on_page(page_pk, request.POST.get("word_pk"))
-    if word is None:
-        return JsonResponse({"error": "Word not found on this page"}, status=404)
-    word.ocr_text = '"'
-    word.corrected_text = None
-    word.is_ditto = False
-    word.corrected_ocr_by = None
-    word.corrected_ocr_at = None
-    word.save(
-        update_fields=[
-            "ocr_text",
-            "corrected_text",
-            "is_ditto",
-            "corrected_ocr_by",
-            "corrected_ocr_at",
-        ]
-    )
-    updated = _run_post_ocr(word.page, request)
-    return JsonResponse({"ok": True, "word_pk": word.pk, "updated": updated})
-
-
-@require_POST
-def words_bulk_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Delete several Words at once. Only words belonging to this page are affected."""
-    try:
-        pks = _parse_word_pks(request.POST.get("word_pks"))
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    if not pks:
-        return JsonResponse({"error": "No word_pks provided"}, status=400)
-    qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
-    found_ids = list(qs.values_list("pk", flat=True))
-    deleted, _ = qs.delete()
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page and not page.words.exists():
-        page.ocr_passes.all().delete()
-    updated = _run_post_ocr(page, request) if page else []
-    return JsonResponse(
-        {
-            "ok": True,
-            "deleted_ids": found_ids,
-            "deleted": deleted,
-            "updated": updated,
-        }
-    )
-
-
-@require_POST
-def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Mark several Words as dittos at once, then re-resolve the page.
-
-    Each marked word's text becomes ``"`` and any human correction is cleared;
-    ``_resolve_page_dittos`` then walks the page top-to-bottom, projecting the
-    most recent word at each horizontal position downward so chained dittos
-    fill in correctly.  Words that resolved get their ``corrected_text`` and
-    ``is_ditto`` flag persisted.
-
-    Response shape matches the JS expectation: ``marked_pks`` lists the words
-    whose raw text was reset to ``"``; ``updated`` lists the words whose
-    effective text changed during resolution.
-    """
-    try:
-        pks = _parse_word_pks(request.POST.get("word_pks"))
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    if not pks:
-        return JsonResponse({"error": "No word_pks provided"}, status=400)
-    qs = Word.objects.filter(pk__in=pks, page_id=page_pk)
-    marked_pks = list(qs.values_list("pk", flat=True))
-    if not marked_pks:
-        return JsonResponse({"error": "No words found on this page"}, status=404)
-    qs.update(
-        ocr_text='"',
-        corrected_text=None,
-        is_ditto=False,
-        corrected_ocr_by=None,
-        corrected_ocr_at=None,
-    )
-    page = DocumentPage.objects.get(pk=page_pk)
-    updated = _run_post_ocr(page, request)
-    return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
-
-
-
-@require_POST
-def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Run (or re-run) HuggingFace NER on a page and return updated word labels.
-
-    Clears existing NERPass records and ner_label values, then runs the HF NER
-    pipeline, saving results as a new NERPass. Returns the full word list with
-    updated ner_label fields so the viewer can refresh without a reload.
-
-    POST params:
-      ``model``  NER model key (optional; defaults to DEFAULT_MODEL).
-                 Must be a key in MODEL_REGISTRY.
-    """
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-
-    from grime.models import NERPass, Word
-    from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
-
-    model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
-    if model_key not in _NER_MODEL_REGISTRY:
-        return JsonResponse(
-            {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"},
-            status=400,
-        )
-
-    schema_name = f"hf-ner-{model_key}"
-    try:
-        NERPass.objects.filter(page=page, schema_name=schema_name).delete()
-        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
-        if not words:
-            return JsonResponse({"error": "Page has no words to run NER on"}, status=400)
-        Word.objects.filter(page=page).update(ner_label=None)
-        text = page.text or " ".join(
-            (w.corrected_text if w.corrected_text is not None else w.ocr_text) or ""
-            for w in words
-        )
-        if not text.strip():
-            return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
-        entities = extract_entities(
-            text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD, model=model_key
-        )
-        ner_pass = NERPass.objects.create(
-            page=page,
-            schema_name=schema_name,
-            method=f"hf-ner-{model_key}",
-            used_llm=False,
-            threshold=DEFAULT_CONFIDENCE_THRESHOLD,
-            status=NERPass.STATUS_COMPLETE,
-        )
-        label_ocr_words(words, text, entities)
-        labelled = [w for w in words if w.ner_label]
-        if labelled:
-            for w in labelled:
-                w.ner_pass = ner_pass
-            Word.objects.bulk_update(labelled, ["ner_pass"])
-    except Exception as exc:
-        return JsonResponse({"error": f"NER failed: {exc}"}, status=500)
-
-    words = list(
-        Word.objects.filter(page=page)
-        .order_by("line_num", "word_num")
-        .values("id", "ner_label", "corrected_label")
-    )
-    return JsonResponse({"ok": True, "words": words, "model": model_key})
-
-
-# ---------------------------------------------------------------------------
-# Document detail view
-# ---------------------------------------------------------------------------
-
-
-@staff_member_required
-def document_page_view(request, doc_pk: int, page_pk: int | None = None):
-    doc = get_object_or_404(Document, pk=doc_pk)
-    pages = list(doc.pages.order_by("page_number"))
-
-    if not pages:
-        return render(
-            request, "grime/document_detail.html", {"document": doc, "image_url": None}
-        )
-
-    if page_pk is None:
-        return redirect("grime:document_page", doc_pk=doc_pk, page_pk=pages[0].pk)
-
-    page = get_object_or_404(DocumentPage, pk=page_pk, document=doc)
-    page_pks = [p.pk for p in pages]
-    idx = page_pks.index(page.pk)
-
-    def _page_url(pk: int) -> str:
-        return reverse("grime:document_page", args=[doc_pk, pk])
-
-    prev_pk = page_pks[idx - 1] if idx > 0 else None
-    next_pk = page_pks[idx + 1] if idx < len(page_pks) - 1 else None
-
-    ctx = build_viewer_context(page)
-    ctx.update(
-        {
-            "document": doc,
-            "prev_url": _page_url(prev_pk) if prev_pk else "",
-            "next_url": _page_url(next_pk) if next_pk else "",
-            "prev_url_json": _safe_json(_page_url(prev_pk) if prev_pk else None),
-            "next_url_json": _safe_json(_page_url(next_pk) if next_pk else None),
-            "page_list_json": _safe_json(
-                [
-                    {"pk": p.pk, "page_number": p.page_number, "url": _page_url(p.pk)}
-                    for p in pages
-                ]
-            ),
-            "page_position": idx + 1,
-            "total_count": len(pages),
-            "nav_prefix": "",
-        }
-    )
-    return render(request, "grime/document_detail.html", ctx)
-
-
-# ---------------------------------------------------------------------------
-# Landing page
-# ---------------------------------------------------------------------------
-
-
-@staff_member_required
-def document_list_view(request):
-    upload_error = None
-    form = DocumentUploadForm()
-
-    if request.method == "POST":
-        form = DocumentUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            uploaded = form.cleaned_data["pdf_file"]
-            title = form.cleaned_data.get("title") or None
-            tags = form.cleaned_data.get("tags") or []
-            stem = Path(uploaded.name).stem
-
-            tmp_dir = tempfile.mkdtemp()
-            tmp_path = Path(tmp_dir) / f"{stem}.pdf"
-            try:
-                with open(tmp_path, "wb") as fh:
-                    for chunk in uploaded.chunks():
-                        fh.write(chunk)
-                from grime.pipeline.ingest import ingest_pdf
-
-                doc, _, _ = ingest_pdf(tmp_path, title=title)
-            except Exception as exc:
-                upload_error = str(exc)
-                doc = None
-            finally:
-                tmp_path.unlink(missing_ok=True)
-                os.rmdir(tmp_dir)
-
-            if doc is not None:
-                if tags:
-                    doc.tags = tags
-                    doc.save(update_fields=["tags"])
-                return redirect("grime:document", doc_pk=doc.pk)
-
-    entity_counts = {
-        row["page__document_id"]: row["n"]
-        for row in Word.objects.filter(ner_label__startswith="B-")
-        .values("page__document_id")
-        .annotate(n=Count("pk"))
-    }
-    doc_list = [
-        {
-            "doc": doc,
-            "doc_tags_json": json.dumps(doc.tags),
-            "entity_count": entity_counts.get(doc.pk, 0),
-        }
-        for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
-    ]
-    worker_slots = list(WorkerSlot.objects.all())
-
-    from grime.forms import CreateJobForm
-    job_form = CreateJobForm()
-
-    return render(
-        request,
-        "grime/document_list.html",
-        {
-            "doc_list": doc_list,
-            "form": form,
-            "upload_error": upload_error,
-            "worker_slots": worker_slots,
-            "job_form": job_form,
-        },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Document rename / delete
-# ---------------------------------------------------------------------------
-
-
-@staff_member_required
-@require_POST
-def rename_document_view(request, doc_pk: int):
-    doc = get_object_or_404(Document, pk=doc_pk)
-    title = request.POST.get("title", "").strip()
-    if not title:
-        return JsonResponse({"error": "Title cannot be empty."}, status=400)
-    doc.title = title
-    update_fields = ["title"]
-    raw_tags = request.POST.get("tags")
-    if raw_tags is not None:
-        try:
-            parsed = json.loads(raw_tags)
-            doc.tags = [str(t).strip() for t in parsed if str(t).strip()] if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
-            doc.tags = []
-        update_fields.append("tags")
-    doc.save(update_fields=update_fields)
-    return JsonResponse({"ok": True, "title": doc.title, "tags": doc.tags})
-
-
-@staff_member_required
-@require_POST
-def delete_document_view(request, doc_pk: int):
-    doc = get_object_or_404(Document, pk=doc_pk)
-    doc.delete()
-    return JsonResponse({"ok": True})
+        page = self.get_page()
+        if page is None:
+            return JsonResponse({"error": "Page not found"}, status=404)
+        if not page.image:
+            return JsonResponse({"error": "Page has no source image"}, status=400)
+        with Image.open(page.image.path) as im:
+            gray = im.convert("L")
+            hist = gray.histogram()  # 256 counts
+        total = sum(hist)
+        cutoff = total * 0.01
+        black = 0
+        cumsum = 0
+        for i, count in enumerate(hist):
+            cumsum += count
+            if cumsum >= cutoff:
+                black = i
+                break
+        white = 255
+        cumsum = 0
+        for i, count in enumerate(reversed(hist)):
+            cumsum += count
+            if cumsum >= cutoff:
+                white = 255 - i
+                break
+        white = max(black + 1, white)
+        return JsonResponse({"ok": True, "black": black, "white": white})
 
 
 # ---------------------------------------------------------------------------
@@ -1050,300 +850,21 @@ def delete_document_view(request, doc_pk: int):
 # ---------------------------------------------------------------------------
 
 
-@staff_member_required
-def export_document_pdf_view(request, doc_pk: int):
-    """Download all pages of a document as a searchable sandwich PDF.
-
-    Query params:
-        confirmed_only=1  — include only words with a manual correction
-    """
-    doc = get_object_or_404(Document, pk=doc_pk)
-    confirmed_only = request.GET.get("confirmed_only") == "1"
-
-    from grime.pipeline.export import export_document_pdf
-
-    buf = io.BytesIO()
-    export_document_pdf(doc, buf, confirmed_only=confirmed_only)
-    buf.seek(0)
-
-    slug = doc.title.replace(" ", "_")[:60]
-    response = HttpResponse(buf, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{slug}.pdf"'
-    return response
-
-
-@staff_member_required
-def export_page_pdf(request, page_pk: int):
+class ExportPagePdfView(StaffRequiredMixin, View):
     """Download a single page as a searchable sandwich PDF.
 
     Query params:
         confirmed_only=1  — include only words with a manual correction
     """
-    page = get_object_or_404(DocumentPage, pk=page_pk)
-    confirmed_only = request.GET.get("confirmed_only") == "1"
 
-    from grime.pipeline.export import export_document_pdf
-
-    buf = io.BytesIO()
-    export_document_pdf(
-        page.document, buf, confirmed_only=confirmed_only, page_pks=[page.pk]
-    )
-    buf.seek(0)
-
-    slug = str(page).replace(" ", "_").replace("/", "-")[:60]
-    response = HttpResponse(buf, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{slug}.pdf"'
-    return response
-
-
-# ---------------------------------------------------------------------------
-# Entity pages
-# ---------------------------------------------------------------------------
-
-_ENTITY_TYPE_LABELS = {"PER": "Person", "LOC": "Location", "ORG": "Organization"}
-_VALID_ENTITY_TYPES = set(_ENTITY_TYPE_LABELS)
-
-
-def _build_entity_spans(words) -> list[dict]:
-    """Group BIO-labelled words into entity spans.
-
-    Mirrors nerBuildEntities() in viewer-ner.js. Returns a list of:
-        {'type': 'PER', 'text': 'John Smith',
-         'bbox': {'left':…, 'top':…, 'width':…, 'height':…}}
-    """
-    spans = []
-    current = None
-    for w in words:
-        label = w.label if hasattr(w, "label") else (w.get("corrected_label") or w.get("ner_label"))
-        if not label:
-            current = None
-            continue
-        entity_type = label[2:]   # strip B- / I-
-        prefix = label[0]
-        if prefix == "B" or current is None or current["type"] != entity_type:
-            current = {"type": entity_type, "words": [w]}
-            spans.append(current)
-        else:
-            current["words"].append(w)
-
-    result = []
-    for s in spans:
-        ws = s["words"]
-        text = " ".join(
-            (w.corrected_text or w.ocr_text) if hasattr(w, "ocr_text")
-            else (w.get("corrected_text") or w.get("ocr_text", ""))
-            for w in ws
-        )
-        left   = min(w.left if hasattr(w, "left") else w["left"] for w in ws)
-        top    = min(w.top  if hasattr(w, "top")  else w["top"]  for w in ws)
-        right  = max((w.left + w.width)  if hasattr(w, "left") else (w["left"] + w["width"])  for w in ws)
-        bottom = max((w.top  + w.height) if hasattr(w, "top")  else (w["top"]  + w["height"]) for w in ws)
-        result.append({
-            "type": s["type"],
-            "text": text,
-            "bbox": {"left": left, "top": top, "width": right - left, "height": bottom - top},
-        })
-    return result
-
-
-@staff_member_required
-def entity_list_view(request):
-    """List unique NER entities, optionally filtered to a single document via ?doc=<pk>."""
-    from collections import defaultdict
-
-    doc_pk = request.GET.get("doc")
-    document = None
-    if doc_pk:
-        document = get_object_or_404(Document, pk=doc_pk)
-
-    pages = (
-        DocumentPage.objects
-        .filter(words__ner_label__isnull=False)
-        .distinct()
-        .select_related("document")
-        .prefetch_related("words")
-    )
-    if document:
-        pages = pages.filter(document=document)
-
-    # Accumulate {(type, text_norm): {display_text, doc_pks, count}}
-    agg: dict = defaultdict(lambda: {"display_text": "", "doc_pks": set(), "count": 0})
-    for page in pages:
-        ordered = sorted(page.words.all(), key=lambda w: (w.line_num, w.word_num))
-        for span in _build_entity_spans(ordered):
-            key = (span["type"], span["text"].strip().lower())
-            entry = agg[key]
-            if not entry["display_text"]:
-                entry["display_text"] = span["text"]
-            entry["doc_pks"].add(page.document_id)
-            entry["count"] += 1
-
-    # Merge Entity records (notes + dismissed)
-    entity_records = {
-        (e.entity_type, e.text): e
-        for e in Entity.objects.all()
-    }
-
-    entities = []
-    for (etype, enorm), data in agg.items():
-        rec = entity_records.get((etype, enorm))
-        entities.append({
-            "type": etype,
-            "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
-            "text": enorm,
-            "display_text": data["display_text"],
-            "doc_count": len(data["doc_pks"]),
-            "occurrence_count": data["count"],
-            "notes": rec.notes if rec else "",
-            "dismissed": rec.dismissed if rec else False,
-        })
-
-    _TYPE_ORDER = {"PER": 0, "ORG": 1, "LOC": 2}
-    entities.sort(key=lambda e: (_TYPE_ORDER.get(e["type"], 9), -e["occurrence_count"]))
-
-    # Flag the first entity of each type so the template can render a section header.
-    last_type = None
-    for e in entities:
-        e["show_type_header"] = e["type"] != last_type
-        last_type = e["type"]
-
-    return render(request, "grime/entity_list.html", {
-        "entities": entities,
-        "document": document,
-        "entity_detail_url": reverse("grime:entity_detail"),
-        "entity_dismiss_url": reverse("grime:entity_dismiss"),
-        "csrf_token": request.META.get("CSRF_COOKIE", ""),
-    })
-
-
-@staff_member_required
-def entity_detail_view(request):
-    """Detail page for a single entity — all occurrences grouped by document."""
-    from collections import defaultdict
-
-    etype = request.GET.get("type", "").strip().upper()
-    raw_text = request.GET.get("text", "").strip()
-    if etype not in _VALID_ENTITY_TYPES or not raw_text:
-        from django.http import Http404
-        raise Http404
-
-    enorm = raw_text.lower()
-    entity = Entity.objects.filter(entity_type=etype, text=enorm).first()
-
-    # Collect all occurrences across all pages
-    pages = (
-        DocumentPage.objects
-        .filter(words__ner_label__isnull=False)
-        .distinct()
-        .select_related("document")
-        .prefetch_related("words")
-    )
-
-    # doc_pk → {doc, pages: {page_pk → {page, occurrences: []}}}
-    doc_map: dict = {}
-    for page in pages:
-        ordered = sorted(page.words.all(), key=lambda w: (w.line_num, w.word_num))
-        occurrences = [
-            s for s in _build_entity_spans(ordered)
-            if s["type"] == etype and s["text"].strip().lower() == enorm
-        ]
-        if not occurrences:
-            continue
-        doc = page.document
-        if doc.pk not in doc_map:
-            doc_map[doc.pk] = {"document": doc, "page_map": {}}
-        page_entry = doc_map[doc.pk]["page_map"]
-        if page.pk not in page_entry:
-            page_entry[page.pk] = {"page": page, "occurrences": []}
-        image = page.display_image
-        for occ in occurrences:
-            page_entry[page.pk]["occurrences"].append({
-                "imageUrl": image.url if image else "",
-                "pageUrl": reverse("grime:document_page", args=[doc.pk, page.pk]),
-                **occ["bbox"],
-            })
-
-    # Build sorted docs list
-    docs_data = []
-    for doc_entry in doc_map.values():
-        pages_data = []
-        total_occurrences = 0
-        for page_entry in sorted(
-            doc_entry["page_map"].values(),
-            key=lambda p: p["page"].page_number or 0,
-        ):
-            pg = page_entry["page"]
-            occs = page_entry["occurrences"]
-            total_occurrences += len(occs)
-            pages_data.append({
-                "pageNumber": pg.page_number,
-                "pageUrl": reverse("grime:document_page", args=[doc_entry["document"].pk, pg.pk]),
-                "occurrences": occs,
-            })
-        docs_data.append({
-            "title": doc_entry["document"].title,
-            "docUrl": doc_entry["document"].get_absolute_url(),
-            "occurrenceCount": total_occurrences,
-            "pages": pages_data,
-        })
-    docs_data.sort(key=lambda d: -d["occurrenceCount"])
-
-    # Canonical display text: first occurrence found
-    display_text = raw_text
-    if docs_data and docs_data[0]["pages"]:
-        pass  # raw_text from URL is fine; user-provided casing
-
-    props = {
-        "entityType": etype,
-        "entityText": enorm,
-        "displayText": raw_text,
-        "typeLabel": _ENTITY_TYPE_LABELS.get(etype, etype),
-        "notes": entity.notes if entity else "",
-        "dismissed": entity.dismissed if entity else False,
-        "docCount": len(doc_map),
-        "noteUpdateUrl": reverse("grime:entity_note_update"),
-        "dismissUrl": reverse("grime:entity_dismiss"),
-        "csrfToken": request.META.get("CSRF_COOKIE", ""),
-        "docs": docs_data,
-    }
-
-    return render(request, "grime/entity_detail.html", {
-        "entity_type": etype,
-        "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
-        "display_text": raw_text,
-        "entity_props_json": _safe_json(props),
-    })
-
-
-@staff_member_required
-@require_POST
-def entity_note_update_view(request):
-    """Save notes for an entity. Creates the Entity record if needed."""
-    etype = (request.POST.get("type") or "").strip().upper()
-    raw_text = (request.POST.get("text") or "").strip()
-    notes = request.POST.get("notes") or ""
-    if etype not in _VALID_ENTITY_TYPES or not raw_text:
-        return JsonResponse({"error": "Invalid type or text"}, status=400)
-    enorm = raw_text.lower()
-    Entity.objects.update_or_create(
-        entity_type=etype, text=enorm,
-        defaults={"notes": notes},
-    )
-    return JsonResponse({"ok": True})
-
-
-@staff_member_required
-@require_POST
-def entity_dismiss_view(request):
-    """Toggle the dismissed flag for an entity."""
-    etype = (request.POST.get("type") or "").strip().upper()
-    raw_text = (request.POST.get("text") or "").strip()
-    dismissed = request.POST.get("dismissed", "true").lower() not in ("false", "0", "")
-    if etype not in _VALID_ENTITY_TYPES or not raw_text:
-        return JsonResponse({"error": "Invalid type or text"}, status=400)
-    enorm = raw_text.lower()
-    entity, _ = Entity.objects.update_or_create(
-        entity_type=etype, text=enorm,
-        defaults={"dismissed": dismissed},
-    )
-    return JsonResponse({"ok": True, "dismissed": entity.dismissed})
+    def get(self, request, page_pk):
+        page = get_object_or_404(DocumentPage, pk=page_pk)
+        confirmed_only = request.GET.get("confirmed_only") == "1"
+        from grime.pipeline.export import export_document_pdf
+        buf = io.BytesIO()
+        export_document_pdf(page.document, buf, confirmed_only=confirmed_only, page_pks=[page.pk])
+        buf.seek(0)
+        slug = str(page).replace(" ", "_").replace("/", "-")[:60]
+        response = HttpResponse(buf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{slug}.pdf"'
+        return response
