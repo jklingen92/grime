@@ -45,6 +45,14 @@ export default function ViewerApp() {
 
   const navigate = useViewerNavigate(state.tab);
 
+  // Persist the active tab in the URL so page reloads (e.g. after a job
+  // completes) land on the same tab instead of always resetting to ocr.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', state.tab);
+    history.replaceState(null, '', url);
+  }, [state.tab]);
+
   // ── OCR popup helpers ──
   const closeOcrPopup = useCallback(() => {
     setOcrPopup(null);
@@ -203,7 +211,7 @@ export default function ViewerApp() {
         dispatch({
           type: 'WORD_PATCH',
           id: word.id,
-          patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
+          patch: { ocr_text: '"', corrected_text: null, is_ditto: true },
         });
         applyOcrUpdated(data2.updated);
       }
@@ -219,7 +227,7 @@ export default function ViewerApp() {
         dispatch({
           type: 'WORD_PATCH',
           id,
-          patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
+          patch: { ocr_text: '"', corrected_text: null, is_ditto: true },
         });
       });
       applyOcrUpdated(data.updated);
@@ -231,7 +239,7 @@ export default function ViewerApp() {
       dispatch({
         type: 'WORD_PATCH',
         id,
-        patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
+        patch: { ocr_text: '"', corrected_text: null, is_ditto: true },
       });
       applyOcrUpdated(data.updated);
       dispatch({ type: 'OCR_SELECT_CLEAR' });
