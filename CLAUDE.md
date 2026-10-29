@@ -23,10 +23,6 @@ pages with tagged regions.
 
 - Never write migrations or manipulate data in any way.
 - Never rebase. Always pull the current branch and add new commits on top.
-- Never use the Explore agent or spawn sub-agents for code searches. Use grep/find directly.
+- Never spawn agents for code searches; use grep/find + Read. Agents only for genuinely parallel multi-step work.
 - Before searching the codebase, ask me for the file path or symbol name so I can provide it.
 - Ask me before adding a one-off fix or patch to accomplish your task; chances are there's an architectural issue that needs to be resolved. 
-- Never spawn agents unless the task is genuinely multi-step and parallel.
-- Prefer Read + grep over any exploratory agent.
-- When referencing code, always include file_path:line_number.
-- Be concise in your responses. 
