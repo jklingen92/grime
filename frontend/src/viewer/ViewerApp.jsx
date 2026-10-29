@@ -262,7 +262,9 @@ export default function ViewerApp() {
       const next = type === 'NONE' || !type ? null : (idx === 0 ? 'B-' : 'I-') + type;
       const data = await correctNerLabel(config, id, next);
       if (data?.ok) {
-        dispatch({ type: 'WORD_PATCH', id, patch: { corrected_label: next } });
+        // Mirror what the server stored: '' means "explicitly cleared", which
+        // suppresses ner_label; null would fall back to it and resurrect the entity.
+        dispatch({ type: 'WORD_PATCH', id, patch: { corrected_label: data.label } });
       }
     }
     dispatch({ type: 'NER_SELECT_CLEAR' });
