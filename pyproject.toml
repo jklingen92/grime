@@ -39,7 +39,7 @@ Repository = "https://github.com/jklingen92/grime.git"
 Issues = "https://github.com/jklingen92/grime/issues"
 
 [project.optional-dependencies]
-ocr = ["pytesseract", "opencv-python", "numpy"]
+ocr = ["pytesseract", "opencv-python-headless", "numpy"]
 textract = ["boto3"]
 hf = ["transformers", "torch"]
 viz = ["imageio[ffmpeg]"]
@@ -59,7 +59,7 @@ target-version = ["py311"]
 [dependency-groups]
 dev = [
     "pytesseract",
-    "opencv-python",
+    "opencv-python-headless",
     "numpy",
     "boto3",
     "transformers",
