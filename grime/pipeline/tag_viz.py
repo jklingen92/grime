@@ -5,7 +5,7 @@ Each frame shows a document page with the current kernel position overlaid and
 a side panel summarising the match score and extracted content fields.
 Frames are compiled into an MP4 using OpenCV.
 
-Requires: matplotlib, opencv-python (both are project dependencies).
+Requires: matplotlib, opencv-python-headless (both are project dependencies).
 """
 
 from __future__ import annotations
