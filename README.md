@@ -11,7 +11,6 @@ pages with tagged regions.
 1. **Python 3.11+**
 2. **Node.js 18+** and **npm** — for the React frontend build
 3. **uv** — Install from https://docs.astral.sh/uv/getting-started/installation/
-4. **honcho** — installed automatically as part of the dev dependencies
 
 ### Installation
 
@@ -20,8 +19,12 @@ pages with tagged regions.
 git clone https://github.com/jklingen92/grime.git
 cd grime
 
-# Install Python dependencies (creates .venv)
-uv sync
+# Install Python dependencies, including the dev group (creates .venv)
+uv sync --group dev
+source .venv/bin/activate
+
+# Install the git pre-commit hooks (black)
+pre-commit install
 
 # Install JavaScript dependencies and build the frontend
 npm install
