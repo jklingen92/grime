@@ -245,3 +245,20 @@ If `params_form_class = None`, no fragment is needed — the modal shows no extr
 `AsyncJob` stores type-specific inputs in `params` (JSONField) and outputs in `result`
 (JSONField). New job types don't require schema changes unless you need new indexed/
 queryable fields on the base model.
+
+## Running the tests
+
+The suite is hermetic: no network, paid services, Tesseract binary or model
+downloads. OCR engines (`pytesseract`, Textract) and the HuggingFace NER
+pipeline are replaced with canned output at their boundaries.
+
+```bash
+# Backend (in-memory SQLite, throwaway MEDIA_ROOT, no .env needed)
+python manage.py test --settings=demo.test_settings
+
+# Frontend (vitest + jsdom)
+npm test
+```
+
+`npm ci` currently fails on a `@vitejs/plugin-react` / `vite@8` peer
+conflict; use `npm ci --legacy-peer-deps` until that is resolved.
