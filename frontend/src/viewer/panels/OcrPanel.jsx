@@ -150,6 +150,7 @@ export default function OcrPanel() {
               {renderedWords.map((w) => {
                 const display = w.corrected_text || w.ocr_text;
                 let cls = 'dp-text-word';
+                if (w.is_ditto) cls += ' ditto';
                 if (state.ocrSelectedIds.has(w.id)) cls += ' selected';
                 if (matchIds.has(w.id)) cls += ' search-match';
                 return (

@@ -129,6 +129,7 @@
   .dp-text-word.selected { background: rgba(230,126,0,0.3); font-weight: 500; outline: 1px solid rgba(230,126,0,0.7); }
   .dp-text-word.search-match { background: rgba(255,220,0,0.45); outline: 1px solid rgba(200,160,0,0.6); }
   .dp-text-word.search-match.selected { background: rgba(230,126,0,0.45); outline: 1px solid rgba(230,126,0,0.9); }
+  .dp-text-word.ditto { outline: 1.5px dotted rgba(120,120,120,0.7); background: rgba(120,120,120,0.06); }
 
   /* text-panel search row */
   #dp-text-search-row {

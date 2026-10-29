@@ -1,8 +1,15 @@
-// Floating action bar for NER selections: apply / clear / delete bulk labels.
+// Floating action bar for NER selections: apply entity label / delete / cancel.
+// The apply button is a Bootstrap split button whose dropdown picks the type.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 import { useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
 import { nerEntityType } from '../state/selectors.js';
+
+const ENTITY_TYPES = [
+  { value: 'PER', label: 'Person' },
+  { value: 'LOC', label: 'Location' },
+  { value: 'ORG', label: 'Organization' },
+];
 
 export default function NerSelectionBar({ wrapRef, onApply }) {
   const state = useViewerState();
@@ -10,7 +17,8 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
   const elRef = useRef(null);
   const visible = state.nerSelectedIds.size > 0 && state.tab === 'ner';
 
-  // Default the dropdown to the most-common existing entity type in the selection.
+  // Default the type to the most-common existing entity type in the selection,
+  // falling back to PER.
   const dominantType = useMemo(() => {
     const counts = {};
     state.nerSelectedIds.forEach((id) => {
@@ -20,19 +28,22 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
     let best = '';
     let bestN = 0;
     Object.keys(counts).forEach((k) => {
-      if (counts[k] > bestN) {
-        best = k;
-        bestN = counts[k];
-      }
+      if (counts[k] > bestN) { best = k; bestN = counts[k]; }
     });
-    return best;
+    return best || 'PER';
   }, [state.nerSelectedIds, state.wordById]);
 
   const [type, setType] = useState(dominantType);
-  // Keep the dropdown synced when the selection changes.
-  useEffect(() => {
-    setType(dominantType);
-  }, [dominantType]);
+  useEffect(() => { setType(dominantType); }, [dominantType]);
+
+  // Show delete only when at least one selected word already has an entity label.
+  const hasEntities = useMemo(() => {
+    let found = false;
+    state.nerSelectedIds.forEach((id) => {
+      if (nerEntityType(state.wordById[id])) found = true;
+    });
+    return found;
+  }, [state.nerSelectedIds, state.wordById]);
 
   const labelText = useMemo(() => {
     const ids = Array.from(state.nerSelectedIds);
@@ -43,7 +54,7 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
     });
     let text = words.map((w) => w.corrected_text || w.ocr_text).join(' ');
     if (text.length > 40) text = text.substring(0, 37) + '…';
-    return '“' + text + '”';
+    return '"' + text + '"';
   }, [state.nerSelectedIds, state.wordById]);
 
   useLayoutEffect(() => {
@@ -54,36 +65,56 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
     }
   }, [visible, labelText, wrapRef]);
 
+  const typeLabel = ENTITY_TYPES.find((t) => t.value === type)?.label || 'Person';
+
   return (
     <div id="ner-select-bar" ref={elRef} style={{ display: visible ? 'flex' : 'none' }}>
       <label id="ner-select-label">{labelText}</label>
-      <select
-        id="ner-select-type"
-        className="form-select form-select-sm"
-        value={type}
-        onChange={(e) => setType(e.target.value)}
-      >
-        <option value="">— label —</option>
-        <option value="PER">Person</option>
-        <option value="LOC">Location</option>
-        <option value="ORG">Organization</option>
-      </select>
-      <button
-        id="ner-select-apply"
-        className="btn btn-sm btn-primary"
-        onClick={() => onApply(type)}
-      >
-        <i className="fa-solid fa-check me-1" />
-        Apply
-      </button>
-      <button
-        id="ner-select-delete"
-        className="btn btn-sm btn-outline-danger"
-        onClick={() => onApply('NONE')}
-      >
-        <i className="fa-solid fa-trash me-1" />
-        Delete
-      </button>
+
+      <div className="btn-group btn-group-sm" role="group">
+        <button
+          id="ner-select-apply"
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onApply(type)}
+        >
+          <i className="fa-solid fa-check me-1" />
+          {typeLabel}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary dropdown-toggle dropdown-toggle-split"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <span className="visually-hidden">More entity types</span>
+        </button>
+        <ul className="dropdown-menu">
+          {ENTITY_TYPES.map((et) => (
+            <li key={et.value}>
+              <a
+                className={'dropdown-item' + (et.value === type ? ' active' : '')}
+                href="#"
+                onClick={(e) => { e.preventDefault(); setType(et.value); onApply(et.value); }}
+              >
+                {et.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {hasEntities && (
+        <button
+          id="ner-select-delete"
+          className="btn btn-sm btn-outline-danger"
+          onClick={() => onApply('NONE')}
+        >
+          <i className="fa-solid fa-trash me-1" />
+          Delete
+        </button>
+      )}
+
       <button
         id="ner-select-cancel"
         className="btn btn-sm btn-outline-secondary"

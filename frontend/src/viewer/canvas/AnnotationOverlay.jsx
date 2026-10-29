@@ -9,7 +9,7 @@ export default function AnnotationOverlay({ scale }) {
   const { annotations, annotation, words } = useViewerState();
 
   if (annotation.phase === 'labeling') {
-    const taggedIds = new Set(annotation.pendingSubcomps.map((s) => s.word_id));
+    const taggedIds = new Set((annotation.pendingSubcomps || []).map((s) => s.word_id));
     return words.map((w) => {
       if (annotation.pendingBbox) {
         const rb = annotation.pendingBbox;

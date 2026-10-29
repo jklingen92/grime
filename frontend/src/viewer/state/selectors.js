@@ -105,7 +105,8 @@ export function highlightWordIdSet(words, highlightKey) {
 
 // Return CSS class for an OCR overlay box.
 export function ocrWordClass(w) {
-  if (w.corrected_text) return 'ocr-word ' + (w.is_ditto ? 'conf-ditto' : 'corrected');
+  if (w.is_ditto) return 'ocr-word conf-ditto';
+  if (w.corrected_text) return 'ocr-word corrected';
   return 'ocr-word ' + (w.conf < 60 ? 'conf-low' : w.conf < 80 ? 'conf-mid' : 'conf-high');
 }
 
