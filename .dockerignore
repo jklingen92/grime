@@ -1,0 +1,11 @@
+# Keep local state and secrets out of the deploy/Dockerfile build context.
+.git
+.env
+.venv
+node_modules
+media
+staticfiles
+db.sqlite3
+**/__pycache__
+*.egg-info
+deploy/.env

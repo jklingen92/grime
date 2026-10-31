@@ -70,6 +70,14 @@ dev = [
     "pre-commit",
     "django-extensions>=4.1",
     "honcho",
+    "psycopg[binary]",
+]
+# Serving the demo project in production (see deploy/).
+# django-extensions is here because demo/settings.py installs it.
+prod = [
+    "gunicorn",
+    "psycopg[binary]",
+    "django-extensions>=4.1",
 ]
 
 [tool.setuptools.package-data]

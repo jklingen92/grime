@@ -33,6 +33,9 @@ npm run build
 # Copy and configure environment variables
 cp .env.example .env  # edit SECRET_KEY and any AWS/broker settings
 
+# Start the dev Postgres container (matches DATABASE_URL in .env.example)
+docker compose -f deploy/compose.dev.yaml up -d
+
 # Run database migrations
 python manage.py migrate   # also seeds WorkerSlot rows via post_migrate signal
 
@@ -85,6 +88,77 @@ npm run dev          # watch mode — rebuilds on every save
 
 The `js` process in the `Procfile` runs watch mode automatically when you
 use `honcho start`.
+
+
+## Deployment
+
+`deploy/` runs the demo project in Docker Compose: Postgres, gunicorn, one
+GPU worker per slot, and Caddy serving static/media. Caddy binds only to the
+host's ZeroTier IP (`BIND_IP`), so the app is reachable only by devices
+authorized on the ZeroTier network. The prod stack (`grime-prod`) is separate
+from the dev Postgres (`grime-dev`, `deploy/compose.dev.yaml`).
+
+### Host setup (once)
+
+The host needs Docker, ZeroTier, and the NVIDIA container toolkit so workers
+can use the GPU for NER.
+
+```bash
+# Let your user talk to Docker (root-equivalent); start a fresh login after,
+# since existing shells and tmux servers keep the old groups.
+sudo usermod -aG docker $USER
+
+# NVIDIA container toolkit (from NVIDIA's install docs)
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# The host's ZeroTier IP goes in BIND_IP and ALLOWED_HOSTS
+sudo zerotier-cli listnetworks
+```
+
+### First deploy
+
+```bash
+cp deploy/.env.example deploy/.env       # fill in SECRET_KEY, POSTGRES_PASSWORD, BIND_IP, ALLOWED_HOSTS
+docker compose -f deploy/compose.yaml up -d --build    # first build pulls torch/CUDA (several GB)
+docker compose -f deploy/compose.yaml run --rm web python manage.py migrate
+docker compose -f deploy/compose.yaml run --rm web python manage.py createsuperuser
+```
+
+Workers crash-loop until `migrate` has run, then recover on their own.
+Visit `http://<zerotier-ip>:8080`.
+
+### Checks
+
+```bash
+docker compose -f deploy/compose.yaml ps
+docker compose -f deploy/compose.yaml logs --tail 50 worker1
+# Workers see the GPU; prints True
+docker compose -f deploy/compose.yaml exec worker1 python -c "import torch; print(torch.cuda.is_available())"
+```
+
+### Deploying new code
+
+```bash
+git pull
+docker compose -f deploy/compose.yaml up -d --build
+docker compose -f deploy/compose.yaml run --rm web python manage.py migrate
+```
+
+### Adding a user
+
+1. They install ZeroTier and join the network ID.
+2. Authorize their device in ZeroTier Central (my.zerotier.com → network → Members).
+3. Create a regular (non-superuser) account at `http://<zerotier-ip>:8080/admin/`.
+4. They open `http://<zerotier-ip>:8080`, typing the `http://`; there's no HTTPS.
+
+On a Chromebook, ZeroTier must be on in the ChromeOS app (VPN icon by the
+clock). ZeroTier inside the Linux container doesn't route Chrome's traffic.
 
 
 ## Management commands
