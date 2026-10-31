@@ -260,5 +260,16 @@ python manage.py test --settings=demo.test_settings
 npm test
 ```
 
+To run the frontend tests in real Chromium, Firefox and WebKit (Safari's
+engine) instead of jsdom:
+
+```bash
+npx playwright install --with-deps chromium firefox webkit  # once
+npm run test:browsers
+```
+
+This is opt-in; `npm test` needs no browser downloads. The browser config
+could not be run in the agent environment (browser binaries are unavailable).
+
 `npm ci` currently fails on a `@vitejs/plugin-react` / `vite@8` peer
 conflict; use `npm ci --legacy-peer-deps` until that is resolved.
