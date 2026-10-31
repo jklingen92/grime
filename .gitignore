@@ -219,6 +219,7 @@ __marimo__/
 
 # Grime demo project local state
 /media/
+/staticfiles/
 /demo/db.sqlite3
 
 # VSCode
@@ -226,3 +227,5 @@ __marimo__/
 
 # Node
 node_modules
+.venv/
+node_modules/

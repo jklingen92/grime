@@ -61,11 +61,9 @@ TEMPLATES = [
 WSGI_APPLICATION = "demo.wsgi.application"
 ASGI_APPLICATION = "demo.asgi.application"
 
+# e.g. DATABASE_URL=postgres://grime:pass@db:5432/grime; SQLite when unset.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 }
 
 LANGUAGE_CODE = "en-us"
@@ -75,7 +73,9 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# Overridden in deploy/compose.yaml so the reverse proxy can serve both from shared volumes.
+STATIC_ROOT = env.path("STATIC_ROOT", default=BASE_DIR / "staticfiles")
+MEDIA_ROOT = env.path("MEDIA_ROOT", default=BASE_DIR / "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
