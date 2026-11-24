@@ -36,6 +36,7 @@ from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Count, Max
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -64,6 +65,7 @@ def get_viewer_urls() -> list:
     endpoints = [
         ("words/correct/", word_correct, "word_correct"),
         ("words/add/", word_add, "word_add"),
+        ("words/restore/", word_restore, "word_restore"),
         ("words/delete/", word_delete, "word_delete"),
         ("words/ner-correct/", word_ner_correct, "word_ner_correct"),
         ("words/mark-ditto/", word_mark_ditto, "word_mark_ditto"),
@@ -239,6 +241,7 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ner_correct_url": _url("grime_documentpage_viewer_word_ner_correct"),
         "ocr_correct_url": _url("grime_documentpage_viewer_word_correct"),
         "ocr_add_word_url": _url("grime_documentpage_viewer_word_add"),
+        "ocr_restore_url": _url("grime_documentpage_viewer_word_restore"),
         "ocr_delete_url": _url("grime_documentpage_viewer_word_delete"),
         "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
@@ -331,6 +334,70 @@ def word_add(request: HttpRequest, page_pk: int) -> JsonResponse:
     )
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "word": _word_to_dict(word), "updated": updated})
+
+
+@require_POST
+def word_restore(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Re-create a deleted Word from a full snapshot (undo of word_delete).
+
+    Unlike word_add this keeps ocr_text, conf and the (line_num, word_num)
+    slot. If the slot is taken, the words from it onward on that line shift
+    right by one. The page is not re-numbered, so the slot survives; only
+    ditto resolution runs.
+
+    POST body: JSON snapshot as produced by _word_to_dict (``id`` ignored).
+    """
+    from grime.pipeline.ditto import resolve_page
+
+    page = DocumentPage.objects.filter(pk=page_pk).first()
+    if page is None:
+        return JsonResponse({"error": "Page not found"}, status=404)
+    try:
+        snap = json.loads(request.body)
+        ints = {
+            k: int(snap[k])
+            for k in ("left", "top", "width", "height", "line_num", "word_num")
+        }
+        conf = float(snap["conf"])
+    except (KeyError, TypeError, ValueError):
+        return JsonResponse({"error": "Invalid word snapshot"}, status=400)
+    if ints["width"] <= 0 or ints["height"] <= 0:
+        return JsonResponse({"error": "Region must have positive size"}, status=400)
+    if min(ints.values()) < 0:
+        return JsonResponse({"error": "Negative coordinates or order"}, status=400)
+
+    corrected = snap.get("corrected_text") or None
+    with transaction.atomic():
+        # Descending so each +1 lands on a slot already vacated (unique_together).
+        shifted = list(
+            Word.objects.filter(
+                page=page, line_num=ints["line_num"], word_num__gte=ints["word_num"]
+            ).order_by("-word_num")
+        )
+        for w in shifted:
+            w.word_num += 1
+            w.save(update_fields=["word_num"])
+        word = Word.objects.create(
+            page=page,
+            conf=conf,
+            ocr_text=snap.get("ocr_text") or "",
+            corrected_text=corrected,
+            corrected_ocr_by=request.user if corrected else None,
+            corrected_ocr_at=timezone.now() if corrected else None,
+            is_ditto=bool(snap.get("is_ditto")),
+            ner_label=snap.get("ner_label") or None,
+            corrected_label=snap.get("corrected_label"),
+            **ints,
+        )
+    updated = resolve_page(page, user=request.user)
+    return JsonResponse(
+        {
+            "ok": True,
+            "word": _word_to_dict(word),
+            "shifted": [{"id": w.pk, "word_num": w.word_num} for w in shifted],
+            "updated": updated,
+        }
+    )
 
 
 @require_POST

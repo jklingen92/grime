@@ -8,6 +8,7 @@ import { useViewerConfig, useViewerDispatch, useViewerState } from './state/View
 import { isDirty, isIdentity, slidersToParams } from './state/imageParams.js';
 import {
   addWord,
+  restoreWord,
   bulkDeleteWords,
   bulkMarkDitto,
   correctNerLabel,
@@ -115,15 +116,14 @@ export default function ViewerApp() {
     return data.deleted_ids;
   }
 
-  // Re-create deleted words from snapshots. The add endpoint only takes a
-  // bbox and text, so the text comes back as a correction on line 0 (the
-  // original ocr_text, confidence and reading order are not restored).
-  // Returns the new ids.
+  // Re-create deleted words from full snapshots, keeping text fields,
+  // confidence and reading-order slot. Returns the new ids.
   async function restoreWords(snaps) {
     const ids = [];
     for (const snap of snaps) {
-      const data = await addWord(config, snap, snap.corrected_text || snap.ocr_text);
+      const data = await restoreWord(config, snap);
       if (!data.ok) continue;
+      data.shifted.forEach(({ id, word_num }) => dispatch({ type: 'WORD_PATCH', id, patch: { word_num } }));
       dispatch({ type: 'WORD_ADD', word: data.word });
       dispatch({ type: 'HISTORY_REMAP_ID', from: snap.id, to: data.word.id });
       applyOcrUpdated(data.updated);

@@ -10,6 +10,7 @@
 export const DEMO_URLS = {
   correctUrl: 'demo:words/correct',
   addWordUrl: 'demo:words/add',
+  restoreWordUrl: 'demo:words/restore',
   deleteUrl: 'demo:words/delete',
   nerCorrectUrl: 'demo:words/ner-correct',
   markAsDittoUrl: 'demo:words/mark-ditto',
@@ -87,6 +88,25 @@ export function installMockServer(store, { originalImageUrl, onChange }) {
       };
       store.words.push(word);
       return ok({ word, updated: [] });
+    },
+    'words/restore': (f, json) => {
+      const keys = ['left', 'top', 'width', 'height', 'line_num', 'word_num'];
+      if (!json || keys.some((k) => !Number.isInteger(json[k])) || typeof json.conf !== 'number') {
+        return err(400, 'Invalid word snapshot');
+      }
+      if (json.width <= 0 || json.height <= 0) return err(400, 'Region must have positive size');
+      if (keys.some((k) => json[k] < 0)) return err(400, 'Negative coordinates or order');
+      const shifted = store.words
+        .filter((w) => w.line_num === json.line_num && w.word_num >= json.word_num)
+        .map((w) => ({ id: w.id, word_num: ++w.word_num }));
+      const word = {
+        id: newId(), ...Object.fromEntries(keys.map((k) => [k, json[k]])),
+        conf: json.conf, ocr_text: json.ocr_text || '', corrected_text: json.corrected_text || null,
+        is_ditto: !!json.is_ditto, ner_label: json.ner_label || null,
+        corrected_label: json.corrected_label ?? null,
+      };
+      store.words.push(word);
+      return ok({ word, shifted, updated: [] });
     },
     'words/delete': (f) => {
       const w = findWord(f.get('word_pk'));
