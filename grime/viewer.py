@@ -15,7 +15,6 @@ Endpoints implemented here:
     POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
     POST words/bulk-delete/   — delete multiple Words at once
     POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
-    POST words/rerun-ner/     — re-run HF NER on the page
     POST annotations/create/  — create an Annotation on this page
     POST annotations/update/  — edit an existing Annotation
     POST annotations/delete/  — delete an Annotation
@@ -69,7 +68,6 @@ def get_viewer_urls() -> list:
         ("words/mark-ditto/", word_mark_ditto, "word_mark_ditto"),
         ("words/bulk-delete/", words_bulk_delete, "words_bulk_delete"),
         ("words/bulk-ditto/", words_bulk_ditto, "words_bulk_ditto"),
-        ("words/rerun-ner/", words_rerun_ner, "words_rerun_ner"),
         ("annotations/create/", annotation_create, "annotation_create"),
         ("annotations/update/", annotation_update, "annotation_update"),
         ("annotations/delete/", annotation_delete, "annotation_delete"),
@@ -776,81 +774,6 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     page = DocumentPage.objects.get(pk=page_pk)
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
-
-
-@require_POST
-def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
-    """Run (or re-run) HuggingFace NER on a page and return updated word labels.
-
-    Clears existing NERPass records and ner_label values, then runs the HF NER
-    pipeline, saving results as a new NERPass. Returns the full word list with
-    updated ner_label fields so the viewer can refresh without a reload.
-
-    POST params:
-      ``model``  NER model key (optional; defaults to DEFAULT_MODEL).
-                 Must be a key in MODEL_REGISTRY.
-    """
-    page = DocumentPage.objects.filter(pk=page_pk).first()
-    if page is None:
-        return JsonResponse({"error": "Page not found"}, status=404)
-
-    from grime.models import NERPass, Word
-    from grime.pipeline.ner import (
-        DEFAULT_CONFIDENCE_THRESHOLD,
-        extract_entities,
-        label_ocr_words,
-    )
-
-    model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
-    if model_key not in _NER_MODEL_REGISTRY:
-        return JsonResponse(
-            {
-                "error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"
-            },
-            status=400,
-        )
-
-    schema_name = f"hf-ner-{model_key}"
-    try:
-        NERPass.objects.filter(page=page, schema_name=schema_name).delete()
-        words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
-        if not words:
-            return JsonResponse(
-                {"error": "Page has no words to run NER on"}, status=400
-            )
-        Word.objects.filter(page=page).update(ner_label=None)
-        text = page.text or " ".join(
-            (w.corrected_text if w.corrected_text is not None else w.ocr_text) or ""
-            for w in words
-        )
-        if not text.strip():
-            return JsonResponse({"error": "Page has no text to run NER on"}, status=400)
-        entities = extract_entities(
-            text, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD, model=model_key
-        )
-        ner_pass = NERPass.objects.create(
-            page=page,
-            schema_name=schema_name,
-            method=f"hf-ner-{model_key}",
-            used_llm=False,
-            threshold=DEFAULT_CONFIDENCE_THRESHOLD,
-            status=NERPass.STATUS_COMPLETE,
-        )
-        label_ocr_words(words, text, entities)
-        labelled = [w for w in words if w.ner_label]
-        if labelled:
-            for w in labelled:
-                w.ner_pass = ner_pass
-            Word.objects.bulk_update(labelled, ["ner_pass"])
-    except Exception as exc:
-        return JsonResponse({"error": f"NER failed: {exc}"}, status=500)
-
-    words = list(
-        Word.objects.filter(page=page)
-        .order_by("line_num", "word_num")
-        .values("id", "ner_label", "corrected_label")
-    )
-    return JsonResponse({"ok": True, "words": words, "model": model_key})
 
 
 # ---------------------------------------------------------------------------
