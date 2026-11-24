@@ -19,6 +19,11 @@ export function addWord(config, bbox, correctedText) {
   return postForm(config.addWordUrl, body, config.csrfToken);
 }
 
+// snap: a full word dict (as sent in ocr_words_json).
+export function restoreWord(config, snap) {
+  return postJson(config.restoreWordUrl, snap, config.csrfToken);
+}
+
 export function deleteWord(config, wordPk) {
   return postForm(config.deleteUrl, 'word_pk=' + encodeURIComponent(wordPk), config.csrfToken);
 }
