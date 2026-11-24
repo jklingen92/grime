@@ -2,6 +2,7 @@
 // (`python manage.py export_demo --page A --page B` -> demo-data/). Rows mirror
 // grime/templates/grime/document_list.html; titles open viewer.html?page=<pk>.
 
+import './version.js';
 import { showTour } from './tour.js';
 import tourText from './tour-text.js';
 

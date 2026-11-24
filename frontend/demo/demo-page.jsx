@@ -5,6 +5,7 @@
 //
 //   npm run build:demo   # -> dist-demo/, served from /grime/
 
+import './version.js';
 import { DEMO_URLS, installMockServer } from './mockServer.js';
 import { showTour } from './tour.js';
 import tourText from './tour-text.js';
