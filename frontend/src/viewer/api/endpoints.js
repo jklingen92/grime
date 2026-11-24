@@ -3,10 +3,11 @@
 
 import { postEmpty, postForm, postJson } from './client.js';
 
-export function correctWord(config, wordPk, correctedText) {
-  return postForm(
-    config.correctUrl,
-    'word_pk=' + encodeURIComponent(wordPk) + '&corrected_text=' + encodeURIComponent(correctedText ?? ''),
+// changes: [{ wordId, text }]; '' or null clears the correction.
+export function bulkCorrectWords(config, changes) {
+  return postJson(
+    config.bulkCorrectUrl,
+    { changes: changes.map(({ wordId, text }) => ({ word_pk: wordId, text: text ?? '' })) },
     config.csrfToken,
   );
 }
@@ -48,13 +49,12 @@ export function bulkMarkDitto(config, wordPks) {
 }
 
 // label mirrors Word.corrected_label: null drops the correction (fall back to
-// the model's ner_label), '' explicitly clears it (the server's 'NONE'), and
-// 'B-PER' etc. set it. Undo needs all three to round-trip.
-export function correctNerLabel(config, wordId, label) {
-  const raw = label === '' ? 'NONE' : label ?? '';
-  return postForm(
-    config.nerCorrectUrl,
-    'word_id=' + encodeURIComponent(wordId) + '&label=' + encodeURIComponent(raw),
+// the model's ner_label), '' explicitly clears it, and 'B-PER' etc. set it.
+// Undo needs all three to round-trip; JSON keeps null and '' distinct.
+export function bulkCorrectNerLabels(config, labels) {
+  return postJson(
+    config.nerBulkCorrectUrl,
+    { changes: labels.map(({ wordId, label }) => ({ word_id: wordId, label })) },
     config.csrfToken,
   );
 }

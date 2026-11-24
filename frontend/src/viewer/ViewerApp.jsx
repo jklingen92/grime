@@ -8,10 +8,10 @@ import { useViewerConfig, useViewerDispatch, useViewerState } from './state/View
 import { isDirty, isIdentity, slidersToParams } from './state/imageParams.js';
 import {
   addWord,
+  bulkCorrectNerLabels,
+  bulkCorrectWords,
   bulkDeleteWords,
   bulkMarkDitto,
-  correctNerLabel,
-  correctWord,
   deleteWord,
   markWordDitto,
   resetImage,
@@ -88,15 +88,13 @@ export default function ViewerApp() {
   // changes: [{ wordId, text }]; '' or null clears the correction.
   // Returns the ids the server accepted.
   async function setCorrections(changes) {
-    const done = [];
-    for (const { wordId, text } of changes) {
-      const data = await correctWord(config, wordId, text ?? '');
-      if (!data.ok) continue;
-      dispatch({ type: 'WORD_PATCH', id: wordId, patch: { corrected_text: data.corrected_text || null } });
-      applyOcrUpdated(data.updated);
-      done.push(wordId);
+    const data = await bulkCorrectWords(config, changes);
+    if (!data.ok) return [];
+    for (const r of data.results) {
+      dispatch({ type: 'WORD_PATCH', id: r.word_pk, patch: { corrected_text: r.corrected_text || null } });
     }
-    return done;
+    applyOcrUpdated(data.updated);
+    return data.results.map((r) => r.word_pk);
   }
 
   // Returns the deleted ids.
@@ -148,17 +146,15 @@ export default function ViewerApp() {
     return marked.map((id) => ({ wordId: id, prevText: prevText[id] }));
   }
 
-  // labels: [{ wordId, label }] with correctNerLabel's null / '' / value
+  // labels: [{ wordId, label }] with bulkCorrectNerLabels' null / '' / value
   // meaning. Returns the ids the server accepted.
   async function setNerLabels(labels) {
-    const done = [];
-    for (const { wordId, label } of labels) {
-      const data = await correctNerLabel(config, wordId, label);
-      if (!data?.ok) continue;
-      dispatch({ type: 'WORD_PATCH', id: wordId, patch: { corrected_label: label } });
-      done.push(wordId);
+    const data = await bulkCorrectNerLabels(config, labels);
+    if (!data?.ok) return [];
+    for (const r of data.results) {
+      dispatch({ type: 'WORD_PATCH', id: r.word_id, patch: { corrected_label: r.label } });
     }
-    return done;
+    return data.results.map((r) => r.word_id);
   }
 
   function record(entry) {

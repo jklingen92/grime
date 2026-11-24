@@ -15,6 +15,8 @@ export const DEMO_URLS = {
   markAsDittoUrl: 'demo:words/mark-ditto',
   bulkDeleteUrl: 'demo:words/bulk-delete',
   bulkDittoUrl: 'demo:words/bulk-ditto',
+  bulkCorrectUrl: 'demo:words/bulk-correct',
+  nerBulkCorrectUrl: 'demo:words/bulk-ner-correct',
   annotationCreateUrl: 'demo:annotations/create',
   annotationUpdateUrl: 'demo:annotations/update',
   annotationDeleteUrl: 'demo:annotations/delete',
@@ -123,6 +125,30 @@ export function installMockServer(store, { originalImageUrl, onChange }) {
       if (!marked.length) return err(404, 'No words found on this page');
       marked.forEach(markDitto);
       return ok({ marked_pks: marked.map((w) => w.id), updated: [] });
+    },
+    'words/bulk-correct': (f, json) => {
+      const changes = json?.changes || [];
+      const words = changes.map((c) => findWord(c.word_pk));
+      if (!words.length) return err(400, 'No changes provided');
+      if (words.some((w) => !w)) return err(404, 'Word not found on this page');
+      const results = changes.map((c, i) => {
+        words[i].corrected_text = String(c.text || '').trim() || null;
+        return { word_pk: words[i].id, corrected_text: words[i].corrected_text };
+      });
+      return ok({ results, updated: [] });
+    },
+    'words/bulk-ner-correct': (f, json) => {
+      const changes = json?.changes || [];
+      const words = changes.map((c) => findWord(c.word_id));
+      if (!words.length) return err(400, 'No changes provided');
+      if (words.some((w) => !w)) return err(404, 'Word not found on this page');
+      const bad = changes.find((c) => !VALID_NER_LABELS.has(c.label));
+      if (bad) return err(400, `Invalid label ${bad.label}`);
+      const results = changes.map((c, i) => {
+        words[i].corrected_label = c.label;
+        return { word_id: words[i].id, label: c.label };
+      });
+      return ok({ results });
     },
     'annotations/create': (f) => {
       const [fields, e] = parseAnnotation(f);
