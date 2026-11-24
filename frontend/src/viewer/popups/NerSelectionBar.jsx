@@ -71,6 +71,8 @@ export default function NerSelectionBar({ wrapRef, onApply }) {
       <button
         id="ner-select-apply"
         className="btn btn-sm btn-primary"
+        // No type chosen: Apply would otherwise act like Delete.
+        disabled={!type}
         onClick={() => onApply(type)}
       >
         <i className="fa-solid fa-check me-1" />

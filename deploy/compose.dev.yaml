@@ -1,0 +1,23 @@
+# Postgres for local development, separate from the prod stack in compose.yaml.
+#   docker compose -f deploy/compose.dev.yaml up -d
+# Then in .env: DATABASE_URL=postgres://grime:grime@127.0.0.1:5432/grime
+
+# Explicit project name; both files live in deploy/ and would otherwise share one.
+name: grime-dev
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: grime
+      POSTGRES_PASSWORD: grime
+      POSTGRES_DB: grime
+    # Loopback only; the dev DB isn't exposed to the LAN or VPN.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+
+volumes:
+  pgdata-dev:

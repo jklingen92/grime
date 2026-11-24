@@ -34,7 +34,7 @@ export default function NerPanel() {
     <div id="dp-ner-panel" className="visible">
       <h3>Entities</h3>
       <div id="dp-ner-instructions">
-        <span>Click a word to edit · drag or shift-click to multi-select.</span>
+        <span>Click an entity to select it · drag or shift-click to select words, then label them.</span>
         <div id="dp-ner-legend-block">
           <span className="dp-ner-legend-title">NER highlights</span>
           <span>

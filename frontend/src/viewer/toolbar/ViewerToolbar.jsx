@@ -3,9 +3,11 @@
 import { useMemo } from 'react';
 import { useViewerConfig, useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
 import { isDirty } from '../state/imageParams.js';
+import { isDemoDisabled } from '../state/selectors.js';
 import TabBar from './TabBar.jsx';
 import ZoomControls from './ZoomControls.jsx';
 import PageNav from './PageNav.jsx';
+import DemoDisabled from '../DemoDisabled.jsx';
 
 export default function ViewerToolbar({
   onFit,
@@ -52,16 +54,18 @@ export default function ViewerToolbar({
           <>
             <div className="dp-toolbar-sep" id="dp-sep-ocr" style={{ display: tab === 'ocr' ? '' : 'none' }} />
             <div id="dp-ocr-actions" className={tab === 'ocr' ? 'visible' : ''}>
-              <button
-                id="dp-rerun-ocr"
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                style={{ display: jobRunning.ocr ? 'none' : '' }}
-                onClick={() => onOpenJobModal('ocr')}
-              >
-                <i className="fa-solid fa-gears me-1" />
-                {ocrBtnLabel}
-              </button>
+              <DemoDisabled feature="jobs">
+                <button
+                  id="dp-rerun-ocr"
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  style={{ display: jobRunning.ocr ? 'none' : '' }}
+                  onClick={() => onOpenJobModal('ocr')}
+                >
+                  <i className="fa-solid fa-gears me-1" />
+                  {ocrBtnLabel}
+                </button>
+              </DemoDisabled>
               <span
                 id="dp-rerun-ocr-spinner"
                 className="dp-job-spinner"
@@ -96,16 +100,18 @@ export default function ViewerToolbar({
 
             <div className="dp-toolbar-sep" id="dp-sep-ner" style={{ display: tab === 'ner' ? '' : 'none' }} />
             <div id="dp-ner-split" style={{ display: tab === 'ner' ? '' : 'none' }}>
-              <button
-                id="dp-rerun-ner"
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                style={{ display: jobRunning.ner ? 'none' : '' }}
-                onClick={() => onOpenJobModal('ner')}
-              >
-                <i className="fa-solid fa-tags me-1" />
-                {nerBtnLabel}
-              </button>
+              <DemoDisabled feature="jobs">
+                <button
+                  id="dp-rerun-ner"
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  style={{ display: jobRunning.ner ? 'none' : '' }}
+                  onClick={() => onOpenJobModal('ner')}
+                >
+                  <i className="fa-solid fa-tags me-1" />
+                  {nerBtnLabel}
+                </button>
+              </DemoDisabled>
               <span
                 id="dp-rerun-ner-spinner"
                 className="dp-job-spinner"
@@ -144,28 +150,32 @@ export default function ViewerToolbar({
         </span>
 
         {config.exportPdfUrl && (
-          <a
-            href={config.exportPdfUrl}
-            className="btn btn-sm btn-outline-secondary"
-            style={{ marginLeft: 'auto' }}
-            title="Download this page as a searchable PDF"
-          >
-            Export PDF
-          </a>
+          <DemoDisabled feature="exportPdf">
+            <a
+              href={config.exportPdfUrl}
+              className="btn btn-sm btn-outline-secondary"
+              style={{ marginLeft: 'auto' }}
+              title="Download this page as a searchable PDF"
+            >
+              Export PDF
+            </a>
+          </DemoDisabled>
         )}
-        <button
-          id="dp-image-save-btn"
-          type="button"
-          className="btn btn-sm btn-warning"
-          style={{
-            display: imageDirty ? '' : 'none',
-            marginLeft: config.exportPdfUrl ? '' : 'auto',
-          }}
-          onClick={onSaveImage}
-        >
-          <i className="fa-solid fa-floppy-disk me-1" />
-          Save adjusted image
-        </button>
+        {!isDemoDisabled(config, 'imageSave') && (
+          <button
+            id="dp-image-save-btn"
+            type="button"
+            className="btn btn-sm btn-warning"
+            style={{
+              display: imageDirty ? '' : 'none',
+              marginLeft: config.exportPdfUrl ? '' : 'auto',
+            }}
+            onClick={onSaveImage}
+          >
+            <i className="fa-solid fa-floppy-disk me-1" />
+            Save adjusted image
+          </button>
+        )}
       </div>
     </>
   );

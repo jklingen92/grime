@@ -1,6 +1,5 @@
 // Shared HTTP helpers for the viewer. All viewer endpoints accept form-encoded
-// bodies and return JSON; postForm matches the legacy viewer-core.postJson
-// shape so the Django endpoints can stay untouched.
+// bodies and return JSON (image save takes JSON via postJson).
 
 export function postForm(url, body, csrfToken) {
   return fetch(url, {

@@ -1,0 +1,11 @@
+/* Shared chrome for the static demo pages (index.html, viewer.html). The real
+   app gets these from grime/templates/grime/base.html. */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: "Roboto","Lucida Grande","DejaVu Sans","Bitstream Vera Sans",Verdana,Arial,sans-serif; }
+#gd-header { background: #417690; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+#gd-header a { color: #c8dce8; text-decoration: none; }
+#gd-header a:hover { text-decoration: underline; }
+#gd-header h1 { margin: 0; font-size: 1em; font-weight: 600; }
+#demo-banner { background: #fff3cd; color: #664d03; border-bottom: 1px solid #ffe69c; padding: 6px 16px; font-size: 0.85em; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#demo-banner a { color: inherit; }
+#demo-reset { margin-left: auto; }

@@ -131,3 +131,9 @@ export function nerSuggestSubcomps(words, bbox) {
   });
   return out;
 }
+
+// True when the static demo (frontend/demo) has turned off a server-backed
+// feature. The real app never sets demoDisabled, so this is always false there.
+export function isDemoDisabled(config, feature) {
+  return (config.demoDisabled || []).includes(feature);
+}

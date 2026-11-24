@@ -1,4 +1,5 @@
-import { useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
+import { useViewerConfig, useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
+import { isDemoDisabled } from '../state/selectors.js';
 
 const TABS = [
   { key: 'ocr', label: 'OCR', icon: 'fa-font' },
@@ -8,11 +9,14 @@ const TABS = [
 ];
 
 export default function TabBar() {
+  const config = useViewerConfig();
   const { tab } = useViewerState();
   const dispatch = useViewerDispatch();
+  // Unlike buttons, demo-disabled tabs are removed outright.
+  const tabs = TABS.filter((t) => !isDemoDisabled(config, t.key));
   return (
     <div id="dp-tabs" className="nav nav-tabs">
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <button
           key={t.key}
           id={'tab-' + t.key}

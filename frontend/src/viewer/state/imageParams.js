@@ -1,6 +1,6 @@
 // Image-adjustment helpers shared between the panel, the SVG filter, and
-// the save/reset endpoints. Must stay numerically identical to
-// grime/static/grime/viewer-image.js so previews match server output.
+// the save/reset endpoints. buildLut must stay numerically identical to
+// _build_image_lut in grime/viewer.py so previews match server output.
 
 import { IMAGE_DEFAULTS } from './initialState.js';
 

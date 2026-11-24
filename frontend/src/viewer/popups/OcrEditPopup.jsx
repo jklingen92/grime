@@ -72,6 +72,8 @@ export default function OcrEditPopup({ popup, wrapRef, onClose, onConfirm, onSav
         </div>
       )}
       <input
+        // Uncontrolled: remount when the target changes so defaultValue applies.
+        key={isDraw ? 'draw' : isMulti ? 'multi' : word?.id}
         ref={inputRef}
         type="text"
         id="ocr-popup-input"
@@ -98,7 +100,8 @@ export default function OcrEditPopup({ popup, wrapRef, onClose, onConfirm, onSav
           <button
             id="ocr-popup-confirm"
             className="btn btn-sm btn-primary"
-            onClick={() => onConfirm()}
+            // Same path as Enter: typed text is saved, an empty box confirms as-is.
+            onClick={handleConfirm}
           >
             <i className="fa-solid fa-check me-1" />
             Confirm

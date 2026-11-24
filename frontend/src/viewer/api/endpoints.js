@@ -47,10 +47,14 @@ export function bulkMarkDitto(config, wordPks) {
   );
 }
 
+// label mirrors Word.corrected_label: null drops the correction (fall back to
+// the model's ner_label), '' explicitly clears it (the server's 'NONE'), and
+// 'B-PER' etc. set it. Undo needs all three to round-trip.
 export function correctNerLabel(config, wordId, label) {
+  const raw = label === '' ? 'NONE' : label ?? '';
   return postForm(
     config.nerCorrectUrl,
-    'word_id=' + encodeURIComponent(wordId) + '&label=' + encodeURIComponent(label || 'NONE'),
+    'word_id=' + encodeURIComponent(wordId) + '&label=' + encodeURIComponent(raw),
     config.csrfToken,
   );
 }

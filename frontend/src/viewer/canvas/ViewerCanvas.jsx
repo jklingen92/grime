@@ -384,9 +384,6 @@ export default function ViewerCanvas({
       const vr = viewer.getBoundingClientRect();
 
       if (g.type === 'annotation-resize') {
-        // Bbox change is recorded via undo when the user clicks Save; we don't
-        // record bbox-change undo entries for live resizes here (the legacy
-        // viewer-annotation.js:460 did record one — TODO).
         gestureRef.current = null;
         dispatch({ type: 'ANNOTATION_SET_RESIZING', resizing: null });
         return;

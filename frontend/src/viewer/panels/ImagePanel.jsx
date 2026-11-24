@@ -1,9 +1,12 @@
 // Image adjustment controls. Live updates patch state.image.current; the
 // SVG filter and image src/transform respond automatically.
 
+import { useRef } from 'react';
 import { useViewerConfig, useViewerDispatch, useViewerState } from '../state/ViewerContext.jsx';
 import { autoContrastImage } from '../api/endpoints.js';
-import { formatSliderVal } from '../state/imageParams.js';
+import { formatSliderVal, isDirty } from '../state/imageParams.js';
+import { IMAGE_DEFAULTS } from '../state/initialState.js';
+import DemoDisabled from '../DemoDisabled.jsx';
 
 export default function ImagePanel() {
   const config = useViewerConfig();
@@ -12,12 +15,44 @@ export default function ImagePanel() {
 
   const sliders = state.image.current;
 
+  // ── Undo history: one 'image-adjust' entry per discrete change or per
+  // completed slider drag, never per drag frame.
+  function record(prev, next) {
+    if (isDirty(next, prev)) dispatch({ type: 'PUSH_UNDO', entry: { type: 'image-adjust', prev, next } });
+  }
+
+  // Buttons, checkbox, autocontrast: apply and record in one step.
+  function applyPatch(patch) {
+    dispatch({ type: 'IMAGE_PATCH_CURRENT', patch });
+    record(sliders, { ...sliders, ...patch });
+  }
+
+  // Sliders: onChange only previews; the drag (pointer) or key press is
+  // recorded when it ends, against the values captured when it began.
+  const slideStartRef = useRef(null);
+  function beginSlide(e) {
+    // Ctrl/Cmd+Z on a focused slider is undo, not a slide.
+    if (e.ctrlKey || e.metaKey) return;
+    if (!slideStartRef.current) slideStartRef.current = sliders;
+  }
+  function endSlide() {
+    if (!slideStartRef.current) return;
+    record(slideStartRef.current, sliders);
+    slideStartRef.current = null;
+  }
+  const slideHandlers = {
+    onPointerDown: beginSlide,
+    onPointerUp: endSlide,
+    onKeyDown: beginSlide,
+    onKeyUp: endSlide,
+  };
+
   function patchSlider(key, value) {
     dispatch({ type: 'IMAGE_PATCH_CURRENT', patch: { [key]: value } });
   }
 
   function toggleBool(key) {
-    dispatch({ type: 'IMAGE_PATCH_CURRENT', patch: { [key]: !sliders[key] } });
+    applyPatch({ [key]: !sliders[key] });
   }
 
   async function onAutoContrast() {
@@ -28,10 +63,7 @@ export default function ImagePanel() {
         alert(data.error || 'Auto contrast failed.');
         return;
       }
-      dispatch({
-        type: 'IMAGE_PATCH_CURRENT',
-        patch: { black: data.black, white: data.white },
-      });
+      applyPatch({ black: data.black, white: data.white });
     } catch (err) {
       alert('Auto contrast failed: ' + (err?.message || err));
     }
@@ -39,6 +71,7 @@ export default function ImagePanel() {
 
   function onReset() {
     dispatch({ type: 'IMAGE_RESET_LOCAL' });
+    record(sliders, IMAGE_DEFAULTS);
   }
 
   return (
@@ -70,6 +103,7 @@ export default function ImagePanel() {
               step="1"
               value={sliders[key]}
               onChange={(e) => patchSlider(key, parseInt(e.target.value, 10))}
+              {...slideHandlers}
             />
             <span className="dp-image-val">{formatSliderVal(key, sliders[key])}</span>
           </div>
@@ -88,6 +122,7 @@ export default function ImagePanel() {
           step="1"
           value={sliders.black}
           onChange={(e) => patchSlider('black', parseInt(e.target.value, 10))}
+          {...slideHandlers}
         />
         <span className="dp-image-val">{sliders.black}</span>
       </div>
@@ -102,22 +137,25 @@ export default function ImagePanel() {
           step="1"
           value={sliders.white}
           onChange={(e) => patchSlider('white', parseInt(e.target.value, 10))}
+          {...slideHandlers}
         />
         <span className="dp-image-val">{sliders.white}</span>
       </div>
 
       <div className="dp-image-section-title">Tools</div>
       <div className="dp-image-btn-group">
-        <button
-          id="dp-image-autocontrast-btn"
-          type="button"
-          className="btn btn-sm btn-outline-secondary"
-          title="Set black/white levels to 1% histogram cutoffs"
-          onClick={onAutoContrast}
-        >
-          <i className="fa-solid fa-wand-magic-sparkles me-1" />
-          Auto contrast
-        </button>
+        <DemoDisabled feature="autocontrast">
+          <button
+            id="dp-image-autocontrast-btn"
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            title="Set black/white levels to 1% histogram cutoffs"
+            onClick={onAutoContrast}
+          >
+            <i className="fa-solid fa-wand-magic-sparkles me-1" />
+            Auto contrast
+          </button>
+        </DemoDisabled>
         <button
           id="dp-image-grayscale-btn"
           type="button"
@@ -162,9 +200,7 @@ export default function ImagePanel() {
           type="checkbox"
           className="form-check-input"
           checked={sliders.threshold !== null}
-          onChange={(e) =>
-            patchSlider('threshold', e.target.checked ? 128 : null)
-          }
+          onChange={(e) => applyPatch({ threshold: e.target.checked ? 128 : null })}
         />
         <label htmlFor="dp-image-threshold-enable" style={{ color: '#444', cursor: 'pointer' }}>
           Enable
@@ -182,6 +218,7 @@ export default function ImagePanel() {
           value={sliders.threshold !== null ? sliders.threshold : 128}
           disabled={sliders.threshold === null}
           onChange={(e) => patchSlider('threshold', parseInt(e.target.value, 10))}
+          {...slideHandlers}
         />
         <span className="dp-image-val">
           {sliders.threshold !== null ? String(sliders.threshold) : '—'}
@@ -195,7 +232,7 @@ export default function ImagePanel() {
           type="button"
           className="btn btn-sm btn-outline-secondary"
           title="Rotate 90° counter-clockwise"
-          onClick={() => patchSlider('rotate90', (sliders.rotate90 + 3) % 4)}
+          onClick={() => applyPatch({ rotate90: (sliders.rotate90 + 3) % 4 })}
         >
           <i className="fa-solid fa-rotate-left me-1" />
           90°
@@ -205,7 +242,7 @@ export default function ImagePanel() {
           type="button"
           className="btn btn-sm btn-outline-secondary"
           title="Rotate 90° clockwise"
-          onClick={() => patchSlider('rotate90', (sliders.rotate90 + 1) % 4)}
+          onClick={() => applyPatch({ rotate90: (sliders.rotate90 + 1) % 4 })}
         >
           <i className="fa-solid fa-rotate-right me-1" />
           90°
@@ -222,6 +259,7 @@ export default function ImagePanel() {
           step="0.1"
           value={sliders.rotateFine}
           onChange={(e) => patchSlider('rotateFine', parseFloat(e.target.value))}
+          {...slideHandlers}
         />
         <span className="dp-image-val">
           {(sliders.rotateFine > 0 ? '+' : '') + sliders.rotateFine.toFixed(1) + '°'}

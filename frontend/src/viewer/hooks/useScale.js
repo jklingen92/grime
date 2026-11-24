@@ -1,5 +1,6 @@
-// Compute the ratio of rendered image width to reference width. The legacy
-// usePreprocessedBbox branch is preserved from viewer-core.js:104.
+// Compute the ratio of rendered image width to reference width. With
+// usePreprocessedBbox, word boxes are in the preprocessed image's space,
+// which is at least 2000px wide.
 
 import { useCallback, useEffect, useState } from 'react';
 
@@ -27,9 +28,4 @@ export function useScale(imgRef, usePreprocessedBbox) {
   }, [imgRef, recompute]);
 
   return { scale, recompute };
-}
-
-export function getRefWidth(img, usePreprocessedBbox) {
-  if (!img || !img.naturalWidth) return 1;
-  return usePreprocessedBbox ? Math.max(img.naturalWidth, 2000) : img.naturalWidth;
 }

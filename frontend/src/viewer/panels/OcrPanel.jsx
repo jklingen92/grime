@@ -81,8 +81,8 @@ export default function OcrPanel() {
         {config.hasRepair && (
           <>
             <span>Click a word to edit.</span>
-            <span>Drag to select · ↑↓ to reorder.</span>
-            <span>Select 2+ to merge or join lines.</span>
+            <span>Drag or shift-click to select several.</span>
+            <span>A to draw a new box · Ctrl+Z to undo.</span>
           </>
         )}
         <div id="dp-ocr-conf-legend">
