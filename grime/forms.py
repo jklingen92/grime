@@ -5,7 +5,9 @@ class CreateJobForm(forms.Form):
     """Outer form for the Add Job modal (job type + document + worker slot + force)."""
 
     job_type = forms.ChoiceField(
-        widget=forms.Select(attrs={"class": "form-select form-select-sm", "id": "id_job_type"}),
+        widget=forms.Select(
+            attrs={"class": "form-select form-select-sm", "id": "id_job_type"}
+        ),
     )
     document = forms.IntegerField(widget=forms.HiddenInput())
     worker_slot = forms.IntegerField(

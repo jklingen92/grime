@@ -126,9 +126,7 @@ def resolve_page(
                 corrected_ocr_at=now,
                 is_ditto=True,
             )
-            changed.append(
-                {"id": w.pk, "corrected_text": new_text, "is_ditto": True}
-            )
+            changed.append({"id": w.pk, "corrected_text": new_text, "is_ditto": True})
         elif not w.is_ditto and new_text != w.text:
             Word.objects.filter(pk=w.pk).update(is_ditto=True)
     return changed

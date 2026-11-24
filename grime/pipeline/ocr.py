@@ -127,7 +127,10 @@ def _reassign_line_nums(page: "DocumentPage") -> None:
 
     final: list[Word] = []
     for line_num, (_li, lw) in enumerate(
-        sorted(line_groups.items(), key=lambda kv: line_centers[kv[0]] if line_centers else 0)
+        sorted(
+            line_groups.items(),
+            key=lambda kv: line_centers[kv[0]] if line_centers else 0,
+        )
     ):
         lw.sort(key=lambda w: w["left"])
         for word_num, w in enumerate(lw):
@@ -231,7 +234,15 @@ def run_page(
         status=OCRPass.STATUS_COMPLETE,
     )
     Word.objects.bulk_create(
-        [Word(page=page, ocr_pass=ocr_pass, ocr_text=w["text"], **{k: v for k, v in w.items() if k != "text"}) for w in words],
+        [
+            Word(
+                page=page,
+                ocr_pass=ocr_pass,
+                ocr_text=w["text"],
+                **{k: v for k, v in w.items() if k != "text"},
+            )
+            for w in words
+        ],
         ignore_conflicts=True,
     )
     post_ocr(page)

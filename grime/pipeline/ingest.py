@@ -95,7 +95,9 @@ def ingest_pdf(
                 DocumentPage.objects.filter(file=rel_str).delete()
 
         if dry_run:
-            log(f"  (dry) p.{i:04d} → {'embedded text' if has_embedded else 'OCR pending'}")
+            log(
+                f"  (dry) p.{i:04d} → {'embedded text' if has_embedded else 'OCR pending'}"
+            )
             created_count += 1
             continue
 

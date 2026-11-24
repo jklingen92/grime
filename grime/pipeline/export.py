@@ -28,7 +28,6 @@ from reportlab.pdfgen import canvas
 
 from grime.models import Document, DocumentPage, Word
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
