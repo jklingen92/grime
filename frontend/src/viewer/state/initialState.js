@@ -79,6 +79,7 @@ export function buildInitialState(config) {
       saved: savedImage,
       current: { ...savedImage },
       hasCorrected: !!config.imageHasCorrected,
+      imageUrl: config.imageUrl,
     },
 
     drawMode: false,

@@ -231,6 +231,7 @@ export function reducer(state, action) {
           ...state.image,
           saved: { ...action.params },
           hasCorrected: action.hasCorrected,
+          imageUrl: action.imageUrl ?? state.image.imageUrl,
         },
       };
 
