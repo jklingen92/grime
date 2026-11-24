@@ -263,10 +263,13 @@ def rerun_selection(
     inserted with bboxes translated back to the full page.
 
     ``line_num`` is inherited from the first deleted Word (0 for full-page);
-    ``word_num`` is reassigned sequentially.  Page text / completion flags
+    ``word_num`` is numbered sequentially after any surviving Words on that
+    line, so a partial-line selection doesn't collide with them.  Page text / completion flags
     are not touched — this is a localised re-OCR, not a page-level pass.
     """
     from PIL import Image as PILImage
+
+    from django.db.models import Max
 
     from grime.models import Word
 
@@ -300,8 +303,13 @@ def rerun_selection(
     )
     _, _, new_words, _ = dispatch(crop, engine=engine)
 
+    last_num = Word.objects.filter(page_id=page.pk, line_num=line_num).aggregate(
+        m=Max("word_num")
+    )["m"]
+    first_num = 0 if last_num is None else last_num + 1
+
     created = []
-    for i, row in enumerate(new_words):
+    for i, row in enumerate(new_words, start=first_num):
         w = Word.objects.create(
             page=page,
             line_num=line_num,
