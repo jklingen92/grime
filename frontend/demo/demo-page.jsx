@@ -79,7 +79,7 @@ window.VIEWER_CONFIG = {
   navPrefix: '',
   navPrevLabel: 'Previous',
   navNextLabel: 'Next',
-  // 'label' and 'imageSave' are hidden; the rest are grayed out.
+  // The viewer hides each of these features.
   demoDisabled: ['jobs', 'exportPdf', 'autocontrast', 'imageSave', 'label'],
 };
 
