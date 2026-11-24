@@ -348,15 +348,14 @@ export default function ViewerApp() {
         alert(data.error || 'Save failed.');
         return false;
       }
+      // Cache-bust so the browser refetches the re-baked image.
+      const sep = data.image_url?.indexOf('?') >= 0 ? '&' : '?';
       dispatch({
         type: 'IMAGE_MARK_SAVED',
         params: state.image.current,
         hasCorrected: !isIdentity(params),
+        imageUrl: data.image_url ? data.image_url + sep + 't=' + Date.now() : undefined,
       });
-      if (data.image_url) {
-        const sep = data.image_url.indexOf('?') >= 0 ? '&' : '?';
-        config.imageUrl = data.image_url + sep + 't=' + Date.now();
-      }
       return true;
     } catch (err) {
       alert('Save failed: ' + (err?.message || err));

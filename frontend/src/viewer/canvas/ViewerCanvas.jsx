@@ -116,7 +116,7 @@ export default function ViewerCanvas({
       state.image.current,
       state.image.saved,
       state.image.hasCorrected,
-      config.imageUrl,
+      state.image.imageUrl,
       config.originalImageUrl,
     );
     if (style.src && img.getAttribute('src') !== style.src) {
@@ -124,7 +124,7 @@ export default function ViewerCanvas({
     }
     img.style.filter = style.filter;
     img.style.transform = style.transform;
-  }, [state.image, config.imageUrl, config.originalImageUrl]);
+  }, [state.image, config.originalImageUrl]);
 
   // ── wheel zoom + coord readout ──
   useEffect(() => {
@@ -606,7 +606,7 @@ export default function ViewerCanvas({
         <img
           id="dp-img"
           ref={imgRef}
-          src={config.imageHasCorrected ? config.imageUrl : config.originalImageUrl}
+          src={state.image.hasCorrected ? state.image.imageUrl : config.originalImageUrl}
           alt={config.imageAlt || ''}
           onLoad={() => setImgNaturalReady(true)}
         />
