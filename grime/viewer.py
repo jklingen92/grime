@@ -36,6 +36,7 @@ from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Count, Max
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -69,6 +70,8 @@ def get_viewer_urls() -> list:
         ("words/mark-ditto/", word_mark_ditto, "word_mark_ditto"),
         ("words/bulk-delete/", words_bulk_delete, "words_bulk_delete"),
         ("words/bulk-ditto/", words_bulk_ditto, "words_bulk_ditto"),
+        ("words/bulk-correct/", words_bulk_correct, "words_bulk_correct"),
+        ("words/bulk-ner-correct/", words_bulk_ner_correct, "words_bulk_ner_correct"),
         ("words/rerun-ner/", words_rerun_ner, "words_rerun_ner"),
         ("annotations/create/", annotation_create, "annotation_create"),
         ("annotations/update/", annotation_update, "annotation_update"),
@@ -243,6 +246,10 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_mark_as_ditto_url": _url("grime_documentpage_viewer_word_mark_ditto"),
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
+        "ocr_bulk_correct_url": _url("grime_documentpage_viewer_words_bulk_correct"),
+        "ner_bulk_correct_url": _url(
+            "grime_documentpage_viewer_words_bulk_ner_correct"
+        ),
         "job_create_url": reverse("grime:job_create"),
         "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace(
             "/0/", "/{pk}/"
@@ -776,6 +783,83 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     page = DocumentPage.objects.get(pk=page_pk)
     updated = _run_post_ocr(page, request)
     return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
+
+
+def _parse_bulk_changes(
+    request: HttpRequest, page_pk: int, id_key: str
+) -> tuple[list[tuple[Word, dict]], JsonResponse | None]:
+    """Parse a JSON ``{"changes": [{<id_key>, ...}]}`` body into (Word, change) pairs.
+
+    Rejects the whole request unless every id is a Word on this page, so a bulk
+    write is all-or-nothing.
+    """
+    try:
+        changes = json.loads(request.body or b"{}")["changes"]
+        pks = [int(c[id_key]) for c in changes]
+    except (KeyError, TypeError, ValueError):
+        return [], JsonResponse({"error": "Invalid changes payload"}, status=400)
+    if not pks:
+        return [], JsonResponse({"error": "No changes provided"}, status=400)
+    words = Word.objects.filter(pk__in=pks, page_id=page_pk).in_bulk()
+    if len(words) != len(set(pks)):
+        return [], JsonResponse({"error": "Word not found on this page"}, status=404)
+    return [(words[pk], c) for pk, c in zip(pks, changes)], None
+
+
+@require_POST
+def words_bulk_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Set Word.corrected_text on several Words in one transaction.
+
+    Body: ``{"changes": [{"word_pk": 1, "text": "foo"}]}``; empty text clears the
+    correction.  ``post_ocr`` runs once for the whole batch.
+    """
+    pairs, error = _parse_bulk_changes(request, page_pk, "word_pk")
+    if error:
+        return error
+    now = timezone.now()
+    results = []
+    for word, change in pairs:
+        corrected = str(change.get("text") or "").strip()
+        word.corrected_text = corrected or None
+        word.corrected_ocr_by = request.user if corrected else None
+        word.corrected_ocr_at = now if corrected else None
+        results.append({"word_pk": word.pk, "corrected_text": word.corrected_text})
+    with transaction.atomic():
+        Word.objects.bulk_update(
+            [w for w, _ in pairs],
+            ["corrected_text", "corrected_ocr_by", "corrected_ocr_at"],
+        )
+    updated = _run_post_ocr(DocumentPage.objects.get(pk=page_pk), request)
+    return JsonResponse({"ok": True, "results": results, "updated": updated})
+
+
+@require_POST
+def words_bulk_ner_correct(request: HttpRequest, page_pk: int) -> JsonResponse:
+    """Set Word.corrected_label on several Words in one transaction.
+
+    Body: ``{"changes": [{"word_id": 1, "label": "B-PER"}]}``.  Label keeps
+    corrected_label's meaning: null drops the correction, '' explicitly clears
+    it, anything else must be a valid NER label.
+    """
+    pairs, error = _parse_bulk_changes(request, page_pk, "word_id")
+    if error:
+        return error
+    now = timezone.now()
+    results = []
+    for word, change in pairs:
+        label = change.get("label")
+        if label not in _VALID_NER_LABELS:
+            return JsonResponse({"error": f"Invalid label {label!r}"}, status=400)
+        word.corrected_label = label
+        word.corrected_ner_by = request.user if label is not None else None
+        word.corrected_ner_at = now if label is not None else None
+        results.append({"word_id": word.pk, "label": label})
+    with transaction.atomic():
+        Word.objects.bulk_update(
+            [w for w, _ in pairs],
+            ["corrected_label", "corrected_ner_by", "corrected_ner_at"],
+        )
+    return JsonResponse({"ok": True, "results": results})
 
 
 @require_POST
