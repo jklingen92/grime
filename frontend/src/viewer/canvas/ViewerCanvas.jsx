@@ -385,7 +385,15 @@ export default function ViewerCanvas({
 
       if (g.type === 'annotation-resize') {
         gestureRef.current = null;
+        const { resizing, pendingBbox } = state.annotation;
         dispatch({ type: 'ANNOTATION_SET_RESIZING', resizing: null });
+        const b = resizing?.startBbox;
+        if (b && pendingBbox && ['left', 'top', 'width', 'height'].some((k) => b[k] !== pendingBbox[k])) {
+          dispatch({
+            type: 'PUSH_UNDO',
+            entry: { type: 'annotation-bbox-change', prev: b, next: { ...pendingBbox } },
+          });
+        }
         return;
       }
 

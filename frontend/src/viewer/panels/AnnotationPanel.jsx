@@ -92,9 +92,9 @@ export default function AnnotationPanel() {
     subSelectedIds.forEach((wid) => {
       const w = state.wordById[wid];
       if (!w) return;
-      const existing = next.find((s) => s.word_id === wid);
-      if (existing) {
-        existing.label = label;
+      const idx = next.findIndex((s) => s.word_id === wid);
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], label };
       } else {
         let text = w.corrected_text || w.ocr_text || '';
         if (isDitto(text) && pendingBbox) {
@@ -104,22 +104,61 @@ export default function AnnotationPanel() {
         next.push({ word_id: wid, label, text });
       }
     });
-    dispatch({ type: 'ANNOTATION_SET_SUBCOMPS', subcomps: next });
+    setSubcomps(next);
     dispatch({ type: 'ANNOTATION_SET_SUB_SELECTED', ids: [] });
     if (subInputRef.current) subInputRef.current.value = '';
+  }
+
+  // Every subcomponent edit goes through here so it is one undo step.
+  function setSubcomps(next) {
+    dispatch({ type: 'ANNOTATION_SET_SUBCOMPS', subcomps: next });
+    dispatch({
+      type: 'PUSH_UNDO',
+      entry: { type: 'annotation-subcomp-change', prev: pendingSubcomps, next },
+    });
   }
 
   function removeSubcompByWordId(wid) {
-    const next = pendingSubcomps.filter((s) => s.word_id !== wid);
-    dispatch({ type: 'ANNOTATION_SET_SUBCOMPS', subcomps: next });
+    setSubcomps(pendingSubcomps.filter((s) => s.word_id !== wid));
   }
 
   function clearSubcompForSelection() {
-    const next = pendingSubcomps.filter((s) => !subSelectedIds.has(s.word_id));
-    dispatch({ type: 'ANNOTATION_SET_SUBCOMPS', subcomps: next });
+    if (!subSelectedIds.size) return;
+    setSubcomps(pendingSubcomps.filter((s) => !subSelectedIds.has(s.word_id)));
     dispatch({ type: 'ANNOTATION_SET_SUB_SELECTED', ids: [] });
     if (subInputRef.current) subInputRef.current.value = '';
   }
+
+  // Legacy shortcuts, active only while the label editor is open:
+  //   Enter: confirm sub-label / blur label input / save
+  //   Esc:   clear sub-selection (in sub input) / exit editor
+  //   Del:   remove selected subcomponents (outside the inputs)
+  useEffect(() => {
+    if (phase !== 'labeling') return;
+    function onKey(e) {
+      const active = document.activeElement;
+      const subActive = !!subInputRef.current && active === subInputRef.current;
+      const labelActive = active === labelInputRef.current;
+      if (e.key === 'Enter') {
+        // Let a focused button (Cancel, Delete…) handle its own Enter.
+        if (active?.tagName === 'BUTTON') return;
+        e.preventDefault();
+        if (subActive) confirmSubLabel();
+        else if (labelActive) active.blur();
+        else onSave();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (subActive) dispatch({ type: 'ANNOTATION_SET_SUB_SELECTED', ids: [] });
+        else onCancel();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (subActive || labelActive) return;
+        e.preventDefault();
+        clearSubcompForSelection();
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
 
   async function onSave() {
     const label = (labelInputRef.current?.value || '').trim();
@@ -147,9 +186,12 @@ export default function AnnotationPanel() {
         return;
       }
       if (editingId) {
+        const prev = state.annotations.find((a) => a.id === editingId);
         dispatch({ type: 'ANNOTATION_REPLACE', annotation: data.annotation });
+        dispatch({ type: 'PUSH_UNDO', entry: { type: 'annotation-update', prev, next: data.annotation } });
       } else {
         dispatch({ type: 'ANNOTATION_ADD', annotation: data.annotation });
+        dispatch({ type: 'PUSH_UNDO', entry: { type: 'annotation-create', annotationId: data.annotation.id } });
       }
       dispatch({ type: 'ANNOTATION_EDITOR_EXIT' });
     } catch (err) {
@@ -165,8 +207,10 @@ export default function AnnotationPanel() {
       alert('Error deleting label.');
       return;
     }
+    const annotation = state.annotations.find((a) => a.id === editingId);
     dispatch({ type: 'ANNOTATION_DELETE', id: editingId });
     dispatch({ type: 'ANNOTATION_EDITOR_EXIT' });
+    dispatch({ type: 'PUSH_UNDO', entry: { type: 'annotation-delete', annotation } });
   }
 
   function onCancel() {
@@ -229,6 +273,9 @@ export default function AnnotationPanel() {
           placeholder="Label…"
           autoComplete="off"
           defaultValue={state.annotation.pendingLabel}
+          // Remount per editor session so a cancelled label's text can't leak
+          // into the next one. Not keyed on the bbox: resizing would drop typing.
+          key={`${phase}-${editingId}`}
         />
         <div
           id="dp-annotation-sub-input-row"
@@ -246,12 +293,6 @@ export default function AnnotationPanel() {
               defaultValue={commonSelectedLabel}
               key={`${commonSelectedLabel}-${subSelectedIds.size}`}
               style={{ flex: 1, minWidth: 0 }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  confirmSubLabel();
-                }
-              }}
             />
             <button
               id="dp-annotation-sub-clear-btn"
