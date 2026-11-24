@@ -263,6 +263,25 @@ export function reducer(state, action) {
       };
     }
 
+    // Same for annotations: undoing a delete re-creates it under a new id.
+    case 'HISTORY_REMAP_ANNOTATION_ID': {
+      const id = (x) => (x === action.from ? action.to : x);
+      const remap = (e) => ({
+        ...e,
+        ...(e.annotationId != null && { annotationId: id(e.annotationId) }),
+        ...(e.annotation && { annotation: { ...e.annotation, id: id(e.annotation.id) } }),
+        ...(e.type === 'annotation-update' && {
+          prev: { ...e.prev, id: id(e.prev.id) },
+          next: { ...e.next, id: id(e.next.id) },
+        }),
+      });
+      return {
+        ...state,
+        undoStack: state.undoStack.map(remap),
+        redoStack: state.redoStack.map(remap),
+      };
+    }
+
     case 'POP_UNDO': {
       if (!state.undoStack.length) return state;
       return { ...state, undoStack: state.undoStack.slice(0, -1) };

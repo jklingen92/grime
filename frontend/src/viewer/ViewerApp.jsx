@@ -12,10 +12,13 @@ import {
   bulkMarkDitto,
   correctNerLabel,
   correctWord,
+  createAnnotation,
+  deleteAnnotation,
   deleteWord,
   markWordDitto,
   resetImage,
   saveImage,
+  updateAnnotation,
 } from './api/endpoints.js';
 
 import ViewerToolbar from './toolbar/ViewerToolbar.jsx';
@@ -113,6 +116,15 @@ export default function ViewerApp() {
     dispatch({ type: 'WORDS_DELETE_BULK', ids: data.deleted_ids });
     applyOcrUpdated(data.updated);
     return data.deleted_ids;
+  }
+
+  // Server delete + reducer update; closes the editor if it had this label open.
+  async function removeAnnotation(id) {
+    const data = await deleteAnnotation(config, id);
+    if (!data.ok) return false;
+    if (state.annotation.editingId === id) dispatch({ type: 'ANNOTATION_EDITOR_EXIT' });
+    dispatch({ type: 'ANNOTATION_DELETE', id });
+    return true;
   }
 
   // Re-create deleted words from snapshots. The add endpoint only takes a
@@ -286,6 +298,36 @@ export default function ViewerApp() {
     'ner-correct': async (e) => {
       const done = await setNerLabels(e.changes.map((c) => ({ wordId: c.wordId, label: c.prev })));
       return { type: 'ner-correct', changes: swap(e.changes.filter((c) => done.includes(c.wordId))) };
+    },
+    // Annotation entries hold the annotation snapshot(s); a restored
+    // annotation gets a new id, so later entries are remapped to it.
+    'annotation-create': async (e) => {
+      const snap = state.annotations.find((a) => a.id === e.annotationId);
+      if (!snap || !(await removeAnnotation(snap.id))) return null;
+      return { type: 'annotation-delete', annotation: snap };
+    },
+    'annotation-delete': async (e) => {
+      const data = await createAnnotation(config, e.annotation);
+      if (!data.ok) return null;
+      dispatch({ type: 'ANNOTATION_ADD', annotation: data.annotation });
+      dispatch({ type: 'HISTORY_REMAP_ANNOTATION_ID', from: e.annotation.id, to: data.annotation.id });
+      return { type: 'annotation-create', annotationId: data.annotation.id };
+    },
+    'annotation-update': async (e) => {
+      const data = await updateAnnotation(config, e.prev.id, e.prev);
+      if (!data.ok) return null;
+      dispatch({ type: 'ANNOTATION_REPLACE', annotation: data.annotation });
+      return { type: 'annotation-update', prev: e.next, next: data.annotation };
+    },
+    // Transient: the editor's unsaved subcomponents and bbox.
+    'annotation-subcomp-change': (e) => {
+      dispatch({ type: 'ANNOTATION_SET_SUBCOMPS', subcomps: e.prev });
+      dispatch({ type: 'ANNOTATION_SET_SUB_SELECTED', ids: [] });
+      return { type: 'annotation-subcomp-change', prev: e.next, next: e.prev };
+    },
+    'annotation-bbox-change': (e) => {
+      dispatch({ type: 'ANNOTATION_SET_PENDING_BBOX', bbox: e.prev });
+      return { type: 'annotation-bbox-change', prev: e.next, next: e.prev };
     },
     'image-adjust': async (e) => {
       dispatch({ type: 'IMAGE_SET_CURRENT', params: e.prev });
