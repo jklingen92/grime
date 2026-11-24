@@ -5,17 +5,9 @@
 import { showTour } from './tour.js';
 import tourText from './tour-text.js';
 
-const DISABLED_TITLE = 'Not available in the demo';
-
 // Escape manifest text before it goes into innerHTML.
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-// Server-backed buttons stay visible but disabled, like DemoDisabled in the viewer.
-// The wrapper span carries the tooltip since disabled buttons get no pointer events.
-const disabledButton = (cls, inner) =>
-  `<span class="d-inline-block" title="${DISABLED_TITLE}" tabindex="0">` +
-  `<button type="button" class="btn btn-sm ${cls}" disabled aria-disabled="true">${inner}</button></span>`;
 
 function row(doc) {
   const tags = doc.tags.length
@@ -28,12 +20,7 @@ function row(doc) {
     <td><a href="viewer.html?page=${doc.pagePk}"><i class="fa-regular fa-file-pdf me-1"></i>${esc(doc.title)}</a></td>
     <td>${tags}</td>
     <td>${pages}</td>
-    <td class="text-center">${disabledButton('btn-outline-secondary', `<i class="fa-solid fa-tags me-1"></i>${doc.entityCount} entities`)}</td>
-    <td><div class="d-flex gap-2 justify-content-end">
-      ${disabledButton('btn-outline-secondary', 'Download PDF')}
-      ${disabledButton('btn-outline-primary', '<i class="fa-solid fa-pencil"></i>')}
-      ${disabledButton('btn-outline-danger', '<i class="fa-solid fa-trash"></i>')}
-    </div></td>
+    <td class="text-center">${doc.entityCount}</td>
   </tr>`;
 }
 

@@ -20,10 +20,6 @@ export const DEMO_URLS = {
   annotationDeleteUrl: 'demo:annotations/delete',
   imageSaveUrl: 'demo:image/save',
   imageResetUrl: 'demo:image/reset',
-  // Never called: the controls using these are demo-disabled. Present so the
-  // viewer still renders them (it hides features whose URL is missing).
-  imageAutocontrastUrl: 'demo:image/autocontrast',
-  exportPdfUrl: 'demo:export/pdf',
 };
 
 const VALID_NER_LABELS = new Set([null, '', 'B-PER', 'I-PER', 'B-LOC', 'I-LOC', 'B-ORG', 'I-ORG']);

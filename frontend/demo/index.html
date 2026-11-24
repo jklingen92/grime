@@ -29,32 +29,6 @@
 
 <main style="padding:12px 16px">
 
-  <!-- Upload card: shown so the feature is visible, but the demo can't ingest. -->
-  <div class="card mb-4" title="Not available in the demo">
-    <div class="card-body">
-      <h2 class="card-title h6 fw-semibold mb-3" style="color:var(--grime-primary)">Upload document</h2>
-      <form>
-        <fieldset disabled>
-          <div class="mb-3">
-            <label for="demo-pdf" class="form-label fw-semibold">PDF file</label>
-            <input type="file" id="demo-pdf" class="form-control" accept="application/pdf">
-          </div>
-          <div class="mb-3">
-            <label for="demo-title-input" class="form-label fw-semibold">Title</label>
-            <input type="text" id="demo-title-input" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Labels</label>
-            <div class="tag-input-wrap">
-              <input type="text" class="tag-text-input" placeholder="Type a tag, press Space to add…">
-            </div>
-          </div>
-          <button type="submit" class="btn btn-grime btn-sm"><i class="fa-solid fa-upload me-1"></i>Ingest PDF</button>
-        </fieldset>
-      </form>
-    </div>
-  </div>
-
   <!-- Document list, filled by demo-list.js -->
   <div id="gl-docs">
     <h2 class="h6 fw-semibold mb-3" style="color:var(--grime-primary)">All documents (<span id="demo-doc-count">0</span>)</h2>
@@ -66,7 +40,6 @@
             <th>Labels</th>
             <th>Pages</th>
             <th class="text-center">Entities</th>
-            <th></th>
           </tr>
         </thead>
         <tbody id="demo-doc-rows"></tbody>

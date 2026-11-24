@@ -6,7 +6,7 @@ import { useViewerConfig, useViewerDispatch, useViewerState } from '../state/Vie
 import { autoContrastImage } from '../api/endpoints.js';
 import { formatSliderVal, isDirty } from '../state/imageParams.js';
 import { IMAGE_DEFAULTS } from '../state/initialState.js';
-import DemoDisabled from '../DemoDisabled.jsx';
+import { isDemoDisabled } from '../state/selectors.js';
 
 export default function ImagePanel() {
   const config = useViewerConfig();
@@ -144,7 +144,7 @@ export default function ImagePanel() {
 
       <div className="dp-image-section-title">Tools</div>
       <div className="dp-image-btn-group">
-        <DemoDisabled feature="autocontrast">
+        {!isDemoDisabled(config, 'autocontrast') && (
           <button
             id="dp-image-autocontrast-btn"
             type="button"
@@ -155,7 +155,7 @@ export default function ImagePanel() {
             <i className="fa-solid fa-wand-magic-sparkles me-1" />
             Auto contrast
           </button>
-        </DemoDisabled>
+        )}
         <button
           id="dp-image-grayscale-btn"
           type="button"

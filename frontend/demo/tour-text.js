@@ -13,9 +13,9 @@ export default {
     },
     {
       title: "What's switched off",
-      body: `<p>Anything that needs a server is shown but grayed out: uploading, running
-        OCR/NER jobs, exports, and editing or deleting documents. Hover a grayed control
-        to confirm.</p>`,
+      body: `<p>Anything that needs a server is left out of the demo: uploading, running
+        OCR/NER jobs, exports, editing or deleting documents, saving image adjustments,
+        and the Label tab.</p>`,
     },
     {
       title: 'Open a document',

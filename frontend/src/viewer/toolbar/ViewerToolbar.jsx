@@ -7,7 +7,6 @@ import { isDemoDisabled } from '../state/selectors.js';
 import TabBar from './TabBar.jsx';
 import ZoomControls from './ZoomControls.jsx';
 import PageNav from './PageNav.jsx';
-import DemoDisabled from '../DemoDisabled.jsx';
 
 export default function ViewerToolbar({
   onFit,
@@ -43,6 +42,8 @@ export default function ViewerToolbar({
   }, [tab, state.words, state.annotations]);
 
   const imageDirty = isDirty(state.image.current, state.image.saved);
+  const showJobs = !isDemoDisabled(config, 'jobs');
+  const showExport = !!config.exportPdfUrl && !isDemoDisabled(config, 'exportPdf');
 
   return (
     <>
@@ -54,7 +55,7 @@ export default function ViewerToolbar({
           <>
             <div className="dp-toolbar-sep" id="dp-sep-ocr" style={{ display: tab === 'ocr' ? '' : 'none' }} />
             <div id="dp-ocr-actions" className={tab === 'ocr' ? 'visible' : ''}>
-              <DemoDisabled feature="jobs">
+              {showJobs && (
                 <button
                   id="dp-rerun-ocr"
                   type="button"
@@ -65,7 +66,7 @@ export default function ViewerToolbar({
                   <i className="fa-solid fa-gears me-1" />
                   {ocrBtnLabel}
                 </button>
-              </DemoDisabled>
+              )}
               <span
                 id="dp-rerun-ocr-spinner"
                 className="dp-job-spinner"
@@ -98,9 +99,11 @@ export default function ViewerToolbar({
               </button>
             </div>
 
-            <div className="dp-toolbar-sep" id="dp-sep-ner" style={{ display: tab === 'ner' ? '' : 'none' }} />
-            <div id="dp-ner-split" style={{ display: tab === 'ner' ? '' : 'none' }}>
-              <DemoDisabled feature="jobs">
+            {/* Run NER is the only control in this group, so hide the separator with it. */}
+            {showJobs && (
+              <>
+              <div className="dp-toolbar-sep" id="dp-sep-ner" style={{ display: tab === 'ner' ? '' : 'none' }} />
+              <div id="dp-ner-split" style={{ display: tab === 'ner' ? '' : 'none' }}>
                 <button
                   id="dp-rerun-ner"
                   type="button"
@@ -111,17 +114,18 @@ export default function ViewerToolbar({
                   <i className="fa-solid fa-tags me-1" />
                   {nerBtnLabel}
                 </button>
-              </DemoDisabled>
-              <span
-                id="dp-rerun-ner-spinner"
-                className="dp-job-spinner"
-                style={{ display: jobRunning.ner ? '' : 'none' }}
-                aria-label="NER running"
-              >
-                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                <span className="dp-job-spinner-text">Running…</span>
-              </span>
-            </div>
+                <span
+                  id="dp-rerun-ner-spinner"
+                  className="dp-job-spinner"
+                  style={{ display: jobRunning.ner ? '' : 'none' }}
+                  aria-label="NER running"
+                >
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  <span className="dp-job-spinner-text">Running…</span>
+                </span>
+              </div>
+              </>
+            )}
           </>
         )}
 
@@ -149,17 +153,15 @@ export default function ViewerToolbar({
           {tabBadge}
         </span>
 
-        {config.exportPdfUrl && (
-          <DemoDisabled feature="exportPdf">
-            <a
-              href={config.exportPdfUrl}
-              className="btn btn-sm btn-outline-secondary"
-              style={{ marginLeft: 'auto' }}
-              title="Download this page as a searchable PDF"
-            >
-              Export PDF
-            </a>
-          </DemoDisabled>
+        {showExport && (
+          <a
+            href={config.exportPdfUrl}
+            className="btn btn-sm btn-outline-secondary"
+            style={{ marginLeft: 'auto' }}
+            title="Download this page as a searchable PDF"
+          >
+            Export PDF
+          </a>
         )}
         {!isDemoDisabled(config, 'imageSave') && (
           <button
@@ -168,7 +170,7 @@ export default function ViewerToolbar({
             className="btn btn-sm btn-warning"
             style={{
               display: imageDirty ? '' : 'none',
-              marginLeft: config.exportPdfUrl ? '' : 'auto',
+              marginLeft: showExport ? '' : 'auto',
             }}
             onClick={onSaveImage}
           >
