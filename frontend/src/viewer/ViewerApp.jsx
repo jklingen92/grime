@@ -43,7 +43,7 @@ export default function ViewerApp() {
   const [activeJobs, setActiveJobs] = useState({}); // { ocr: jobPk, ner: jobPk }
   const [unsavedBar, setUnsavedBar] = useState(null); // { onContinue }
 
-  const navigate = useViewerNavigate(state.tab);
+  const goTo = useViewerNavigate(state.tab);
 
   // ── OCR popup helpers ──
   const closeOcrPopup = useCallback(() => {
@@ -372,6 +372,9 @@ export default function ViewerApp() {
     setUnsavedBar({ onContinue });
   }
 
+  // Every page navigation goes through here so unsaved adjustments are never dropped silently.
+  const navigate = (url) => ensureImageSaved(() => goTo(url));
+
   // ── Fit ──
   const onFit = useCallback(() => {
     const img = document.getElementById('dp-img');
@@ -518,6 +521,7 @@ export default function ViewerApp() {
             ner: !!activeJobs.ner,
           }}
           onSaveImage={onSaveImage}
+          navigate={navigate}
         />
 
         <div id="dp-outer">
