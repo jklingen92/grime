@@ -29,7 +29,7 @@ function resolveDitto(annotations, label, currentTop) {
   return null;
 }
 
-export default function AnnotationPanel({ onConfirmSave }) {
+export default function AnnotationPanel() {
   const config = useViewerConfig();
   const state = useViewerState();
   const dispatch = useViewerDispatch();
@@ -152,7 +152,6 @@ export default function AnnotationPanel({ onConfirmSave }) {
         dispatch({ type: 'ANNOTATION_ADD', annotation: data.annotation });
       }
       dispatch({ type: 'ANNOTATION_EDITOR_EXIT' });
-      onConfirmSave?.();
     } catch (err) {
       alert('Save failed: ' + (err?.message || err));
     }

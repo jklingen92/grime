@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 class JobCancelled(Exception):
     """Raised by AsyncJob.check_cancelled() when a worker should stop mid-run."""
 
+
 TEXT_SOURCE_CHOICES = [
     ("ocr", "OCR"),
     ("embedded", "Embedded"),
@@ -103,16 +104,22 @@ class DocumentPage(models.Model):
     image = models.ImageField(upload_to="document_pages/", null=True, blank=True)
 
     corrected_image = models.ImageField(
-        upload_to="document_pages/corrected/", null=True, blank=True,
+        upload_to="document_pages/corrected/",
+        null=True,
+        blank=True,
         help_text="User-adjusted version of `image`; baked from `image_adjustments`.",
     )
     image_adjustments = models.JSONField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="Brightness/contrast/levels params used to produce corrected_image",
     )
     corrected_image_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="+",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
     )
     corrected_image_at = models.DateTimeField(null=True, blank=True)
 
@@ -358,11 +365,16 @@ class AsyncJob(models.Model):
         Document, on_delete=models.CASCADE, related_name="async_jobs"
     )
     worker_slot = models.ForeignKey(
-        WorkerSlot, on_delete=models.SET_NULL, null=True, blank=True,
+        WorkerSlot,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="jobs",
     )
     job_type = models.CharField(max_length=20)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
     force = models.BooleanField(default=False)
     task_id = models.CharField(max_length=255, blank=True)
     error = models.TextField(blank=True)
@@ -384,6 +396,7 @@ class AsyncJob(models.Model):
     @cached_property
     def handler(self):
         from grime.job_types import JOB_TYPES
+
         return JOB_TYPES[self.job_type]
 
     def elapsed_time(self):
@@ -405,6 +418,7 @@ class AsyncJob(models.Model):
         """Raise JobCancelled if this job's status has flipped away from RUNNING."""
         print(f"[check_cancelled] job {self.pk} — entering", flush=True)
         from django.db import connection
+
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE grime_asyncjob SET updated_at = %s"
@@ -422,7 +436,8 @@ class AsyncJob(models.Model):
             status = row[0] if row else None
             logger.info(
                 "Job %d cancelled — DB status is %r, raising JobCancelled",
-                self.pk, status,
+                self.pk,
+                status,
             )
             raise JobCancelled(f"Job {self.pk} status changed to {status!r}")
 
@@ -494,10 +509,10 @@ class Entity(models.Model):
     this model only persists notes and dismissed status.
     """
 
-    entity_type = models.CharField(max_length=10)   # PER | LOC | ORG
-    text = models.CharField(max_length=500)          # normalized
+    entity_type = models.CharField(max_length=10)  # PER | LOC | ORG
+    text = models.CharField(max_length=500)  # normalized
     notes = models.TextField(blank=True)
-    dismissed = models.BooleanField(default=False)   # user-flagged false positive
+    dismissed = models.BooleanField(default=False)  # user-flagged false positive
 
     class Meta:
         unique_together = [("entity_type", "text")]

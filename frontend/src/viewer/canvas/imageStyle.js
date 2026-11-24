@@ -1,5 +1,6 @@
 // Compute the CSS filter chain and transform for the page <img> from the
-// current image sliders. Matches viewer-image.js:106 applyFilter().
+// current image sliders: a live preview of what image_save in grime/viewer.py
+// bakes server-side.
 
 import { isIdentity, isIdentityLut, slidersToParams } from '../state/imageParams.js';
 

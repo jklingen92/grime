@@ -31,8 +31,15 @@ class Command(BaseCommand):
     help = "Run a worker that processes AsyncJobs assigned to a slot."
 
     def add_arguments(self, parser):
-        parser.add_argument("--slot", type=int, required=True, help="WorkerSlot.slot_number to serve")
-        parser.add_argument("--poll-interval", type=float, default=2.0, help="Seconds between empty-queue polls")
+        parser.add_argument(
+            "--slot", type=int, required=True, help="WorkerSlot.slot_number to serve"
+        )
+        parser.add_argument(
+            "--poll-interval",
+            type=float,
+            default=2.0,
+            help="Seconds between empty-queue polls",
+        )
 
     def handle(self, *args, slot, poll_interval, **kwargs):
         slot_obj = WorkerSlot.objects.filter(slot_number=slot).first()
@@ -45,7 +52,8 @@ class Command(BaseCommand):
         # Any RUNNING job assigned to this slot is an orphan from a previous
         # crashed/killed worker. Mark them FAILED so they don't stay stuck.
         orphaned = AsyncJob.objects.filter(
-            worker_slot=slot_obj, status=AsyncJob.STATUS_RUNNING,
+            worker_slot=slot_obj,
+            status=AsyncJob.STATUS_RUNNING,
         ).update(
             status=AsyncJob.STATUS_FAILED,
             error="Worker restarted while job was running",
@@ -75,8 +83,7 @@ class Command(BaseCommand):
         """Atomically claim the oldest PENDING job for this slot."""
         with transaction.atomic():
             job = (
-                AsyncJob.objects
-                .select_for_update(skip_locked=True)
+                AsyncJob.objects.select_for_update(skip_locked=True)
                 .filter(worker_slot=slot_obj, status=AsyncJob.STATUS_PENDING)
                 .order_by("created_at")
                 .first()
@@ -91,7 +98,11 @@ class Command(BaseCommand):
     def _run_job(self, job: AsyncJob) -> None:
         logger.info(
             "Job %d starting: type=%s doc='%s' force=%s params=%s",
-            job.pk, job.job_type, job.document, job.force, job.params,
+            job.pk,
+            job.job_type,
+            job.document,
+            job.force,
+            job.params,
         )
         try:
             job.handler.run(job)
@@ -115,7 +126,8 @@ class Command(BaseCommand):
         # Re-read status with a conditional update; if it's no longer RUNNING,
         # honour it and do not mark complete.
         still_running = AsyncJob.objects.filter(
-            pk=job.pk, status=AsyncJob.STATUS_RUNNING,
+            pk=job.pk,
+            status=AsyncJob.STATUS_RUNNING,
         ).update(
             status=AsyncJob.STATUS_COMPLETE,
             completed_at=timezone.now(),
@@ -125,7 +137,8 @@ class Command(BaseCommand):
             job.refresh_from_db(fields=["status"])
             logger.info(
                 "Job %d finished but status is %r — not marking complete",
-                job.pk, job.status,
+                job.pk,
+                job.status,
             )
             try:
                 job.handler.clean(job)

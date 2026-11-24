@@ -1,5 +1,5 @@
-// Navigate while preserving the active tab in the query string.
-// Mirrors viewer-core.js:99 navigate().
+// Navigate while preserving the active tab in the query string
+// (read back by getInitialTab in state/initialState.js).
 
 import { useCallback } from 'react';
 

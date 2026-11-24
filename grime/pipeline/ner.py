@@ -50,7 +50,9 @@ MODEL_LABELS: dict[str, str] = {
 DEFAULT_MODEL = "general"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.80
 
-_FINE_TUNED_BASE = Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
+_FINE_TUNED_BASE = (
+    Path(__file__).resolve().parent.parent / "models" / "hf_ner_finetuned"
+)
 
 # Per-model pipeline cache — loaded once per process per model key.
 _pipelines: dict[str, object] = {}

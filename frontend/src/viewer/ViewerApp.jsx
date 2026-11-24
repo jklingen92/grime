@@ -3,19 +3,17 @@
 // and the orchestration of network calls that span multiple slices
 // (OCR mutations, NER bulk-label, image save, undo/redo, page nav).
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useViewerConfig, useViewerDispatch, useViewerState } from './state/ViewerContext.jsx';
-import { isDirty, slidersToParams } from './state/imageParams.js';
+import { isDirty, isIdentity, slidersToParams } from './state/imageParams.js';
 import {
   addWord,
   bulkDeleteWords,
   bulkMarkDitto,
   correctNerLabel,
   correctWord,
-  createJob,
   deleteWord,
   markWordDitto,
-  pollJob,
   resetImage,
   saveImage,
 } from './api/endpoints.js';
@@ -38,7 +36,9 @@ export default function ViewerApp() {
 
   const wrapRef = useRef(null);
   const coordElRef = useRef(null);
-  const [ocrPopup, setOcrPopup] = useState(null); // { mode, word?, pendingRegion? }
+  // { mode: 'selection' } | { mode: 'draw', pendingRegion }. Selection contents
+  // are derived below from the live selection, never stored, so they can't go stale.
+  const [ocrPopup, setOcrPopup] = useState(null);
   const [jobModal, setJobModal] = useState({ visible: false, jobType: '' });
   const [activeJobs, setActiveJobs] = useState({}); // { ocr: jobPk, ner: jobPk }
   const [unsavedBar, setUnsavedBar] = useState(null); // { onContinue }
@@ -51,73 +51,144 @@ export default function ViewerApp() {
     dispatch({ type: 'OCR_SELECT_CLEAR' });
   }, [dispatch]);
 
+  // Called right after a selection dispatch, before that state lands, so it
+  // only marks the popup open; what it shows comes from the next render.
   const openOcrPopupForSelection = useCallback(() => {
     if (!config.hasRepair) return;
-    setOcrPopup((prev) => {
-      if (prev?.mode === 'draw') return prev;
-      const ids = Array.from(state.ocrSelectedIds);
-      if (ids.length === 1) {
-        return { mode: 'single-edit', word: state.wordById[ids[0]] };
-      }
-      if (ids.length > 1) {
-        return { mode: 'multi-edit' };
-      }
-      return null;
-    });
-  }, [config.hasRepair, state.ocrSelectedIds, state.wordById]);
+    setOcrPopup((prev) => (prev?.mode === 'draw' ? prev : { mode: 'selection' }));
+  }, [config.hasRepair]);
 
-  // Re-derive popup contents when selection changes while open.
+  // Close the selection popup once nothing is selected.
   useEffect(() => {
-    if (!ocrPopup || ocrPopup.mode === 'draw') return;
+    if (ocrPopup?.mode === 'selection' && state.ocrSelectedIds.size === 0) setOcrPopup(null);
+  }, [state.ocrSelectedIds, ocrPopup]);
+
+  // What OcrEditPopup renders: draw as stored, selection resolved to
+  // single-edit (with the current word) or multi-edit.
+  const ocrPopupView = useMemo(() => {
+    if (ocrPopup?.mode !== 'selection') return ocrPopup;
     const ids = Array.from(state.ocrSelectedIds);
-    if (ids.length === 0) {
-      setOcrPopup(null);
-    } else if (ids.length === 1 && ocrPopup.mode !== 'single-edit') {
-      setOcrPopup({ mode: 'single-edit', word: state.wordById[ids[0]] });
-    } else if (ids.length > 1 && ocrPopup.mode !== 'multi-edit') {
-      setOcrPopup({ mode: 'multi-edit' });
-    }
-  }, [state.ocrSelectedIds, state.wordById, ocrPopup]);
+    if (ids.length === 1) return { mode: 'single-edit', word: state.wordById[ids[0]] };
+    if (ids.length > 1) return { mode: 'multi-edit' };
+    return null;
+  }, [ocrPopup, state.ocrSelectedIds, state.wordById]);
 
   const openOcrPopupForDraw = useCallback((pending) => {
     setOcrPopup({ mode: 'draw', pendingRegion: pending });
   }, []);
 
-  // ── OCR save / confirm / ditto / delete / restore actions ──
-  async function postCorrection(word, text, skipUndo) {
-    if (!config.hasRepair) return;
-    const prev = word.corrected_text;
-    if (!skipUndo) {
-      dispatch({
-        type: 'PUSH_UNDO',
-        entry: { type: 'ocr-correct', wordId: word.id, prev, next: text },
-      });
-    }
-    const data = await correctWord(config, word.id, text ?? '');
-    if (!data.ok) return;
-    dispatch({
-      type: 'WORD_PATCH',
-      id: word.id,
-      patch: { corrected_text: data.corrected_text || null },
-    });
-    applyOcrUpdated(data.updated);
-  }
+  // ── Word primitives: server call + reducer update, no history. Shared by
+  // the UI actions below (which record history) and undo/redo (which doesn't).
 
   function applyOcrUpdated(updates) {
     if (!updates || !updates.length) return;
     dispatch({ type: 'WORDS_PATCH', updates });
   }
 
-  async function onOcrConfirm() {
-    const ids = Array.from(state.ocrSelectedIds);
+  // changes: [{ wordId, text }]; '' or null clears the correction.
+  // Returns the ids the server accepted.
+  async function setCorrections(changes) {
+    const done = [];
+    for (const { wordId, text } of changes) {
+      const data = await correctWord(config, wordId, text ?? '');
+      if (!data.ok) continue;
+      dispatch({ type: 'WORD_PATCH', id: wordId, patch: { corrected_text: data.corrected_text || null } });
+      applyOcrUpdated(data.updated);
+      done.push(wordId);
+    }
+    return done;
+  }
+
+  // Returns the deleted ids.
+  async function removeWords(ids) {
+    if (ids.length === 1) {
+      const data = await deleteWord(config, ids[0]);
+      if (!data.ok) return [];
+      dispatch({ type: 'WORD_DELETE', id: data.deleted_id });
+      applyOcrUpdated(data.updated);
+      return [data.deleted_id];
+    }
+    const data = await bulkDeleteWords(config, ids);
+    if (!data.ok) return [];
+    dispatch({ type: 'WORDS_DELETE_BULK', ids: data.deleted_ids });
+    applyOcrUpdated(data.updated);
+    return data.deleted_ids;
+  }
+
+  // Re-create deleted words from snapshots. The add endpoint only takes a
+  // bbox and text, so the text comes back as a correction on line 0 (the
+  // original ocr_text, confidence and reading order are not restored).
+  // Returns the new ids.
+  async function restoreWords(snaps) {
+    const ids = [];
+    for (const snap of snaps) {
+      const data = await addWord(config, snap, snap.corrected_text || snap.ocr_text);
+      if (!data.ok) continue;
+      dispatch({ type: 'WORD_ADD', word: data.word });
+      dispatch({ type: 'HISTORY_REMAP_ID', from: snap.id, to: data.word.id });
+      applyOcrUpdated(data.updated);
+      ids.push(data.word.id);
+    }
+    return ids;
+  }
+
+  // Returns [{ wordId, prevText }] for the words marked, to undo with.
+  async function markDittos(ids) {
+    if (!ids.length) return [];
+    const prevText = Object.fromEntries(
+      ids.map((id) => [id, state.wordById[id]?.corrected_text || state.wordById[id]?.ocr_text || '']),
+    );
+    const data = ids.length === 1 ? await markWordDitto(config, ids[0]) : await bulkMarkDitto(config, ids);
+    if (!data.ok) return [];
+    const marked = data.marked_pks || [data.word_pk];
+    marked.forEach((id) =>
+      dispatch({ type: 'WORD_PATCH', id, patch: { ocr_text: '"', corrected_text: null, is_ditto: false } }),
+    );
+    applyOcrUpdated(data.updated);
+    return marked.map((id) => ({ wordId: id, prevText: prevText[id] }));
+  }
+
+  // labels: [{ wordId, label }] with correctNerLabel's null / '' / value
+  // meaning. Returns the ids the server accepted.
+  async function setNerLabels(labels) {
+    const done = [];
+    for (const { wordId, label } of labels) {
+      const data = await correctNerLabel(config, wordId, label);
+      if (!data?.ok) continue;
+      dispatch({ type: 'WORD_PATCH', id: wordId, patch: { corrected_label: label } });
+      done.push(wordId);
+    }
+    return done;
+  }
+
+  function record(entry) {
+    dispatch({ type: 'PUSH_UNDO', entry });
+  }
+
+  // ── OCR save / confirm / ditto / delete / restore actions ──
+
+  // Set each selected word's correction to text(word) as one undo step.
+  async function correctSelection(text) {
+    const ids = Array.from(state.ocrSelectedIds).filter((id) => state.wordById[id]);
     if (!ids.length) return;
     setOcrPopup(null);
     dispatch({ type: 'OCR_SELECT_CLEAR' });
-    for (const id of ids) {
-      const w = state.wordById[id];
-      if (!w) continue;
-      await postCorrection(w, w.corrected_text || w.ocr_text);
-    }
+    const changes = ids.map((id) => ({
+      wordId: id,
+      prev: state.wordById[id].corrected_text ?? null,
+      next: text(state.wordById[id]),
+    }));
+    const done = await setCorrections(changes.map((c) => ({ wordId: c.wordId, text: c.next })));
+    if (done.length) record({ type: 'ocr-correct', changes: changes.filter((c) => done.includes(c.wordId)) });
+  }
+
+  // Confirm as-is: pin the current text as a correction.
+  function onOcrConfirm() {
+    return correctSelection((w) => w.corrected_text || w.ocr_text);
+  }
+
+  function onOcrRestore() {
+    return correctSelection(() => '');
   }
 
   async function onOcrSave(text) {
@@ -129,135 +200,117 @@ export default function ViewerApp() {
       const data = await addWord(config, pending, text);
       if (!data.ok) return;
       dispatch({ type: 'WORD_ADD', word: data.word });
-      dispatch({
-        type: 'PUSH_UNDO',
-        entry: { type: 'ocr-add', wordId: data.word.id },
-      });
       applyOcrUpdated(data.updated);
+      record({ type: 'ocr-add', wordIds: [data.word.id] });
       return;
     }
-    const ids = Array.from(state.ocrSelectedIds);
-    if (!ids.length) return;
-    setOcrPopup(null);
-    dispatch({ type: 'OCR_SELECT_CLEAR' });
-    for (const id of ids) {
-      const w = state.wordById[id];
-      if (w) await postCorrection(w, text);
-    }
+    return correctSelection(() => text);
   }
 
   async function onOcrDelete() {
-    const ids = Array.from(state.ocrSelectedIds);
+    const ids = Array.from(state.ocrSelectedIds).filter((id) => state.wordById[id]);
     if (!ids.length) return;
-    if (ids.length === 1) {
-      const id = ids[0];
-      const w = state.wordById[id];
-      if (!w) return;
-      const snap = { ...w };
-      setOcrPopup(null);
-      dispatch({ type: 'OCR_SELECT_CLEAR' });
-      const data = await deleteWord(config, id);
-      if (!data.ok) return;
-      dispatch({ type: 'WORD_DELETE', id: data.deleted_id });
-      dispatch({
-        type: 'PUSH_UNDO',
-        entry: { type: 'ocr-delete', wordData: snap },
-      });
-      applyOcrUpdated(data.updated);
-    } else {
-      if (!confirm('Delete ' + ids.length + ' words?')) return;
-      setOcrPopup(null);
-      const data = await bulkDeleteWords(config, ids);
-      if (!data.ok) return;
-      dispatch({ type: 'WORDS_DELETE_BULK', ids: data.deleted_ids });
-      applyOcrUpdated(data.updated);
-    }
-  }
-
-  async function onOcrRestore() {
-    const ids = Array.from(state.ocrSelectedIds).filter(
-      (id) => !!(state.wordById[id] && state.wordById[id].corrected_text),
-    );
-    if (!ids.length) return;
+    if (ids.length > 1 && !confirm('Delete ' + ids.length + ' words?')) return;
+    const snaps = ids.map((id) => ({ ...state.wordById[id] }));
     setOcrPopup(null);
     dispatch({ type: 'OCR_SELECT_CLEAR' });
-    for (const id of ids) {
-      const w = state.wordById[id];
-      if (w) await postCorrection(w, '');
-    }
+    const deleted = await removeWords(ids);
+    if (deleted.length) record({ type: 'ocr-delete', words: snaps.filter((w) => deleted.includes(w.id)) });
   }
 
   async function onOcrDitto() {
     if (ocrPopup?.mode === 'draw') {
-      // Add region as empty then mark ditto.
+      // Add the region empty, then mark it a ditto. Undo removes the region.
       const pending = ocrPopup.pendingRegion;
       setOcrPopup(null);
       dispatch({ type: 'SET_DRAW_MODE', active: false });
       const data = await addWord(config, pending, '');
       if (!data.ok) return;
-      const word = data.word;
-      dispatch({ type: 'WORD_ADD', word });
-      dispatch({ type: 'PUSH_UNDO', entry: { type: 'ocr-add', wordId: word.id } });
-      const data2 = await markWordDitto(config, word.id);
-      if (data2.ok) {
-        dispatch({
-          type: 'WORD_PATCH',
-          id: word.id,
-          patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
-        });
-        applyOcrUpdated(data2.updated);
-      }
+      dispatch({ type: 'WORD_ADD', word: data.word });
+      applyOcrUpdated(data.updated);
+      record({ type: 'ocr-add', wordIds: [data.word.id] });
+      await markDittos([data.word.id]);
       return;
     }
     const ids = Array.from(state.ocrSelectedIds);
     if (!ids.length) return;
     setOcrPopup(null);
-    if (ids.length > 1) {
-      const data = await bulkMarkDitto(config, ids);
-      if (!data.ok) return;
-      data.marked_pks.forEach((id) => {
-        dispatch({
-          type: 'WORD_PATCH',
-          id,
-          patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
-        });
-      });
-      applyOcrUpdated(data.updated);
-      dispatch({ type: 'OCR_SELECT_CLEAR' });
-    } else {
-      const id = ids[0];
-      const data = await markWordDitto(config, id);
-      if (!data.ok) return;
-      dispatch({
-        type: 'WORD_PATCH',
-        id,
-        patch: { ocr_text: '"', corrected_text: null, is_ditto: false },
-      });
-      applyOcrUpdated(data.updated);
-      dispatch({ type: 'OCR_SELECT_CLEAR' });
-    }
+    dispatch({ type: 'OCR_SELECT_CLEAR' });
+    const changes = await markDittos(ids);
+    if (changes.length) record({ type: 'ocr-ditto', changes });
   }
 
   // ── NER apply ──
+  // type: 'PER' / 'LOC' / 'ORG', or 'NONE' to explicitly clear the label.
   async function onNerApply(type) {
-    const ids = Array.from(state.nerSelectedIds);
-    if (!ids.length) return;
+    const ids = Array.from(state.nerSelectedIds).filter((id) => state.wordById[id]);
+    if (!ids.length || !type) return;
     ids.sort((a, b) => {
       const wa = state.wordById[a];
       const wb = state.wordById[b];
-      if (!wa || !wb) return 0;
       if (wa.left !== wb.left) return wa.left - wb.left;
       return wa.top - wb.top;
     });
-    for (let idx = 0; idx < ids.length; idx++) {
-      const id = ids[idx];
-      const next = type === 'NONE' || !type ? null : (idx === 0 ? 'B-' : 'I-') + type;
-      const data = await correctNerLabel(config, id, next);
-      if (data?.ok) {
-        dispatch({ type: 'WORD_PATCH', id, patch: { corrected_label: next } });
-      }
-    }
+    const changes = ids.map((id, idx) => ({
+      wordId: id,
+      prev: state.wordById[id].corrected_label ?? null,
+      next: type === 'NONE' ? '' : (idx === 0 ? 'B-' : 'I-') + type,
+    }));
     dispatch({ type: 'NER_SELECT_CLEAR' });
+    const done = await setNerLabels(changes.map((c) => ({ wordId: c.wordId, label: c.next })));
+    if (done.length) record({ type: 'ner-correct', changes: changes.filter((c) => done.includes(c.wordId)) });
+  }
+
+  // ── Undo / redo ──
+  // Each handler reverts one entry and returns the entry that reverts it back,
+  // so the same table serves both directions.
+  const swap = (changes) => changes.map((c) => ({ ...c, prev: c.next, next: c.prev }));
+  const historyHandlers = {
+    'ocr-correct': async (e) => {
+      const done = await setCorrections(e.changes.map((c) => ({ wordId: c.wordId, text: c.prev })));
+      return { type: 'ocr-correct', changes: swap(e.changes.filter((c) => done.includes(c.wordId))) };
+    },
+    'ocr-add': async (e) => {
+      const snaps = e.wordIds.map((id) => state.wordById[id]).filter(Boolean).map((w) => ({ ...w }));
+      const deleted = await removeWords(snaps.map((w) => w.id));
+      return { type: 'ocr-delete', words: snaps.filter((w) => deleted.includes(w.id)) };
+    },
+    'ocr-delete': async (e) => ({ type: 'ocr-add', wordIds: await restoreWords(e.words) }),
+    // Like the legacy viewer, undoing a ditto re-applies each word's prior
+    // text as a correction rather than restoring the raw ocr_text.
+    'ocr-ditto': async (e) => {
+      const done = await setCorrections(e.changes.map((c) => ({ wordId: c.wordId, text: c.prevText })));
+      return { type: 'ocr-redo-ditto', wordIds: done };
+    },
+    'ocr-redo-ditto': async (e) => ({ type: 'ocr-ditto', changes: await markDittos(e.wordIds) }),
+    'ner-correct': async (e) => {
+      const done = await setNerLabels(e.changes.map((c) => ({ wordId: c.wordId, label: c.prev })));
+      return { type: 'ner-correct', changes: swap(e.changes.filter((c) => done.includes(c.wordId))) };
+    },
+    'image-adjust': async (e) => {
+      dispatch({ type: 'IMAGE_SET_CURRENT', params: e.prev });
+      return { type: 'image-adjust', prev: e.next, next: e.prev };
+    },
+  };
+
+  // One replay at a time: entries hold word ids that the previous replay
+  // may still be remapping.
+  const historyBusyRef = useRef(false);
+  async function applyHistory(direction) {
+    const stack = direction === 'undo' ? state.undoStack : state.redoStack;
+    if (historyBusyRef.current || !stack.length) return;
+    const entry = stack[stack.length - 1];
+    const handler = historyHandlers[entry.type];
+    historyBusyRef.current = true;
+    dispatch({ type: direction === 'undo' ? 'POP_UNDO' : 'POP_REDO' });
+    try {
+      const inverse = handler ? await handler(entry) : null;
+      if (inverse) {
+        dispatch({ type: direction === 'undo' ? 'PUSH_REDO' : 'PUSH_REDO_TO_UNDO', entry: inverse });
+      }
+    } finally {
+      historyBusyRef.current = false;
+    }
   }
 
   // ── Annotation labeling entry ──
@@ -289,11 +342,8 @@ export default function ViewerApp() {
   // ── Image save / unsaved-bar gating ──
   async function onSaveImage() {
     const params = slidersToParams(state.image.current);
-    const url = isIdentityParams(params) ? config.imageResetUrl : config.imageSaveUrl;
     try {
-      const data = isIdentityParams(params)
-        ? await resetImage(config)
-        : await saveImage(config, params);
+      const data = isIdentity(params) ? await resetImage(config) : await saveImage(config, params);
       if (!data.ok) {
         alert(data.error || 'Save failed.');
         return false;
@@ -301,7 +351,7 @@ export default function ViewerApp() {
       dispatch({
         type: 'IMAGE_MARK_SAVED',
         params: state.image.current,
-        hasCorrected: !isIdentityParams(params),
+        hasCorrected: !isIdentity(params),
       });
       if (data.image_url) {
         const sep = data.image_url.indexOf('?') >= 0 ? '&' : '?';
@@ -375,13 +425,17 @@ export default function ViewerApp() {
         return;
       }
       if (config.hasRepair && (e.ctrlKey || e.metaKey) && !inField) {
-        if (e.key === 'z' && !e.shiftKey) {
+        // e.key is 'Z' with Shift held on most layouts.
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
           e.preventDefault();
-          /* TODO: undo */ return;
+          applyHistory('undo');
+          return;
         }
-        if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
           e.preventDefault();
-          /* TODO: redo */ return;
+          applyHistory('redo');
+          return;
         }
       }
       if (state.tab === 'ocr' && config.hasRepair) {
@@ -455,7 +509,6 @@ export default function ViewerApp() {
   return (
     <>
       <ImageFilterSvg sliders={state.image.current} />
-      <div id="dp-person-confirm-strip" style={{ display: 'none' }} />
       <div style={{ marginBottom: '1.5em' }}>
         <ViewerToolbar
           onFit={onFit}
@@ -466,10 +519,6 @@ export default function ViewerApp() {
           }}
           onSaveImage={onSaveImage}
         />
-
-        <div id="dp-ner-progress-wrap">
-          <div id="dp-ner-progress-bar" />
-        </div>
 
         <div id="dp-outer">
           <ViewerCanvas
@@ -499,7 +548,7 @@ export default function ViewerApp() {
       <div id="dp-coord" ref={coordElRef} />
 
       <OcrEditPopup
-        popup={ocrPopup}
+        popup={ocrPopupView}
         wrapRef={wrapRef}
         onClose={closeOcrPopup}
         onConfirm={onOcrConfirm}
@@ -510,7 +559,7 @@ export default function ViewerApp() {
       />
       <OcrSelectionBar
         wrapRef={wrapRef}
-        popupOpen={!!ocrPopup}
+        popupOpen={!!ocrPopupView}
         onBulkDitto={onOcrDitto}
         onBulkDelete={onOcrDelete}
       />
@@ -540,21 +589,5 @@ export default function ViewerApp() {
         onJobStarted={onJobStarted}
       />
     </>
-  );
-}
-
-function isIdentityParams(p) {
-  return (
-    p.brightness === 0 &&
-    p.contrast === 1 &&
-    p.gamma === 1 &&
-    p.black === 0 &&
-    p.white === 255 &&
-    !p.grayscale &&
-    !p.invert &&
-    p.threshold == null &&
-    !p.sharpen &&
-    !p.rotate90 &&
-    !p.rotate_fine
   );
 }

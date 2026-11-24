@@ -1,11 +1,10 @@
 """
 Views and template-context wiring for the embedded document viewer.
 
-The viewer lives on the DocumentPage admin change form and exchanges JSON
-with the browser via a small set of AJAX endpoints, all rooted under
-``/admin/grime/documentpage/<page_pk>/viewer/``.  Endpoint URLs are
-attached to ``DocumentPageAdmin.get_urls()`` so they share the admin's
-auth and CSRF treatment.
+The React viewer (document_detail.html) exchanges JSON with the browser via
+a small set of AJAX endpoints, all rooted under
+``pages/<page_pk>/viewer/`` in grime/urls.py.  get_viewer_urls() wraps
+every one in staff_member_required; CSRF is Django's default.
 
 Endpoints implemented here:
 
@@ -16,18 +15,18 @@ Endpoints implemented here:
     POST words/mark-ditto/    — mark one Word as a ditto and re-resolve the page
     POST words/bulk-delete/   — delete multiple Words at once
     POST words/bulk-ditto/    — mark multiple Words as dittos and re-resolve the page
-    POST words/rerun-ocr/     — re-OCR the union bbox of a Word selection
+    POST words/rerun-ner/     — re-run HF NER on the page
     POST annotations/create/  — create an Annotation on this page
     POST annotations/update/  — edit an existing Annotation
     POST annotations/delete/  — delete an Annotation
     POST image/save/          — bake brightness/contrast/levels into corrected_image
     POST image/reset/         — clear corrected_image and revert to original
     POST image/autocontrast/  — analyse histogram and return suggested black/white levels
+    GET  export/pdf/          — download the page as a searchable PDF
 
 Word ops are scoped to the page in the URL — the view rejects requests
 that try to touch a Word belonging to a different page.
 """
-
 
 import io
 import json
@@ -57,88 +56,35 @@ _VALID_NER_LABELS = {None, "", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-O
 
 
 def get_viewer_urls() -> list:
-    """URL patterns mounted under DocumentPageAdmin.get_urls().
+    """Viewer endpoint patterns, included under ``pages/`` in grime/urls.py.
 
-    Returned patterns are relative to ``/admin/grime/documentpage/`` — they
-    expect the page primary key to follow that prefix.
+    Every view is wrapped in staff_member_required here, in one place, so a
+    new endpoint can't ship without auth.
     """
+    endpoints = [
+        ("words/correct/", word_correct, "word_correct"),
+        ("words/add/", word_add, "word_add"),
+        ("words/delete/", word_delete, "word_delete"),
+        ("words/ner-correct/", word_ner_correct, "word_ner_correct"),
+        ("words/mark-ditto/", word_mark_ditto, "word_mark_ditto"),
+        ("words/bulk-delete/", words_bulk_delete, "words_bulk_delete"),
+        ("words/bulk-ditto/", words_bulk_ditto, "words_bulk_ditto"),
+        ("words/rerun-ner/", words_rerun_ner, "words_rerun_ner"),
+        ("annotations/create/", annotation_create, "annotation_create"),
+        ("annotations/update/", annotation_update, "annotation_update"),
+        ("annotations/delete/", annotation_delete, "annotation_delete"),
+        ("image/save/", image_save, "image_save"),
+        ("image/reset/", image_reset, "image_reset"),
+        ("image/autocontrast/", image_autocontrast, "image_autocontrast"),
+        ("export/pdf/", export_page_pdf, "export_pdf"),
+    ]
     return [
         path(
-            "<int:page_pk>/viewer/words/correct/",
-            word_correct,
-            name="grime_documentpage_viewer_word_correct",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/add/",
-            word_add,
-            name="grime_documentpage_viewer_word_add",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/delete/",
-            word_delete,
-            name="grime_documentpage_viewer_word_delete",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/ner-correct/",
-            word_ner_correct,
-            name="grime_documentpage_viewer_word_ner_correct",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/mark-ditto/",
-            word_mark_ditto,
-            name="grime_documentpage_viewer_word_mark_ditto",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/bulk-delete/",
-            words_bulk_delete,
-            name="grime_documentpage_viewer_words_bulk_delete",
-        ),
-        path(
-            "<int:page_pk>/viewer/words/bulk-ditto/",
-            words_bulk_ditto,
-            name="grime_documentpage_viewer_words_bulk_ditto",
-        ),
-
-        path(
-            "<int:page_pk>/viewer/words/rerun-ner/",
-            words_rerun_ner,
-            name="grime_documentpage_viewer_words_rerun_ner",
-        ),
-        path(
-            "<int:page_pk>/viewer/annotations/create/",
-            annotation_create,
-            name="grime_documentpage_viewer_annotation_create",
-        ),
-        path(
-            "<int:page_pk>/viewer/annotations/update/",
-            annotation_update,
-            name="grime_documentpage_viewer_annotation_update",
-        ),
-        path(
-            "<int:page_pk>/viewer/annotations/delete/",
-            annotation_delete,
-            name="grime_documentpage_viewer_annotation_delete",
-        ),
-        path(
-            "<int:page_pk>/viewer/image/save/",
-            image_save,
-            name="grime_documentpage_viewer_image_save",
-        ),
-        path(
-            "<int:page_pk>/viewer/image/reset/",
-            image_reset,
-            name="grime_documentpage_viewer_image_reset",
-        ),
-        path(
-            "<int:page_pk>/viewer/image/autocontrast/",
-            image_autocontrast,
-            name="grime_documentpage_viewer_image_autocontrast",
-        ),
-        path(
-            "<int:page_pk>/viewer/export/pdf/",
-            export_page_pdf,
-            name="grime_documentpage_viewer_export_pdf",
-        ),
+            f"<int:page_pk>/viewer/{route}",
+            staff_member_required(view),
+            name=f"grime_documentpage_viewer_{name}",
+        )
+        for route, view, name in endpoints
     ]
 
 
@@ -245,7 +191,11 @@ def build_viewer_context(page: DocumentPage) -> dict:
     )
 
     ner_models = [
-        {"key": k, "label": _NER_MODEL_LABELS.get(k, k.capitalize()), "default": k == _NER_DEFAULT_MODEL}
+        {
+            "key": k,
+            "label": _NER_MODEL_LABELS.get(k, k.capitalize()),
+            "default": k == _NER_DEFAULT_MODEL,
+        }
         for k in _NER_MODEL_REGISTRY
     ]
 
@@ -266,7 +216,9 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "next_url_json": _safe_json(None),
         "page_list_json": _safe_json(None),
         "ocr_record_pk": page.pk,
-        "confirmed_word_count": Word.objects.filter(page=page, corrected_ocr_by__isnull=False).count(),
+        "confirmed_word_count": Word.objects.filter(
+            page=page, corrected_ocr_by__isnull=False
+        ).count(),
         "annotation_source_type_id": page_ct.pk,
         "annotation_source_id": page.pk,
         "doc_annotation_count": Annotation.objects.filter(
@@ -292,7 +244,9 @@ def build_viewer_context(page: DocumentPage) -> dict:
         "ocr_bulk_delete_url": _url("grime_documentpage_viewer_words_bulk_delete"),
         "ocr_bulk_ditto_url": _url("grime_documentpage_viewer_words_bulk_ditto"),
         "job_create_url": reverse("grime:job_create"),
-        "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace("/0/", "/{pk}/"),
+        "job_poll_url_tpl": reverse("grime:job_poll", args=[0]).replace(
+            "/0/", "/{pk}/"
+        ),
         "job_form_fields_url": reverse("grime:job_form_fields"),
         "job_status_url": reverse("grime:jobs_status"),
         "document_pk": page.document_id,
@@ -469,7 +423,9 @@ def annotation_update(request: HttpRequest, page_pk: int) -> JsonResponse:
     except (KeyError, ValueError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     page_ct = ContentType.objects.get_for_model(DocumentPage)
-    annotation = Annotation.objects.filter(pk=annotation_id, source_type=page_ct, source_id=page_pk).first()
+    annotation = Annotation.objects.filter(
+        pk=annotation_id, source_type=page_ct, source_id=page_pk
+    ).first()
     if annotation is None:
         return JsonResponse({"error": "Annotation not found on this page"}, status=404)
     fields, err = _parse_annotation_payload(request)
@@ -501,8 +457,9 @@ def annotation_delete(request: HttpRequest, page_pk: int) -> JsonResponse:
 # ---------------------------------------------------------------------------
 
 
-# Identity adjustments. Must match the DEFAULTS object in viewer-image.js after
-# the slider->params conversion done there (brightness/100, contrast/100, etc.).
+# Identity adjustments. Must match IMAGE_DEFAULTS in
+# frontend/src/viewer/state/initialState.js after slidersToParams()
+# (brightness/100, contrast/100, etc.).
 _DEFAULT_IMAGE_PARAMS = {
     "brightness": 0.0,
     "contrast": 1.0,
@@ -519,7 +476,7 @@ _DEFAULT_IMAGE_PARAMS = {
 
 
 def _build_image_lut(params: dict) -> list[int]:
-    """Per-channel 0-255 LUT. Mirrors buildLut() in viewer-image.js exactly."""
+    """Per-channel 0-255 LUT. Mirrors buildLut() in frontend/src/viewer/state/imageParams.js exactly."""
     black = max(0, min(255, int(params.get("black", 0))))
     white = max(black + 1, min(255, int(params.get("white", 255))))
     gamma = max(0.01, float(params.get("gamma", 1.0)))
@@ -534,7 +491,7 @@ def _build_image_lut(params: dict) -> list[int]:
             x = 0.0
         elif x > 1.0:
             x = 1.0
-        x = x ** inv_gamma
+        x = x**inv_gamma
         x = (x - 0.5) * contrast + 0.5
         x = x + brightness
         if x < 0.0:
@@ -821,7 +778,6 @@ def words_bulk_ditto(request: HttpRequest, page_pk: int) -> JsonResponse:
     return JsonResponse({"ok": True, "marked_pks": marked_pks, "updated": updated})
 
 
-
 @require_POST
 def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
     """Run (or re-run) HuggingFace NER on a page and return updated word labels.
@@ -839,12 +795,18 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
         return JsonResponse({"error": "Page not found"}, status=404)
 
     from grime.models import NERPass, Word
-    from grime.pipeline.ner import DEFAULT_CONFIDENCE_THRESHOLD, extract_entities, label_ocr_words
+    from grime.pipeline.ner import (
+        DEFAULT_CONFIDENCE_THRESHOLD,
+        extract_entities,
+        label_ocr_words,
+    )
 
     model_key = (request.POST.get("model") or _NER_DEFAULT_MODEL).strip()
     if model_key not in _NER_MODEL_REGISTRY:
         return JsonResponse(
-            {"error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"},
+            {
+                "error": f"Unknown model {model_key!r}. Valid keys: {', '.join(_NER_MODEL_REGISTRY)}"
+            },
             status=400,
         )
 
@@ -853,7 +815,9 @@ def words_rerun_ner(request: HttpRequest, page_pk: int) -> JsonResponse:
         NERPass.objects.filter(page=page, schema_name=schema_name).delete()
         words = list(Word.objects.filter(page=page).order_by("line_num", "word_num"))
         if not words:
-            return JsonResponse({"error": "Page has no words to run NER on"}, status=400)
+            return JsonResponse(
+                {"error": "Page has no words to run NER on"}, status=400
+            )
         Word.objects.filter(page=page).update(ner_label=None)
         text = page.text or " ".join(
             (w.corrected_text if w.corrected_text is not None else w.ocr_text) or ""
@@ -944,6 +908,29 @@ def document_page_view(request, doc_pk: int, page_pk: int | None = None):
 # ---------------------------------------------------------------------------
 
 
+def build_document_list(documents=None) -> list[dict]:
+    """Dashboard rows, ordered by title. Shared by document_list_view and the
+    static demo export (`python manage.py export_demo --page 12 --page 40`).
+
+    documents: optional Document queryset to restrict the list (default: all).
+    """
+    documents = Document.objects.all() if documents is None else documents
+    entity_counts = {
+        row["page__document_id"]: row["n"]
+        for row in Word.objects.filter(ner_label__startswith="B-")
+        .values("page__document_id")
+        .annotate(n=Count("pk"))
+    }
+    return [
+        {
+            "doc": doc,
+            "doc_tags_json": json.dumps(doc.tags),
+            "entity_count": entity_counts.get(doc.pk, 0),
+        }
+        for doc in documents.annotate(page_count=Count("pages")).order_by("title")
+    ]
+
+
 @staff_member_required
 def document_list_view(request):
     upload_error = None
@@ -979,23 +966,11 @@ def document_list_view(request):
                     doc.save(update_fields=["tags"])
                 return redirect("grime:document", doc_pk=doc.pk)
 
-    entity_counts = {
-        row["page__document_id"]: row["n"]
-        for row in Word.objects.filter(ner_label__startswith="B-")
-        .values("page__document_id")
-        .annotate(n=Count("pk"))
-    }
-    doc_list = [
-        {
-            "doc": doc,
-            "doc_tags_json": json.dumps(doc.tags),
-            "entity_count": entity_counts.get(doc.pk, 0),
-        }
-        for doc in Document.objects.annotate(page_count=Count("pages")).order_by("title")
-    ]
+    doc_list = build_document_list()
     worker_slots = list(WorkerSlot.objects.all())
 
     from grime.forms import CreateJobForm
+
     job_form = CreateJobForm()
 
     return render(
@@ -1029,7 +1004,11 @@ def rename_document_view(request, doc_pk: int):
     if raw_tags is not None:
         try:
             parsed = json.loads(raw_tags)
-            doc.tags = [str(t).strip() for t in parsed if str(t).strip()] if isinstance(parsed, list) else []
+            doc.tags = (
+                [str(t).strip() for t in parsed if str(t).strip()]
+                if isinstance(parsed, list)
+                else []
+            )
         except (json.JSONDecodeError, TypeError):
             doc.tags = []
         update_fields.append("tags")
@@ -1114,11 +1093,15 @@ def _build_entity_spans(words) -> list[dict]:
     spans = []
     current = None
     for w in words:
-        label = w.label if hasattr(w, "label") else (w.get("corrected_label") or w.get("ner_label"))
+        label = (
+            w.label
+            if hasattr(w, "label")
+            else (w.get("corrected_label") or w.get("ner_label"))
+        )
         if not label:
             current = None
             continue
-        entity_type = label[2:]   # strip B- / I-
+        entity_type = label[2:]  # strip B- / I-
         prefix = label[0]
         if prefix == "B" or current is None or current["type"] != entity_type:
             current = {"type": entity_type, "words": [w]}
@@ -1130,19 +1113,35 @@ def _build_entity_spans(words) -> list[dict]:
     for s in spans:
         ws = s["words"]
         text = " ".join(
-            (w.corrected_text or w.ocr_text) if hasattr(w, "ocr_text")
-            else (w.get("corrected_text") or w.get("ocr_text", ""))
+            (
+                (w.corrected_text or w.ocr_text)
+                if hasattr(w, "ocr_text")
+                else (w.get("corrected_text") or w.get("ocr_text", ""))
+            )
             for w in ws
         )
-        left   = min(w.left if hasattr(w, "left") else w["left"] for w in ws)
-        top    = min(w.top  if hasattr(w, "top")  else w["top"]  for w in ws)
-        right  = max((w.left + w.width)  if hasattr(w, "left") else (w["left"] + w["width"])  for w in ws)
-        bottom = max((w.top  + w.height) if hasattr(w, "top")  else (w["top"]  + w["height"]) for w in ws)
-        result.append({
-            "type": s["type"],
-            "text": text,
-            "bbox": {"left": left, "top": top, "width": right - left, "height": bottom - top},
-        })
+        left = min(w.left if hasattr(w, "left") else w["left"] for w in ws)
+        top = min(w.top if hasattr(w, "top") else w["top"] for w in ws)
+        right = max(
+            (w.left + w.width) if hasattr(w, "left") else (w["left"] + w["width"])
+            for w in ws
+        )
+        bottom = max(
+            (w.top + w.height) if hasattr(w, "top") else (w["top"] + w["height"])
+            for w in ws
+        )
+        result.append(
+            {
+                "type": s["type"],
+                "text": text,
+                "bbox": {
+                    "left": left,
+                    "top": top,
+                    "width": right - left,
+                    "height": bottom - top,
+                },
+            }
+        )
     return result
 
 
@@ -1157,8 +1156,7 @@ def entity_list_view(request):
         document = get_object_or_404(Document, pk=doc_pk)
 
     pages = (
-        DocumentPage.objects
-        .filter(words__ner_label__isnull=False)
+        DocumentPage.objects.filter(words__ner_label__isnull=False)
         .distinct()
         .select_related("document")
         .prefetch_related("words")
@@ -1179,24 +1177,23 @@ def entity_list_view(request):
             entry["count"] += 1
 
     # Merge Entity records (notes + dismissed)
-    entity_records = {
-        (e.entity_type, e.text): e
-        for e in Entity.objects.all()
-    }
+    entity_records = {(e.entity_type, e.text): e for e in Entity.objects.all()}
 
     entities = []
     for (etype, enorm), data in agg.items():
         rec = entity_records.get((etype, enorm))
-        entities.append({
-            "type": etype,
-            "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
-            "text": enorm,
-            "display_text": data["display_text"],
-            "doc_count": len(data["doc_pks"]),
-            "occurrence_count": data["count"],
-            "notes": rec.notes if rec else "",
-            "dismissed": rec.dismissed if rec else False,
-        })
+        entities.append(
+            {
+                "type": etype,
+                "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
+                "text": enorm,
+                "display_text": data["display_text"],
+                "doc_count": len(data["doc_pks"]),
+                "occurrence_count": data["count"],
+                "notes": rec.notes if rec else "",
+                "dismissed": rec.dismissed if rec else False,
+            }
+        )
 
     _TYPE_ORDER = {"PER": 0, "ORG": 1, "LOC": 2}
     entities.sort(key=lambda e: (_TYPE_ORDER.get(e["type"], 9), -e["occurrence_count"]))
@@ -1207,13 +1204,17 @@ def entity_list_view(request):
         e["show_type_header"] = e["type"] != last_type
         last_type = e["type"]
 
-    return render(request, "grime/entity_list.html", {
-        "entities": entities,
-        "document": document,
-        "entity_detail_url": reverse("grime:entity_detail"),
-        "entity_dismiss_url": reverse("grime:entity_dismiss"),
-        "csrf_token": request.META.get("CSRF_COOKIE", ""),
-    })
+    return render(
+        request,
+        "grime/entity_list.html",
+        {
+            "entities": entities,
+            "document": document,
+            "entity_detail_url": reverse("grime:entity_detail"),
+            "entity_dismiss_url": reverse("grime:entity_dismiss"),
+            "csrf_token": request.META.get("CSRF_COOKIE", ""),
+        },
+    )
 
 
 @staff_member_required
@@ -1225,6 +1226,7 @@ def entity_detail_view(request):
     raw_text = request.GET.get("text", "").strip()
     if etype not in _VALID_ENTITY_TYPES or not raw_text:
         from django.http import Http404
+
         raise Http404
 
     enorm = raw_text.lower()
@@ -1232,8 +1234,7 @@ def entity_detail_view(request):
 
     # Collect all occurrences across all pages
     pages = (
-        DocumentPage.objects
-        .filter(words__ner_label__isnull=False)
+        DocumentPage.objects.filter(words__ner_label__isnull=False)
         .distinct()
         .select_related("document")
         .prefetch_related("words")
@@ -1244,7 +1245,8 @@ def entity_detail_view(request):
     for page in pages:
         ordered = sorted(page.words.all(), key=lambda w: (w.line_num, w.word_num))
         occurrences = [
-            s for s in _build_entity_spans(ordered)
+            s
+            for s in _build_entity_spans(ordered)
             if s["type"] == etype and s["text"].strip().lower() == enorm
         ]
         if not occurrences:
@@ -1257,11 +1259,13 @@ def entity_detail_view(request):
             page_entry[page.pk] = {"page": page, "occurrences": []}
         image = page.display_image
         for occ in occurrences:
-            page_entry[page.pk]["occurrences"].append({
-                "imageUrl": image.url if image else "",
-                "pageUrl": reverse("grime:document_page", args=[doc.pk, page.pk]),
-                **occ["bbox"],
-            })
+            page_entry[page.pk]["occurrences"].append(
+                {
+                    "imageUrl": image.url if image else "",
+                    "pageUrl": reverse("grime:document_page", args=[doc.pk, page.pk]),
+                    **occ["bbox"],
+                }
+            )
 
     # Build sorted docs list
     docs_data = []
@@ -1275,17 +1279,23 @@ def entity_detail_view(request):
             pg = page_entry["page"]
             occs = page_entry["occurrences"]
             total_occurrences += len(occs)
-            pages_data.append({
-                "pageNumber": pg.page_number,
-                "pageUrl": reverse("grime:document_page", args=[doc_entry["document"].pk, pg.pk]),
-                "occurrences": occs,
-            })
-        docs_data.append({
-            "title": doc_entry["document"].title,
-            "docUrl": doc_entry["document"].get_absolute_url(),
-            "occurrenceCount": total_occurrences,
-            "pages": pages_data,
-        })
+            pages_data.append(
+                {
+                    "pageNumber": pg.page_number,
+                    "pageUrl": reverse(
+                        "grime:document_page", args=[doc_entry["document"].pk, pg.pk]
+                    ),
+                    "occurrences": occs,
+                }
+            )
+        docs_data.append(
+            {
+                "title": doc_entry["document"].title,
+                "docUrl": doc_entry["document"].get_absolute_url(),
+                "occurrenceCount": total_occurrences,
+                "pages": pages_data,
+            }
+        )
     docs_data.sort(key=lambda d: -d["occurrenceCount"])
 
     # Canonical display text: first occurrence found
@@ -1307,12 +1317,16 @@ def entity_detail_view(request):
         "docs": docs_data,
     }
 
-    return render(request, "grime/entity_detail.html", {
-        "entity_type": etype,
-        "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
-        "display_text": raw_text,
-        "entity_props_json": _safe_json(props),
-    })
+    return render(
+        request,
+        "grime/entity_detail.html",
+        {
+            "entity_type": etype,
+            "type_label": _ENTITY_TYPE_LABELS.get(etype, etype),
+            "display_text": raw_text,
+            "entity_props_json": _safe_json(props),
+        },
+    )
 
 
 @staff_member_required
@@ -1326,7 +1340,8 @@ def entity_note_update_view(request):
         return JsonResponse({"error": "Invalid type or text"}, status=400)
     enorm = raw_text.lower()
     Entity.objects.update_or_create(
-        entity_type=etype, text=enorm,
+        entity_type=etype,
+        text=enorm,
         defaults={"notes": notes},
     )
     return JsonResponse({"ok": True})
@@ -1343,7 +1358,8 @@ def entity_dismiss_view(request):
         return JsonResponse({"error": "Invalid type or text"}, status=400)
     enorm = raw_text.lower()
     entity, _ = Entity.objects.update_or_create(
-        entity_type=etype, text=enorm,
+        entity_type=etype,
+        text=enorm,
         defaults={"dismissed": dismissed},
     )
     return JsonResponse({"ok": True, "dismissed": entity.dismissed})

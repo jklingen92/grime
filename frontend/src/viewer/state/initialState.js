@@ -1,6 +1,8 @@
 // Build the initial reducer state from the window.VIEWER_CONFIG payload that
 // the Django template emits (see grime/templates/grime/document_detail.html).
 
+import { isDemoDisabled } from './selectors.js';
+
 const IMAGE_DEFAULTS = {
   brightness: 0,
   contrast: 100,
@@ -32,10 +34,12 @@ function paramsToSliders(saved) {
   };
 }
 
-function getInitialTab() {
+// ?tab=<key> from page nav; a tab the demo hides (TabBar) falls back to OCR.
+function getInitialTab(config) {
   const t = new URLSearchParams(window.location.search).get('tab');
   const normalized = t === 'tagging' ? 'label' : t;
-  return ['ocr', 'ner', 'label', 'image'].includes(normalized) ? normalized : 'ocr';
+  const known = ['ocr', 'ner', 'label', 'image'].includes(normalized);
+  return known && !isDemoDisabled(config, normalized) ? normalized : 'ocr';
 }
 
 export function buildInitialState(config) {
@@ -48,7 +52,7 @@ export function buildInitialState(config) {
   const savedImage = paramsToSliders(config.imageAdjustments) || { ...IMAGE_DEFAULTS };
 
   return {
-    tab: getInitialTab(),
+    tab: getInitialTab(config),
     zoomLevel: 1.0,
     sidePanelWidth: 260,
 
@@ -70,7 +74,6 @@ export function buildInitialState(config) {
 
     nerSelectedIds: new Set(),
     nerHighlightKey: null,
-    nerModel: (config.nerModels || []).find((m) => m.default)?.key || null,
 
     image: {
       saved: savedImage,

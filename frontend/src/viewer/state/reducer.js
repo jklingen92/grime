@@ -122,9 +122,6 @@ export function reducer(state, action) {
     case 'NER_SET_HIGHLIGHT':
       return { ...state, nerHighlightKey: action.key };
 
-    case 'NER_SET_MODEL':
-      return { ...state, nerModel: action.model };
-
     /* ─── Annotations ─── */
 
     case 'ANNOTATION_ADD': {
@@ -241,6 +238,9 @@ export function reducer(state, action) {
       return { ...state, image: { ...state.image, current: { ...IMAGE_DEFAULTS } } };
 
     /* ─── Undo / redo ─── */
+    // A user action records with PUSH_UNDO (which invalidates redo). Replay
+    // (ViewerApp.applyHistory) pops one stack and pushes the inverse onto the
+    // other with PUSH_REDO / PUSH_REDO_TO_UNDO, leaving the opposite stack intact.
 
     case 'PUSH_UNDO':
       return {
@@ -251,6 +251,17 @@ export function reducer(state, action) {
 
     case 'PUSH_REDO_TO_UNDO':
       return { ...state, undoStack: [...state.undoStack, action.entry] };
+
+    // Undoing a delete re-creates the word under a new id; point every
+    // history entry that still names the old id at the new one.
+    case 'HISTORY_REMAP_ID': {
+      const remap = (e) => remapHistoryEntry(e, action.from, action.to);
+      return {
+        ...state,
+        undoStack: state.undoStack.map(remap),
+        redoStack: state.redoStack.map(remap),
+      };
+    }
 
     case 'POP_UNDO': {
       if (!state.undoStack.length) return state;
@@ -268,4 +279,17 @@ export function reducer(state, action) {
     default:
       return state;
   }
+}
+
+// Word ids live in three entry shapes: changes[].wordId (ocr-correct,
+// ocr-ditto, ner-correct), wordIds[] (ocr-add, ocr-redo-ditto) and words[].id
+// (ocr-delete snapshots).
+function remapHistoryEntry(e, from, to) {
+  const id = (x) => (x === from ? to : x);
+  return {
+    ...e,
+    ...(e.changes && { changes: e.changes.map((c) => ({ ...c, wordId: id(c.wordId) })) }),
+    ...(e.wordIds && { wordIds: e.wordIds.map(id) }),
+    ...(e.words && { words: e.words.map((w) => ({ ...w, id: id(w.id) })) }),
+  };
 }

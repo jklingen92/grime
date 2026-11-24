@@ -149,7 +149,6 @@ activemq-data/
 
 # Environments
 .env
-.envrc
 .venv
 env/
 venv/
@@ -229,3 +228,7 @@ __marimo__/
 node_modules
 .venv/
 node_modules/
+
+# Static viewer demo (export_demo output and build)
+/demo-data/
+/dist-demo/

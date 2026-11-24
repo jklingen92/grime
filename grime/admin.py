@@ -10,7 +10,16 @@ Endpoint routing and JSON request handling for the viewer live in
 
 from django.contrib import admin
 
-from grime.models import Annotation, AsyncJob, Document, DocumentPage, NERPass, OCRPass, Word, WorkerSlot
+from grime.models import (
+    Annotation,
+    AsyncJob,
+    Document,
+    DocumentPage,
+    NERPass,
+    OCRPass,
+    Word,
+    WorkerSlot,
+)
 
 
 class DocumentPageInline(admin.TabularInline):
@@ -147,10 +156,26 @@ class WorkerSlotAdmin(admin.ModelAdmin):
 
 @admin.register(AsyncJob)
 class AsyncJobAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "job_type", "document", "worker_slot", "status", "force", "created_at", "completed_at")
+    list_display = (
+        "__str__",
+        "job_type",
+        "document",
+        "worker_slot",
+        "status",
+        "force",
+        "created_at",
+        "completed_at",
+    )
     list_filter = ("job_type", "status", "worker_slot", "force")
     search_fields = ("document__title",)
-    readonly_fields = ("created_at", "updated_at", "started_at", "completed_at", "task_id", "result")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "task_id",
+        "result",
+    )
 
 
 # @admin.register(OCRPass)
