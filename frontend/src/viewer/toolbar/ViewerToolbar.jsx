@@ -14,6 +14,7 @@ export default function ViewerToolbar({
   onOpenJobModal,
   jobRunning,
   onSaveImage,
+  navigate,
 }) {
   const config = useViewerConfig();
   const state = useViewerState();
@@ -126,7 +127,7 @@ export default function ViewerToolbar({
         )}
 
         <div className="dp-toolbar-sep" />
-        <PageNav />
+        <PageNav navigate={navigate} />
 
         {state.docAnnotationCount != null && (
           <>

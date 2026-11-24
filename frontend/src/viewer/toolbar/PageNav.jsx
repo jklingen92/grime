@@ -1,10 +1,8 @@
-import { useViewerConfig, useViewerState } from '../state/ViewerContext.jsx';
-import { useViewerNavigate } from '../hooks/useViewerNavigate.js';
+import { useViewerConfig } from '../state/ViewerContext.jsx';
 
-export default function PageNav() {
+// navigate is ViewerApp's guarded navigate (prompts about unsaved image changes).
+export default function PageNav({ navigate }) {
   const config = useViewerConfig();
-  const { tab } = useViewerState();
-  const navigate = useViewerNavigate(tab);
   const pageList = config.pageList;
 
   return (
